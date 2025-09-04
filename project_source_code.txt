@@ -1,0 +1,722 @@
+ИСХОДНЫЙ КОД ПРОЕКТА
+Путь к проекту: /home/mflkee/projects/metrologenerator
+Дата генерации: 2025-09-04 15:15:35
+================================================================================
+
+ПРЕОБЛАДАЮЩИЙ ЯЗЫК: Python
+РАСПРЕДЕЛЕНИЕ ЯЗЫКОВ:
+  Python: 20 файлов
+
+================================================================================
+
+
+==================== README.md ====================
+Protocol generator for mkair
+
+============================================================
+
+==================== main.py ====================
+def main():
+    print("Hello from metrologenerator!")
+
+
+if __name__ == "__main__":
+    main()
+
+============================================================
+
+==================== project_source_code.txt ====================
+
+============================================================
+
+==================== app/main.py ====================
+from fastapi import FastAPI
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.api.routes.arshin import router as arshin_router
+
+logger = setup_logging()
+
+def create_app() -> FastAPI:
+    app = FastAPI(title=settings.APP_NAME)
+    app.include_router(arshin_router)
+    return app
+
+app = create_app()
+
+============================================================
+
+==================== app/__init__.py ====================
+
+============================================================
+
+==================== app/api/deps.py ====================
+from __future__ import annotations
+import asyncio
+import httpx
+from fastapi import Depends
+from app.core.config import settings
+
+# Пул асинхронного клиента и семафор для ограничения параллелизма
+class ClientPool:
+    def __init__(self):
+        self.client = httpx.AsyncClient(headers={"User-Agent": settings.USER_AGENT})
+        self.sem = asyncio.Semaphore(settings.ARSHIN_CONCURRENCY)
+
+pool = ClientPool()
+
+async def get_http_client() -> httpx.AsyncClient:
+    return pool.client
+
+def get_semaphore() -> asyncio.Semaphore:
+    return pool.sem
+
+============================================================
+
+==================== app/api/__init__.py ====================
+
+============================================================
+
+==================== app/api/routes/arshin.py ====================
+from __future__ import annotations
+import asyncio
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query, Depends
+import httpx
+
+from app.schemas.arshin import VriIdOut, VriIdListOut, VriDetailOut, VriDetailListOut
+from app.services.arshin_client import(
+    fetch_vri_id_by_certificate, guess_year_from_cert,
+    fetch_vri_details, compose_etalon_line_from_details, extract_detail_fields
+)
+from app.utils.excel import read_column_as_list
+from app.api.deps import get_http_client, get_semaphore
+
+router = APIRouter(prefix="/api/v1/resolve", tags=["resolve"])
+
+# 1) ОДИН номер -> vri_id
+@router.get("/vri-id", response_model=VriIdOut)
+async def resolve_single_vri_id(
+    cert: str = Query(..., description="Номер свидетельства, как в Аршине"),
+    year: int | None = Query(None, description="Необязательно. Если не указан — попытаемся угадать из номера."),
+    client: httpx.AsyncClient = Depends(get_http_client),
+):
+    try:
+        year_used = year or guess_year_from_cert(cert)
+        data = await fetch_vri_id_by_certificate(client, cert, year_used)
+        return VriIdOut(certificate=cert, vri_id=data["vri_id"], year_used=year_used)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Аршин вернул ошибку {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 2) Excel (колонка P со 2 строки) -> список vri_id
+@router.post("/vri-ids-by-excel", response_model=VriIdListOut)
+async def resolve_vri_ids_by_excel(
+    file: UploadFile = File(..., description="Excel-файл. Берём колонку P, начиная со строки 2."),
+    column_letter: str = "P",
+    start_row: int = 2,
+    year: int | None = Query(None, description="Опционально: принудительный год для всех запросов."),
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem = Depends(get_semaphore),
+):
+    content = await file.read()
+    await file.close()
+    certs = read_column_as_list(content, column_letter=column_letter, start_row=start_row)
+    if not certs:
+        raise HTTPException(status_code=400, detail="В Excel не найдено номеров свидетельств в указанной колонке.")
+
+    async def worker(c: str):
+        y = year or guess_year_from_cert(c)
+        async with sem:
+            try:
+                data = await fetch_vri_id_by_certificate(client, c, y)
+                return VriIdOut(certificate=c, vri_id=data["vri_id"], year_used=y)
+            except Exception as e:
+                return VriIdOut(certificate=c, vri_id=None, year_used=y, error=str(e))
+
+    items = await asyncio.gather(*[worker(c) for c in certs])
+    return VriIdListOut(items=items)
+
+# 3) Детали по одному vri_id
+@router.get("/vri/{vri_id}", response_model=VriDetailOut)
+async def details_by_vri_id(
+    vri_id: str,
+    client: httpx.AsyncClient = Depends(get_http_client),
+):
+    try:
+        data = await fetch_vri_details(client, vri_id)
+        fields = extract_detail_fields(data)
+        etalon_line = compose_etalon_line_from_details(data)
+        return VriDetailOut(vri_id=vri_id, etalon_line=etalon_line, raw=data, **fields)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Аршин вернул ошибку {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 4) Excel -> vri_id -> детали (всё сразу списком)
+@router.post("/vri-details-by-excel", response_model=VriDetailListOut)
+async def details_by_excel(
+    file: UploadFile = File(..., description="Excel-файл. Колонка P, начиная со строки 2."),
+    column_letter: str = "P",
+    start_row: int = 2,
+    year: int | None = Query(None, description="Опциональный фиксированный год для всех запросов."),
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem = Depends(get_semaphore),
+):
+    content = await file.read()
+    await file.close()
+    certs = read_column_as_list(content, column_letter=column_letter, start_row=start_row)
+    if not certs:
+        raise HTTPException(status_code=400, detail="В Excel не найдено номеров свидетельств в указанной колонке.")
+
+    async def worker(cert: str) -> VriDetailOut:
+        y = year or guess_year_from_cert(cert)
+        async with sem:
+            try:
+                # 1) резолвим vri_id
+                id_data = await fetch_vri_id_by_certificate(client, cert, y)
+                vri_id = id_data.get("vri_id")
+            except Exception as e:
+                return VriDetailOut(certificate=cert, vri_id=None, error=f"resolve error: {e}")
+
+        if not vri_id:
+            return VriDetailOut(certificate=cert, vri_id=None, error="vri_id not found")
+
+        async with sem:
+            try:
+                # 2) тянем детали
+                det = await fetch_vri_details(client, vri_id)
+                fields = extract_detail_fields(det)
+                etalon_line = compose_etalon_line_from_details(det)
+                return VriDetailOut(certificate=cert, vri_id=vri_id, etalon_line=etalon_line, raw=det, **fields)
+            except Exception as e:
+                return VriDetailOut(certificate=cert, vri_id=vri_id, error=f"details error: {e}")
+
+    items = await asyncio.gather(*[worker(c) for c in certs])
+    return VriDetailListOut(items=items)
+
+
+============================================================
+
+==================== app/api/routes/__init__.py ====================
+
+============================================================
+
+==================== app/core/config.py ====================
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    APP_NAME: str = "Arshin helper API"
+    ARSHIN_TIMEOUT: int = 30
+    ARSHIN_CONCURRENCY: int = 8
+    USER_AGENT: str = "arshin-fastapi/0.1"
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+settings = Settings()
+
+============================================================
+
+==================== app/core/logging.py ====================
+import sys
+from loguru import logger
+
+def setup_logging():
+    logger.remove()
+    logger.add(sys.stdout, level="INFO",
+               format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}")
+    return logger
+
+============================================================
+
+==================== app/core/__init__.py ====================
+
+============================================================
+
+==================== app/schemas/arshin.py ====================
+from __future__ import annotations
+from typing import Optional, Dict, Any, List
+from pydantic import BaseModel
+
+class VriIdOut(BaseModel):
+    certificate: str
+    vri_id: Optional[str] = None
+    year_used: Optional[int] = None
+    error: Optional[str] = None
+
+class VriIdListOut(BaseModel):
+    items: List[VriIdOut]
+
+class VriDetailOut(BaseModel):
+    certificate: Optional[str] = None
+    vri_id: Optional[str] = None
+    organization: Optional[str] = None
+    vrfDate: Optional[str] = None
+    validDate: Optional[str] = None
+    applicable: Optional[bool] = None
+    protocol_url: Optional[str] = None
+    regNumber: Optional[str] = None
+    mitypeNumber: Optional[str] = None
+    mitypeTitle: Optional[str] = None
+    mitypeType: Optional[str] = None
+    mitypeType_short: Optional[str] = None
+    manufactureNum: Optional[str] = None
+    manufactureYear: Optional[int] = None
+    rankCode: Optional[str] = None
+    rankTitle: Optional[str] = None
+    etalon_line: Optional[str] = None
+    raw: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+class VriDetailListOut(BaseModel):
+    items: List[VriDetailOut]
+
+
+============================================================
+
+==================== app/schemas/__init__.py ====================
+
+============================================================
+
+==================== app/services/arshin_client.py ====================
+from __future__ import annotations
+import re
+from typing import Optional, Dict, Any
+
+import httpx
+from dateutil import parser as dtparser
+from app.core.config import settings
+
+ARSHIN_BASE = "https://fgis.gost.ru/fundmetrology/eapi"
+
+def guess_year_from_cert(cert: str) -> Optional[int]:
+    m = re.search(r"(20\d{2})", cert)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(\d{1,2}[./-]\d{1,2}[./-](20\d{2}))", cert)
+    if m:
+        try:
+            return dtparser.parse(m.group(1), dayfirst=True).year
+        except Exception:
+            return None
+    return None
+
+async def fetch_vri_id_by_certificate(client: httpx.AsyncClient, certificate: str, year: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Возвращает словарь: {certificate, vri_id, year_used, raw_result}
+    """
+    params = {"result_docnum": certificate}
+    if year:
+        params["year"] = year
+
+    r = await client.get(f"{ARSHIN_BASE}/vri", params=params, timeout=settings.ARSHIN_TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
+    items = (data.get("result") or {}).get("items") or []
+    vri_id = items[0].get("vri_id") if items else None
+    return {
+        "certificate": certificate,
+        "vri_id": vri_id,
+        "year_used": year,
+        "raw_result": data.get("result", {})
+    }
+
+async def fetch_vri_details(client: httpx.AsyncClient, vri_id: str) -> Dict[str, Any]:
+    url = f"{ARSHIN_BASE}/vri/{vri_id}"
+    r = await client.get(url, timeout=settings.ARSHIN_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+def compose_etalon_line_from_details(details: Dict[str, Any]) -> str:
+    res = (details or {}).get("result", {})
+    eta = (res.get("miInfo") or {}).get("etaMI") or {}
+    reg = (eta.get("regNumber") or "").strip()
+    num = (eta.get("mitypeNumber") or "").strip()
+    title = (eta.get("mitypeTitle") or "").strip()
+    mtype = (eta.get("mitypeType") or "").strip()
+    short = re.split(r"\s*,\s*", mtype)[0] if mtype else ""
+    parts = [p for p in [reg, num, title, short] if p]
+    return "; ".join(parts)
+
+def extract_detail_fields(details: Dict[str, Any]) -> Dict[str, Any]:
+    res = (details or {}).get("result", {})
+    vri = (res.get("vriInfo") or {})
+    eta = ((res.get("miInfo") or {}).get("etaMI") or {})
+    applicable = bool(((vri.get("applicable") or {}).get("certNum")))
+    # короткая форма типа (до запятой)
+    mtype = (eta.get("mitypeType") or "").strip()
+    mtype_short = re.split(r"\s*,\s*", mtype)[0] if mtype else ""
+    return {
+        "organization": vri.get("organization"),
+        "vrfDate": vri.get("vrfDate"),
+        "validDate": vri.get("validDate"),
+        "applicable": applicable,
+        "protocol_url": (res.get("info") or {}).get("protocol_url"),
+        "regNumber": eta.get("regNumber"),
+        "mitypeNumber": eta.get("mitypeNumber"),
+        "mitypeTitle": eta.get("mitypeTitle"),
+        "mitypeType": eta.get("mitypeType"),
+        "mitypeType_short": mtype_short,
+        "manufactureNum": eta.get("manufactureNum"),
+        "manufactureYear": eta.get("manufactureYear"),
+        "rankCode": eta.get("rankCode"),
+        "rankTitle": eta.get("rankTitle"),
+    }
+
+============================================================
+
+==================== app/services/__init__.py ====================
+
+============================================================
+
+==================== app/utils/excel.py ====================
+from __future__ import annotations
+from io import BytesIO
+from typing import List
+from openpyxl import load_workbook
+
+def read_column_as_list(file_bytes: bytes, column_letter: str = "P", start_row: int = 2) -> List[str]:
+    """
+    Читает колонку (по умолчанию P) со start_row, убирает пустые и дубликаты (сохраняя порядок).
+    """
+    wb = load_workbook(filename=BytesIO(file_bytes), data_only=True)
+    ws = wb.active
+    items = []
+    col = column_letter.upper()
+
+    for row in range(start_row, ws.max_row + 1):
+        val = ws[f"{col}{row}"].value
+        if val is None:
+            continue
+        s = str(val).strip()
+        if s:
+            items.append(s)
+
+    seen = set()
+    uniq = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            uniq.append(x)
+    return uniq
+
+============================================================
+
+==================== app/utils/__init__.py ====================
+
+============================================================
+
+==================== tests/test_excel_utils.py ====================
+import io
+from openpyxl import Workbook
+from app.utils.excel import read_column_as_list
+
+def test_read_column_as_list_default():
+    wb = Workbook()
+    ws = wb.active
+    ws["P1"] = "Номер свидетельтсва"
+    ws["P2"] = "С-ЕЖБ/05-06-2025/440144576"
+    ws["P3"] = "С-ЕЖБ/05-06-2025/440144575"
+    ws["P4"] = "С-ЕЖБ/05-06-2025/440144575"  # дубликат
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    items = read_column_as_list(buf.getvalue(), column_letter="P", start_row=2)
+    assert items == [
+        "С-ЕЖБ/05-06-2025/440144576",
+        "С-ЕЖБ/05-06-2025/440144575",
+    ]
+
+============================================================
+
+==================== tests/test_arshin_service.py ====================
+import respx
+import httpx
+
+from app.services.arshin_client import (
+    fetch_vri_id_by_certificate,
+    fetch_vri_details,
+    compose_etalon_line_from_details,
+    extract_detail_fields,
+    ARSHIN_BASE,
+)
+
+CERT = "С-ВЯ/15-01-2025/402123271"
+VRI_ID = "1-402123271"
+
+LIST_PAYLOAD = {
+    "result": {
+        "count": 1, "start": 0, "rows": 10,
+        "items": [{
+            "vri_id": VRI_ID,
+            "org_title": "ФБУ \"ТЮМЕНСКИЙ ЦСМ\"",
+            "mit_number": "77090-19",
+            "mit_title": "Преобразователи давления эталонные",
+            "mit_notation": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+            "mi_modification": "1М-0,01-Т35",
+            "mi_number": "3127",
+            "verification_date": "15.01.2025",
+            "valid_date": "14.01.2026",
+            "result_docnum": CERT,
+            "applicability": True
+        }]
+    }
+}
+
+DETAILS_PAYLOAD = {
+    "result": {
+        "miInfo": {
+            "etaMI": {
+                "regNumber": "77090.19.1Р.00761951",
+                "mitypeNumber": "77090-19",
+                "mitypeTitle": "Преобразователи давления эталонные",
+                "mitypeType": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+                "manufactureNum": "3127",
+                "manufactureYear": 2020,
+                "rankCode": "1Р",
+                "rankTitle": "Эталон 1-го разряда",
+            }
+        },
+        "vriInfo": {
+            "organization": "ФБУ \"ТЮМЕНСКИЙ ЦСМ\"",
+            "vrfDate": "15.01.2025",
+            "validDate": "14.01.2026",
+            "applicable": {"certNum": CERT}
+        },
+        "info": {
+            "protocol_url": f"{ARSHIN_BASE}/vri/{VRI_ID}/protocol"
+        }
+    }
+}
+
+@respx.mock
+async def test_fetch_vri_and_details():
+    async with httpx.AsyncClient() as client:
+        # мок: список по сертификату
+        respx.get(f"{ARSHIN_BASE}/vri").mock(
+            return_value=httpx.Response(200, json=LIST_PAYLOAD)
+        )
+        # мок: детали по vri_id
+        respx.get(f"{ARSHIN_BASE}/vri/{VRI_ID}").mock(
+            return_value=httpx.Response(200, json=DETAILS_PAYLOAD)
+        )
+
+        data = await fetch_vri_id_by_certificate(client, CERT, year=2025)
+        assert data["vri_id"] == VRI_ID
+
+        details = await fetch_vri_details(client, VRI_ID)
+        line = compose_etalon_line_from_details(details)
+        fields = extract_detail_fields(details)
+
+        assert line == "77090.19.1Р.00761951; 77090-19; Преобразователи давления эталонные; ЭЛМЕТРО-Паскаль-04"
+        assert fields["organization"].startswith("ФБУ")
+        assert fields["vrfDate"] == "15.01.2025"
+        assert fields["applicable"] is True
+
+============================================================
+
+==================== tests/conftest.py ====================
+import os
+import sys
+
+# 1) добавляем корень репозитория в sys.path ДО импортов app.*
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+# 2) теперь можно импортировать приложение
+from app.main import app as fastapi_app
+
+import io
+import pytest
+import httpx
+from fastapi import FastAPI
+from openpyxl import Workbook
+
+
+@pytest.fixture(scope="session")
+def app() -> FastAPI:
+    return fastapi_app
+
+
+@pytest.fixture
+async def async_client(app: FastAPI):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+def make_excel():
+    """Фабрика: создаёт XLSX в памяти с данными в указанной колонке/строке."""
+    def _make(values, column_letter="P", header="Номер свидетельтсва", start_row=2):
+        wb = Workbook()
+        ws = wb.active
+        ws[f"{column_letter}1"] = header
+        r = start_row
+        for v in values:
+            ws[f"{column_letter}{r}"] = v
+            r += 1
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    return _make
+
+============================================================
+
+==================== tests/test_arshin_routes.py ====================
+import respx
+import httpx
+import pytest
+
+from app.services.arshin_client import ARSHIN_BASE
+
+@pytest.mark.anyio
+@respx.mock
+async def test_get_vri_id_endpoint(async_client):
+    cert = "С-ВЯ/15-01-2025/402123271"
+    vri_id = "1-402123271"
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        return_value=httpx.Response(200, json={
+            "result": {"items": [{"vri_id": vri_id}]}
+        })
+    )
+    r = await async_client.get("/api/v1/resolve/vri-id", params={"cert": cert})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["certificate"] == cert
+    assert body["vri_id"] == vri_id
+
+@pytest.mark.anyio
+@respx.mock
+async def test_post_vri_ids_by_excel(async_client, make_excel):
+    certs = [
+        "С-ЕЖБ/05-06-2025/440144576",
+        "С-ЕЖБ/05-06-2025/440144575",
+    ]
+    xlsx = make_excel(certs)  # колонка P, со 2 строки
+
+    # мок на /vri для каждого сертификата
+    for i, cert in enumerate(certs, start=1):
+        respx.get(f"{ARSHIN_BASE}/vri").mock(
+            return_value=httpx.Response(200, json={"result": {"items": [{"vri_id": f"1-40212327{i}"}]}})
+        )
+
+    files = {"file": ("input.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    r = await async_client.post("/api/v1/resolve/vri-ids-by-excel", files=files)
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == len(certs)
+    assert {item["certificate"] for item in body["items"]} == set(certs)
+
+@pytest.mark.anyio
+@respx.mock
+async def test_get_details_by_vri_id(async_client):
+    vri_id = "1-402123271"
+    respx.get(f"{ARSHIN_BASE}/vri/{vri_id}").mock(
+        return_value=httpx.Response(200, json={
+            "result": {
+                "miInfo": {"etaMI": {
+                    "regNumber": "77090.19.1Р.00761951",
+                    "mitypeNumber": "77090-19",
+                    "mitypeTitle": "Преобразователи давления эталонные",
+                    "mitypeType": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+                }},
+                "vriInfo": {"organization": "ФБУ", "applicable": {"certNum": "X"}},
+                "info": {"protocol_url": f"{ARSHIN_BASE}/vri/{vri_id}/protocol"}
+            }
+        })
+    )
+    r = await async_client.get(f"/api/v1/resolve/vri/{vri_id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["vri_id"] == vri_id
+    assert body["etalon_line"].startswith("77090.19.1Р.00761951; 77090-19")
+
+@pytest.mark.anyio
+@respx.mock
+async def test_post_vri_details_by_excel(async_client, make_excel):
+    certs = [
+        "С-ЕЖБ/05-06-2025/440144576",
+        "С-ЕЖБ/05-06-2025/440144575",
+    ]
+    xlsx = make_excel(certs)
+
+    # 1) мок /vri: два последовательных ответа для двух вызовов
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        side_effect=[
+            httpx.Response(200, json={"result": {"items": [{"vri_id": "1-AAA"}]}}),
+            httpx.Response(200, json={"result": {"items": [{"vri_id": "1-BBB"}]}}),
+        ]
+    )
+    # 2) мок /vri/{id} → детали
+    respx.get(f"{ARSHIN_BASE}/vri/1-AAA").mock(
+        return_value=httpx.Response(200, json={
+            "result": {
+                "miInfo": {"etaMI": {
+                    "regNumber": "77090.19.1Р.00761951",
+                    "mitypeNumber": "77090-19",
+                    "mitypeTitle": "Преобразователи давления эталонные",
+                    "mitypeType": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+                }},
+                "vriInfo": {"vrfDate": "15.01.2025", "validDate": "14.01.2026", "applicable": {"certNum": "X"}},
+                "info": {"protocol_url": f"{ARSHIN_BASE}/vri/1-AAA/protocol"}
+            }
+        })
+    )
+    respx.get(f"{ARSHIN_BASE}/vri/1-BBB").mock(
+        return_value=httpx.Response(200, json={
+            "result": {
+                "miInfo": {"etaMI": {
+                    "regNumber": "52506.16.РЭ.00353712",
+                    "mitypeNumber": "52506-16",
+                    "mitypeTitle": "Манометры газовые грузопоршневые",
+                    "mitypeType": "МГП-10",
+                }},
+                "vriInfo": {"vrfDate": "01.02.2025", "validDate": "31.01.2026", "applicable": {"certNum": "Y"}},
+                "info": {"protocol_url": f"{ARSHIN_BASE}/vri/1-BBB/protocol"}
+            }
+        })
+    )
+
+    files = {"file": ("input.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    r = await async_client.post("/api/v1/resolve/vri-details-by-excel", files=files)
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 2
+    ids = {it["vri_id"] for it in body["items"]}
+    assert ids == {"1-AAA", "1-BBB"}
+    # проверим готовую строку для одного из них
+    one = next(it for it in body["items"] if it["vri_id"] == "1-AAA")
+    assert "Преобразователи давления эталонные" in one["etalon_line"]
+
+============================================================
+
+
+ИТОГОВАЯ СТАТИСТИКА:
+Обработано файлов: 22
+Преобладающий язык: Python
+
+Обработанные файлы:
+  - README.md
+  - main.py
+  - project_source_code.txt
+  - app/main.py
+  - app/__init__.py
+  - app/api/deps.py
+  - app/api/__init__.py
+  - app/api/routes/arshin.py
+  - app/api/routes/__init__.py
+  - app/core/config.py
+  - app/core/logging.py
+  - app/core/__init__.py
+  - app/schemas/arshin.py
+  - app/schemas/__init__.py
+  - app/services/arshin_client.py
+  - app/services/__init__.py
+  - app/utils/excel.py
+  - app/utils/__init__.py
+  - tests/test_excel_utils.py
+  - tests/test_arshin_service.py
+  - tests/conftest.py
+  - tests/test_arshin_routes.py
