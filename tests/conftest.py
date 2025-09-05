@@ -1,5 +1,11 @@
+import io
 import os
 import sys
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from openpyxl import Workbook
 
 # 1) добавляем корень репозитория в sys.path ДО импортов app.*
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -7,13 +13,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 # 2) теперь можно импортировать приложение
-from app.main import app as fastapi_app
-
-import io
-import pytest
-import httpx
-from fastapi import FastAPI
-from openpyxl import Workbook
+from app.main import app as fastapi_app  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -31,6 +31,7 @@ async def async_client(app: FastAPI):
 @pytest.fixture
 def make_excel():
     """Фабрика: создаёт XLSX в памяти с данными в указанной колонке/строке."""
+
     def _make(values, column_letter="P", header="Номер свидетельтсва", start_row=2):
         wb = Workbook()
         ws = wb.active
@@ -42,4 +43,5 @@ def make_excel():
         buf = io.BytesIO()
         wb.save(buf)
         return buf.getvalue()
+
     return _make

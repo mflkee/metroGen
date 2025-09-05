@@ -1,6 +1,9 @@
 import io
+
 from openpyxl import Workbook
+
 from app.utils.excel import read_column_as_list
+
 
 def test_read_column_as_list_default():
     wb = Workbook()

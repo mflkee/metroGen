@@ -1,8 +1,13 @@
 import sys
+
 from loguru import logger
+
 
 def setup_logging():
     logger.remove()
-    logger.add(sys.stdout, level="INFO",
-               format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}")
+    logger.add(
+        sys.stdout,
+        level="INFO",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | {message}",
+    )
     return logger

@@ -1,37 +1,44 @@
 from __future__ import annotations
-from typing import Optional, Dict, Any, List
+
+from typing import Any
+
 from pydantic import BaseModel
+
 
 class VriIdOut(BaseModel):
     certificate: str
-    vri_id: Optional[str] = None
-    year_used: Optional[int] = None
-    error: Optional[str] = None
+    vri_id: str | None = None
+    year_used: int | None = None
+    error: str | None = None
+
 
 class VriIdListOut(BaseModel):
-    items: List[VriIdOut]
+    items: list[VriIdOut]
+
 
 class VriDetailOut(BaseModel):
-    certificate: Optional[str] = None
-    vri_id: Optional[str] = None
-    organization: Optional[str] = None
-    vrfDate: Optional[str] = None
-    validDate: Optional[str] = None
-    applicable: Optional[bool] = None
-    protocol_url: Optional[str] = None
-    regNumber: Optional[str] = None
-    mitypeNumber: Optional[str] = None
-    mitypeTitle: Optional[str] = None
-    mitypeType: Optional[str] = None
-    mitypeType_short: Optional[str] = None
-    manufactureNum: Optional[str] = None
-    manufactureYear: Optional[int] = None
-    rankCode: Optional[str] = None
-    rankTitle: Optional[str] = None
-    etalon_line: Optional[str] = None
-    raw: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    certificate: str | None = None
+    vri_id: str | None = None
+    organization: str | None = None
+    vrfDate: str | None = None
+    validDate: str | None = None
+    applicable: bool | None = None
+    protocol_url: str | None = None
+    regNumber: str | None = None
+    mitypeNumber: str | None = None
+    mitypeTitle: str | None = None
+    mitypeType: str | None = None
+    mitypeType_short: str | None = None
+    manufactureNum: str | None = None
+    manufactureYear: int | None = None
+    rankCode: str | None = None
+    rankTitle: str | None = None
+    etalon_line: str | None = None
+    raw: dict[str, Any] | None = None
+    error: str | None = None
+
 
 class VriDetailListOut(BaseModel):
-    items: List[VriDetailOut]
+    items: list[VriDetailOut]
 
+    # Дубликаты схем протоколов удалены. Используйте app.schemas.protocol.
