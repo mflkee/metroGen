@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     ARSHIN_TIMEOUT: int = 30
     ARSHIN_CONCURRENCY: int = 8
     USER_AGENT: str = "arshin-fastapi/0.1"
+    DATABASE_URL: str | None = None
+    EXPORTS_DIR: str = "exports"  # base folder for saved files
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

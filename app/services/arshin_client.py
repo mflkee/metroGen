@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from app.services.cache import arshin_cache
+
 # Важно: этот BASE дергается в тестах!
 ARSHIN_BASE = "https://fgis.gost.ru/fundmetrology/eapi"
 
@@ -53,6 +55,7 @@ async def fetch_vri_id_by_certificate(
     cert: str,
     year: int | None = None,
     sem: asyncio.Semaphore | None = None,
+    use_cache: bool = True,
 ) -> str | None:
     """
     Возвращает vri_id по номеру свидетельства.
@@ -62,6 +65,12 @@ async def fetch_vri_id_by_certificate(
     params = {"result_docnum": cert}
     if year:
         params["year"] = str(year)
+
+    cache_key = ("vri", tuple(sorted(params.items())))
+    if use_cache:
+        cached = arshin_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     if sem:
         async with sem:
@@ -74,7 +83,10 @@ async def fetch_vri_id_by_certificate(
     if not items:
         return None
     first = items[0] or {}
-    return first.get("vri_id")
+    vri_id = first.get("vri_id")
+    if vri_id and use_cache:
+        arshin_cache.set(cache_key, vri_id)
+    return vri_id
 
 
 async def fetch_vri_details(
@@ -193,6 +205,11 @@ async def resolve_etalon_cert_from_details(
         "mi_modification": mi_mod,
         "mi_number": mi_num,
     }
+    cache_key = ("eta_cert", tuple(sorted(params.items())))
+    cached = arshin_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     if sem:
         async with sem:
             resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
@@ -212,13 +229,16 @@ async def resolve_etalon_cert_from_details(
     if not (cert and valid_date):
         return None
 
-    line = f"свидетельство о поверке № {cert}; действительно до {valid_date};"
-    return {
+    # Без завершающей точки с запятой в конце строки
+    line = f"свидетельство о поверке № {cert}; действительно до {valid_date}"
+    result = {
         "docnum": cert,
         "verification_date": vrf_date,
         "valid_date": valid_date,
         "line": line,
     }
+    arshin_cache.set(cache_key, result)
+    return result
 
 
 # Алиас для совместимости со старым импортом в protocols.py

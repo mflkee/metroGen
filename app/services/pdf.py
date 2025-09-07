@@ -31,10 +31,15 @@ async def html_to_pdf_bytes(html: str) -> bytes | None:
         browser = await p.chromium.launch()
         page = await browser.new_page()
         await page.set_content(html, wait_until="load")
+        # Явно фиксируем формат A4 в книжной ориентации.
+        # Указываем точные размеры страницы, чтобы исключить авто-поворот.
         pdf_bytes = await page.pdf(
-            format="A4",
+            width="210mm",
+            height="297mm",
             print_background=True,
-            margin={"top": "12mm", "bottom": "12mm", "left": "15mm", "right": "15mm"},
+            # Уменьшаем внешние поля страницы, чтобы увеличить ширину контента
+            margin={"top": "10mm", "bottom": "10mm", "left": "8mm", "right": "8mm"},
+            landscape=False,
         )
         await browser.close()
         return pdf_bytes

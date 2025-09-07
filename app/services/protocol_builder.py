@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any
 
 import httpx
@@ -39,16 +39,46 @@ def _parse_range_and_unit(
     return lo, hi, unit or None
 
 
-def _fmt_date_ddmmyyyy(s: str) -> str:
-    s = str(s).strip()
-    if re.match(r"\d{2}\.\d{2}\.\d{4}$", s):
-        return s
-    for fmt in ("%d.%m.%Y", "%m/%d/%Y", "%Y-%m-%d"):
+def _fmt_date_ddmmyyyy(s: object) -> str:
+    """Возвращает дату в формате ДД.ММ.ГГГГ.
+
+    Поддерживает входные значения:
+      - datetime/date объекты
+      - строки вида "ДД.ММ.ГГГГ", "ГГГГ-ММ-ДД", "ГГГГ-ММ-ДД HH:MM:SS", "ГГГГ-ММ-ДДTHH:MM:SS",
+        а также "MM/DD/YYYY".
+    В противном случае возвращает исходную строку.
+    """
+    if isinstance(s, datetime):
+        return s.strftime("%d.%m.%Y")
+    if isinstance(s, date):
+        return s.strftime("%d.%m.%Y")
+
+    txt = str(s or "").strip()
+    if re.fullmatch(r"\d{2}\.\d{2}\.\d{4}", txt):
+        return txt
+
+    # Популярные форматы, включая ISO с временем
+    fmts = (
+        "%d.%m.%Y",
+        "%m/%d/%Y",
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+    )
+    for fmt in fmts:
         try:
-            return datetime.strptime(s, fmt).strftime("%d.%m.%Y")
+            return datetime.strptime(txt, fmt).strftime("%d.%m.%Y")
+        except Exception:
+            continue
+
+    # Если строка похожа на ISO, отрежем время и попробуем снова
+    if re.match(r"^\d{4}-\d{2}-\d{2} ", txt):
+        try:
+            return datetime.strptime(txt[:10], "%Y-%m-%d").strftime("%d.%m.%Y")
         except Exception:
             pass
-    return s
+
+    return txt
 
 
 def _fmt_date_ddmmyy(s: str) -> str:
@@ -303,3 +333,54 @@ def suggest_filename(row: dict) -> str:
     )
     date_part = _fmt_date_ddmmyy(str(date_raw))
     return f"{sn}-б-{date_part}-1"
+
+
+def _initials3(full_name: str | None) -> str:
+    """Возвращает 3 буквы инициалов (Ф+И+О), например:
+    "Большаков С Н" → "БСН", "Иванов И.И." → "ИИИ".
+    Берём первую букву первой части (фамилии) и по одной букве из следующих частей.
+    """
+    if not full_name:
+        return ""
+    # Убираем точки/лишние пробелы
+    cleaned = re.sub(r"[.]+", " ", str(full_name)).strip()
+    parts = [p for p in re.split(r"\s+", cleaned) if p]
+    if not parts:
+        return ""
+    letters: list[str] = []
+    # Первая буква фамилии
+    letters.append(parts[0][0])
+    # Первая буква каждого из последующих компонентов
+    for p in parts[1:]:
+        if p:
+            letters.append(p[0])
+        if len(letters) >= 3:
+            break
+    # Если частей меньше трёх, просто вернём что есть
+    return "".join(letters).upper()
+
+
+def _fmt_date_ddmmyyyy_no_dots(s: str | None) -> str:
+    """Дата формата ДДММГГГГ без разделителей.
+    Принимает строки вида "15.01.2025", "2025-01-15" и т.п.
+    """
+    if not s:
+        return ""
+    human = _fmt_date_ddmmyyyy(str(s))  # ДД.ММ.ГГГГ
+    try:
+        dt = datetime.strptime(human, "%d.%m.%Y")
+        return dt.strftime("%d%m%Y")
+    except Exception:
+        # Если не распарсилось — просто уберём точки
+        return human.replace(".", "")
+
+
+def make_protocol_number(verifier_name: str | None, verification_date: str | None, seq: int) -> str:
+    """Строит номер протокола вида: ИНИ/ДДММГГ/N (дата без разделителей, 6 знаков).
+
+    Пример: Большаков С Н, 15.01.2025, 1 → "БСН/150125/1".
+    """
+    ini = _initials3(verifier_name)
+    d = _fmt_date_ddmmyy(verification_date or "")
+    seq_part = max(int(seq or 1), 1)
+    return f"{ini}/{d}/{seq_part}"

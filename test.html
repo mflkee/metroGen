@@ -6,25 +6,25 @@
     <title>Форма манометра</title>
   </head>
   <body>
-    <p class="text-center">
+    <p class="vh-center">
       Общество с ограниченной ответственностью "Многоцелевая Компания.
       Автоматизация. Исследования. Разработки"
     </p>
-    <p class="text-center" id="setValue_address">
+    <p class="vh-center" id="setValue_address">
       Ханты-Мансийский автономный округ - Югра, г.о. Нижневартовск, г
       Нижневартовск, ул Индустриальная, зд. 32, стр. 1, кабинет 14
     </p>
-    <p class="text-center">
+    <p class="vh-center">
       Уникальный номер записи об аккредитации в реестре аккредитованных лиц
       №RA.RU.314356
     </p>
     <p class="vh-center bold spread-header">
       ПРОТОКОЛ ПЕРИОДИЧЕСКОЙ ПОВЕРКИ №
-      <span id="setValue_protocolNumber">{{ protocol_number }}</span>
+      <span id="setValue_protocolNumber">None</span>
     </p>
     <div class="spread-bottom">
       <p class="line text-center" id="manual_deviceInfo">
-        {{ device_info }}
+        ДМ2010СгУ2
       </p>
       <p class="undertext">
         наименование, тип (согласно Гос. реестра СИ РФ), если в состав средства
@@ -33,15 +33,15 @@
     </div>
     <div class="spread-bottom">
       <div class="line">
-        <p class="vh-center" id="setValue_deviceTypeNumber">{{ mitypeNumber }}</p>
+        <p class="vh-center" id="setValue_deviceTypeNumber">13535-93</p>
       </div>
       <p class="undertext">номер по Государственному реестру СИ РФ</p>
     </div>
     <div class="split-20 spread-bottom">
       <div></div>
       <div>
-        <div>
-          <p class="vh-center" id="setValue_deviceSerial">{{ manufactureNum }}</p>
+        <div class="line">
+          <p class="vh-center" id="setValue_deviceSerial">03607</p>
         </div>
         <p class="undertext">
           заводской номер (все цифры и буквы заводского номера)
@@ -53,7 +53,7 @@
         <p>Год выпуска:</p>
       </div>
       <div class="line">
-        <p class="vh-center" id="setValue_manufactureYear">{{ manufactureYear }}</p>
+        <p class="vh-center" id="setValue_manufactureYear">2010</p>
       </div>
     </div>
     <div class="split-20 spread-bottom">
@@ -64,10 +64,10 @@
         <div class="line">
           <p class="h-center" style="gap: 10px">
             <span>
-              <span id="setValue_owner">{{ owner_name }}</span>
+              <span id="setValue_owner">ООО &#34;РИ-ИНВЕСТ&#34;</span>
               <span>, ИНН</span>
             </span>
-            <span id="setValue_ownerINN">{{ owner_inn }}</span>
+            <span id="setValue_ownerINN">7705551779</span>
           </p>
         </div>
         <p class="undertext">
@@ -80,7 +80,7 @@
       <p>Документ на методику поверки:</p>
       <div>
         <p class="line" id="manual_verificationMethodMain">
-          {{ methodology_full }}
+          МИ 2124-90 «ГСИ. Манометры, вакуумметры, мановакуумметры, напоромеры, тягомеры и тягонапоромеры показывающие и самопишущие. Методика поверки»
         </p>
         <p class="undertext">наименование и номер документа</p>
       </div>
@@ -89,7 +89,7 @@
       <p>Средства поверки:</p>
       <div>
         <p class="line" id="manual_etalonsMain">
-          {{ etalon_line_top }}
+          77090.19.1Р.00761951; 77090-19; Преобразователи давления эталонные; ЭЛМЕТРО-Паскаль-04,
         </p>
         <p class="undertext">
           Указываются эталоны единиц величин, обеспечивающие передачу размера
@@ -98,13 +98,10 @@
       </div>
     </div>
     <div class="spread-bottom">
-      <p class="line" id="manual_etalonsAdditional">{{ etalon_line_bottom }}</p>
+      <p class="line" id="manual_etalonsAdditional">Паскаль-04; 1М-0,01-Т35; 3127; 2020; 1Р; Эталон 1-го разряда; Приказ Росстандарта № 2653 от 20 октября 2022 г.;</p>
       <p class="undertext spread-bottom">
         номер (все цифры и буквы регистрационного номера)
       </p>
-      {% if etalon_certificate_line %}
-      <p class="line" id="manual_etalonsCertificate">{{ etalon_certificate_line }}</p>
-      {% endif %}
     </div>
     <div class="split-20 spread-bottom">
       <p>Условия поверки:</p>
@@ -112,11 +109,11 @@
         <p class="line" style="display: flex; gap: 15px">
           <span>температура окружающего воздуха</span>
           <span
-            ><span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span
+            ><span id="setValue_temperature" data-format="N1">21,6°С</span
             >°С</span
           >
           <span>относительная влажность</span>
-          <span id="setValue_humidity" data-format="0%">{{ humidity_plain }}</span>
+          <span id="setValue_humidity" data-format="0%">39%</span>
         </p>
         <p class="undertext">
           Указываются влияющие факторы, нормированные в НД на методику поверки,
@@ -129,22 +126,15 @@
       <div class="line">
         <p style="display: flex; gap: 15px">
           <span>атмосферное давление</span
-          ><span id="setValue_pressure">{{ pressure }}</span>
+          ><span id="setValue_pressure">101,5 кПа</span>
         </p>
       </div>
     </div>
-    <div class="spread-bottom" id="manual_checkups">
-      <p class="manual_checkup">
-        1. Результат внешнего осмотра: <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
-      </p>
-      <p class="manual_checkup">
-        2. Результат опробования: <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. <span class="manual_checkupValue">{{ methodology_points.p2 }}</span> методики поверки
-      </p>
-      <p class="manual_checkup">
-        3. Определение основной погрешности в соответствии с п. <span class="manual_checkupValue">{{ methodology_points.p3 }}</span>
-        методики поверки
+    <div class="spread-bottom">
+      <p id="manual_checkup">
+        <span id="manual_checkupNum">1. </span>
+        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. <span id="manual_checkupValue">5.1</span> методики поверки
       </p>
     </div>
     <table class="spread-bottom-large" id="valuesTable">
@@ -158,8 +148,8 @@
           <th rowspan="3">Допустимая вариация, %</th>
         </tr>
         <tr class="units-row">
-          <th colspan="2" id="measurementUnit1">{{ unit_label }}</th>
-          <th colspan="2" id="measurementUnit2">{{ unit_label }}</th>
+          <th colspan="2" id="measurementUnit1">кгс/см²</th>
+          <th colspan="2" id="measurementUnit2">кгс/см²</th>
         </tr>
         <tr class="header-row">
           <th>прямой ход</th>
@@ -171,19 +161,103 @@
         </tr>
       </thead>
       <tbody>
-        {% for row in table_rows %}
+        
         <tr>
-          <td>{{ row.si_fwd }}</td>
-          <td>{{ row.si_rev }}</td>
-          <td>{{ row.ref_fwd }}</td>
-          <td>{{ row.ref_rev }}</td>
-          <td>{{ row.err_fwd }}</td>
-          <td>{{ row.err_rev }}</td>
-          <td>{{ allowable_error }}</td>
-          <td>{{ row.var_pct }}</td>
-          <td>{{ allowable_variation }}</td>
+          <td>0.00</td>
+          <td>3.97</td>
+          <td>0.000</td>
+          <td>4.000</td>
+          <td>0.08</td>
+          <td>-0.77</td>
+          <td>1.50</td>
+          <td>99.16</td>
+          <td>1.50</td>
         </tr>
-        {% endfor %}
+        
+        <tr>
+          <td>0.61</td>
+          <td>3.40</td>
+          <td>0.571</td>
+          <td>3.429</td>
+          <td>0.85</td>
+          <td>-0.63</td>
+          <td>1.50</td>
+          <td>69.96</td>
+          <td>1.50</td>
+        </tr>
+        
+        <tr>
+          <td>1.16</td>
+          <td>2.88</td>
+          <td>1.143</td>
+          <td>2.857</td>
+          <td>0.49</td>
+          <td>0.53</td>
+          <td>1.50</td>
+          <td>42.89</td>
+          <td>1.50</td>
+        </tr>
+        
+        <tr>
+          <td>1.69</td>
+          <td>2.30</td>
+          <td>1.714</td>
+          <td>2.286</td>
+          <td>-0.63</td>
+          <td>0.24</td>
+          <td>1.50</td>
+          <td>15.17</td>
+          <td>1.50</td>
+        </tr>
+        
+        <tr>
+          <td>2.26</td>
+          <td>1.75</td>
+          <td>2.286</td>
+          <td>1.714</td>
+          <td>-0.65</td>
+          <td>0.89</td>
+          <td>1.50</td>
+          <td>12.76</td>
+          <td>1.50</td>
+        </tr>
+        
+        <tr>
+          <td>2.86</td>
+          <td>1.16</td>
+          <td>2.857</td>
+          <td>1.143</td>
+          <td>0.04</td>
+          <td>0.32</td>
+          <td>1.50</td>
+          <td>42.57</td>
+          <td>1.50</td>
+        </tr>
+        
+        <tr>
+          <td>3.41</td>
+          <td>0.60</td>
+          <td>3.429</td>
+          <td>0.571</td>
+          <td>-0.36</td>
+          <td>0.79</td>
+          <td>1.50</td>
+          <td>70.29</td>
+          <td>1.50</td>
+        </tr>
+        
+        <tr>
+          <td>4.03</td>
+          <td>0.03</td>
+          <td>4.000</td>
+          <td>0.000</td>
+          <td>0.66</td>
+          <td>0.86</td>
+          <td>1.50</td>
+          <td>99.80</td>
+          <td>1.50</td>
+        </tr>
+        
       </tbody>
     </table>
     <p class="spread-bottom-large">
@@ -194,8 +268,8 @@
     <div class="split-15">
       <p>Дата поверки:</p>
       <div>
-        <p class="line h-center" id="setValue_verificationDate">{{ verification_date }}</p>
-        <p class="undertext">Указывается дата поверки в формате ДД.ММ.ГГГГ.</p>
+        <p class="line h-center" id="setValue_verificationDate">2025-06-05 00:00:00</p>
+        <p class="undertext">Указывается дата поверки в формате ЧЧ.ММ.ГГГГ.</p>
       </div>
     </div>
     <div class="split-15">
@@ -206,9 +280,9 @@
           style="display: flex; justify-content: space-around; margin-top: 60px"
         >
           <div>
-            <img alt="ПОДПИСЬ" id="sign" src="{{ sign_src or '' }}" />
+            <img alt="ПОДПИСЬ" id="sign" src="" />
           </div>
-          <p class="v-bottom" id="setValue_worker">{{ verifier_name }}</p>
+          <p class="v-bottom" id="setValue_worker">Большаков С.Н.</p>
         </div>
         <div
           class="undertext"
@@ -221,14 +295,8 @@
     </div>
   </body>
   <style>
-    /* Фиксируем формат и ориентацию страницы при печати/PDF */
-    @page {
-      size: A4 portrait;
-      /* Отступы задаются также на уровне генератора PDF; здесь оставим по умолчанию */
-    }
     body {
-      /* Уменьшаем внутренние поля, чтобы увеличить полезную ширину */
-      padding: 1rem 1.5rem;
+      padding: 2rem 5rem;
     }
     p {
       padding: 0;
@@ -238,29 +306,18 @@
     }
     table {
       border-collapse: collapse;
-      border-spacing: 0;
       width: 100%;
       margin: 0 auto;
       font-size: 12px;
     }
-    /* Единообразные тонкие границы только для таблицы значений */
-    #valuesTable,
-    #valuesTable th,
-    #valuesTable td {
-      border: 0.5pt solid #555;
-    }
-    #valuesTable th,
-    #valuesTable td {
+    th,
+    td {
+      border: 1px solid black;
       text-align: center;
-    }
-    #valuesTable .units-row th,
-    #valuesTable .header-row th {
-      border-width: 0.5pt;
     }
     .spread-header {
       margin-top: 1.4rem;
       margin-bottom: 1.4rem;
-      text-align: center;
     }
     .spread-bottom {
       margin-bottom: 0.2rem;
@@ -396,7 +453,7 @@
       left: 150px; /* 30 - 150 */
       height: 33px; /* 31 - 33 */
       width: auto;
-      display: {{ sign_src and 'block' or 'none' }};
+      display: none;
     }
   </style>
 </html>

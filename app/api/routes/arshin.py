@@ -36,7 +36,9 @@ async def get_vri_id(
         raise HTTPException(status_code=400, detail="cert is required")
 
     year = guess_year_from_cert(cert)
-    vri_id = await fetch_vri_id_by_certificate(client, cert, year=year, sem=sem)
+    vri_id = await fetch_vri_id_by_certificate(
+        client, cert, year=year, sem=sem, use_cache=False
+    )
     if not vri_id:
         # возвращаем 200 с пустым vri_id — тестам это не критично,
         # но пусть будет информативнее
@@ -125,7 +127,7 @@ async def post_vri_details_by_excel(
     async def process(cert: str) -> dict[str, Any]:
         try:
             vri_id = await fetch_vri_id_by_certificate(
-                client, cert, year=guess_year_from_cert(cert), sem=sem
+                client, cert, year=guess_year_from_cert(cert), sem=sem, use_cache=False
             )
             details: dict[str, Any] = {}
             if vri_id:
