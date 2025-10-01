@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from enum import Enum as PyEnum
 from datetime import date, datetime
+from enum import Enum as PyEnum
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
     text,
-    Float,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,7 +30,7 @@ class Template(Base):
         JSONB, nullable=True
     )
 
-    protocols: Mapped[list["Protocol"]] = relationship(back_populates="template")
+    protocols: Mapped[list[Protocol]] = relationship(back_populates="template")
 
 
 class Owner(Base):
@@ -41,11 +40,11 @@ class Owner(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     inn: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
 
-    protocols: Mapped[list["Protocol"]] = relationship(back_populates="owner")
-    aliases: Mapped[list["OwnerAlias"]] = relationship(
+    protocols: Mapped[list[Protocol]] = relationship(back_populates="owner")
+    aliases: Mapped[list[OwnerAlias]] = relationship(
         back_populates="owner", cascade="all, delete-orphan"
     )
-    instruments: Mapped[list["MeasuringInstrument"]] = relationship(back_populates="owner")
+    instruments: Mapped[list[MeasuringInstrument]] = relationship(back_populates="owner")
 
 
 class OwnerAlias(Base):
@@ -74,6 +73,7 @@ class VerificationRegistryEntry(Base):
     protocol_no: Mapped[str | None] = mapped_column(String(128), index=True)
     owner_name_raw: Mapped[str | None] = mapped_column(String(255))
     methodology_raw: Mapped[str | None] = mapped_column(String(255))
+    instrument_kind: Mapped[str | None] = mapped_column(String(64), index=True)
     verification_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -81,10 +81,8 @@ class VerificationRegistryEntry(Base):
         Boolean, nullable=False, default=True, server_default=text("true")
     )
 
-    instruments: Mapped[list["MeasuringInstrument"]] = relationship(
-        back_populates="registry_entry"
-    )
-    protocols: Mapped[list["Protocol"]] = relationship(back_populates="registry_entry")
+    instruments: Mapped[list[MeasuringInstrument]] = relationship(back_populates="registry_entry")
+    protocols: Mapped[list[Protocol]] = relationship(back_populates="registry_entry")
 
 
 class Methodology(Base):
@@ -97,24 +95,20 @@ class Methodology(Base):
     notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     allowable_variation_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    aliases: Mapped[list["MethodologyAlias"]] = relationship(
+    aliases: Mapped[list[MethodologyAlias]] = relationship(
         back_populates="methodology", cascade="all, delete-orphan"
     )
-    points: Mapped[list["MethodologyPoint"]] = relationship(
+    points: Mapped[list[MethodologyPoint]] = relationship(
         back_populates="methodology", cascade="all, delete-orphan"
     )
-    instruments: Mapped[list["MeasuringInstrument"]] = relationship(
-        back_populates="methodology"
-    )
+    instruments: Mapped[list[MeasuringInstrument]] = relationship(back_populates="methodology")
 
 
 class MethodologyAlias(Base):
     __tablename__ = "methodology_aliases"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    methodology_id: Mapped[int] = mapped_column(
-        ForeignKey("methodologies.id", ondelete="CASCADE")
-    )
+    methodology_id: Mapped[int] = mapped_column(ForeignKey("methodologies.id", ondelete="CASCADE"))
     alias: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_alias: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     weight: Mapped[int] = mapped_column(
@@ -134,9 +128,7 @@ class MethodologyPoint(Base):
     __tablename__ = "methodology_points"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    methodology_id: Mapped[int] = mapped_column(
-        ForeignKey("methodologies.id", ondelete="CASCADE")
-    )
+    methodology_id: Mapped[int] = mapped_column(ForeignKey("methodologies.id", ondelete="CASCADE"))
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str] = mapped_column(String(512), nullable=False)
     point_type: Mapped[str] = mapped_column(
@@ -166,7 +158,7 @@ class EtalonDevice(Base):
     schema_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    certifications: Mapped[list["EtalonCertification"]] = relationship(
+    certifications: Mapped[list[EtalonCertification]] = relationship(
         back_populates="device", cascade="all, delete-orphan"
     )
 
@@ -187,7 +179,7 @@ class EtalonCertification(Base):
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     device: Mapped[EtalonDevice] = relationship(back_populates="certifications")
-    protocols: Mapped[list["Protocol"]] = relationship(back_populates="etalon_certification")
+    protocols: Mapped[list[Protocol]] = relationship(back_populates="etalon_certification")
 
 
 class MeasuringInstrument(Base):
@@ -226,7 +218,7 @@ class MeasuringInstrument(Base):
     registry_entry: Mapped[VerificationRegistryEntry | None] = relationship(
         back_populates="instruments"
     )
-    protocols: Mapped[list["Protocol"]] = relationship(back_populates="measuring_instrument")
+    protocols: Mapped[list[Protocol]] = relationship(back_populates="measuring_instrument")
 
 
 class Etalon(Base):
@@ -238,7 +230,7 @@ class Etalon(Base):
     certificate: Mapped[str | None] = mapped_column(String(128), nullable=True)
     valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    protocols: Mapped[list["Protocol"]] = relationship(back_populates="etalon")
+    protocols: Mapped[list[Protocol]] = relationship(back_populates="etalon")
 
 
 class Protocol(Base):

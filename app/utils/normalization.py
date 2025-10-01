@@ -16,4 +16,3 @@ def normalize_serial(value: Any) -> str:
     for ch in ("№", " ", "-", "/", "\\"):
         text = text.replace(ch, "")
     return text.upper()
-

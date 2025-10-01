@@ -1,4 +1,3 @@
-import asyncio
 from datetime import date
 
 import pytest
@@ -38,9 +37,7 @@ async def test_ingest_registry_rows_persists_owner_and_methodology():
                 models.VerificationRegistryEntry.source_file == source_file
             )
         )
-        await session.execute(
-            delete(models.Owner).where(models.Owner.name == owner_name)
-        )
+        await session.execute(delete(models.Owner).where(models.Owner.name == owner_name))
         await session.commit()
 
         result = await ingest_registry_rows(
@@ -63,9 +60,7 @@ async def test_ingest_registry_rows_persists_owner_and_methodology():
         assert entry.document_no == "С-ЕЖБ/05-06-2025/443771099"
 
         owner = (
-            await session.execute(
-                select(models.Owner).where(models.Owner.name == owner_name)
-            )
+            await session.execute(select(models.Owner).where(models.Owner.name == owner_name))
         ).scalar_one()
         assert owner.inn == owner_inn
 
@@ -77,12 +72,16 @@ async def test_ingest_registry_rows_persists_owner_and_methodology():
         assert methodology.allowable_variation_pct == pytest.approx(1.5)
 
         points = (
-            await session.execute(
-                select(models.MethodologyPoint)
-                .where(models.MethodologyPoint.methodology_id == methodology.id)
-                .order_by(models.MethodologyPoint.position)
+            (
+                await session.execute(
+                    select(models.MethodologyPoint)
+                    .where(models.MethodologyPoint.methodology_id == methodology.id)
+                    .order_by(models.MethodologyPoint.position)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         point_labels = [point.label for point in points]
         assert "5.1" in point_labels
         assert "5.2.3" in point_labels
@@ -93,7 +92,5 @@ async def test_ingest_registry_rows_persists_owner_and_methodology():
                 models.VerificationRegistryEntry.source_file == source_file
             )
         )
-        await session.execute(
-            delete(models.Owner).where(models.Owner.name == owner_name)
-        )
+        await session.execute(delete(models.Owner).where(models.Owner.name == owner_name))
         await session.commit()

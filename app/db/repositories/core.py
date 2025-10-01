@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,7 +129,9 @@ class MethodologyRepository(BaseRepository):
     async def get_by_code(self, code: str) -> models.Methodology | None:
         stmt = (
             select(models.Methodology)
-            .options(selectinload(models.Methodology.points), selectinload(models.Methodology.aliases))
+            .options(
+                selectinload(models.Methodology.points), selectinload(models.Methodology.aliases)
+            )
             .where(models.Methodology.code == code)
         )
         result = await self.session.execute(stmt)
@@ -238,7 +241,9 @@ class MethodologyRepository(BaseRepository):
                 point_type = MethodologyPointType.BOOL
 
             point_type_value = (
-                point_type.value if isinstance(point_type, MethodologyPointType) else str(point_type).lower()
+                point_type.value
+                if isinstance(point_type, MethodologyPointType)
+                else str(point_type).lower()
             )
             point = models.MethodologyPoint(
                 methodology_id=methodology.id,
@@ -250,9 +255,7 @@ class MethodologyRepository(BaseRepository):
             self.session.add(point)
         await self.session.flush()
 
-    async def _fetch_alias(
-        self, normalized_alias: str
-    ) -> models.MethodologyAlias | None:
+    async def _fetch_alias(self, normalized_alias: str) -> models.MethodologyAlias | None:
         stmt = select(models.MethodologyAlias).where(
             models.MethodologyAlias.normalized_alias == normalized_alias
         )
@@ -313,9 +316,7 @@ class RegistryRepository(BaseRepository):
 
 
 class InstrumentRepository(BaseRepository):
-    async def find_by_serial(
-        self, normalized_serial: str
-    ) -> list[models.MeasuringInstrument]:
+    async def find_by_serial(self, normalized_serial: str) -> list[models.MeasuringInstrument]:
         stmt = select(models.MeasuringInstrument).where(
             models.MeasuringInstrument.normalized_serial == normalized_serial
         )

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from random import uniform
 
+from .base import GenInput, TableGenerator
+
 
 def _fmt_fixed(x: float, digits: int) -> str:
     """Форматирование с устранением «-0.00» при очень малых значениях.
@@ -16,8 +18,6 @@ def _fmt_fixed(x: float, digits: int) -> str:
     if abs(x) < threshold:
         x = 0.0
     return f"{x:.{digits}f}"
-
-from .base import GenInput, TableGenerator
 
 
 def _round_si(x: float) -> str:  # показания СИ
@@ -68,7 +68,7 @@ class PressureCommon(TableGenerator):
 
             candidates: list[float] = []
             for k in range(-4, 5):
-                base = 10 ** k
+                base = 10**k
                 for b in (1.0, 2.0, 5.0):
                     candidates.append(b * base)
 
@@ -83,7 +83,9 @@ class PressureCommon(TableGenerator):
                     continue
                 if abs(m - m_round) <= 1e-6:  # шаг кратен FSV
                     points = m_round + 1
-                    score = abs(points - desired_points) + 0.1 * (abs(s - approx_step) / max(approx_step, 1e-9))
+                    score = abs(points - desired_points) + 0.1 * (
+                        abs(s - approx_step) / max(approx_step, 1e-9)
+                    )
                     if score < best_score:
                         best = (s, points)
                         best_score = score

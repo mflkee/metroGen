@@ -7,10 +7,9 @@ Create Date: 2025-10-01 07:45:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision = "20251001_000003_methodology"
@@ -28,9 +27,7 @@ def upgrade() -> None:
         "methodology_points",
         "point_type",
         type_=sa.String(length=32),
-        existing_type=postgresql.ENUM(
-            "bool", "clause", "custom", name="methodology_point_type"
-        ),
+        existing_type=postgresql.ENUM("bool", "clause", "custom", name="methodology_point_type"),
         postgresql_using="point_type::text",
         server_default=sa.text("'bool'"),
     )
@@ -39,9 +36,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP TYPE IF EXISTS methodology_point_type")
-    enum_type = postgresql.ENUM(
-        "bool", "clause", "custom", name="methodology_point_type"
-    )
+    enum_type = postgresql.ENUM("bool", "clause", "custom", name="methodology_point_type")
     enum_type.create(op.get_bind(), checkfirst=False)
     op.alter_column(
         "methodology_points",

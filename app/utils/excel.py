@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from io import BytesIO
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from openpyxl import load_workbook
-
 
 # Excel headers we accept for certificate numbers; include common typo + correct spelling.
 CERTIFICATE_HEADER_KEYS: tuple[str, ...] = (

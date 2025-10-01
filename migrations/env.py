@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.db.base import Base
-from app.db import models as _models  # noqa: F401  # register models
+from app.db.base import Base  # noqa: E402
+from app.db import models as _models  # noqa: E402,F401  # register models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -57,9 +57,7 @@ def run_migrations_online() -> None:
     if url.startswith("postgresql+asyncpg"):
 
         async def async_run() -> None:
-            connectable: AsyncEngine = create_async_engine(
-                url, poolclass=pool.NullPool
-            )
+            connectable: AsyncEngine = create_async_engine(url, poolclass=pool.NullPool)
             async with connectable.connect() as connection:
                 await connection.run_sync(_run_migrations)
             await connectable.dispose()

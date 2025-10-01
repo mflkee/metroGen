@@ -7,24 +7,20 @@ Create Date: 2025-10-01 06:20:00.000000
 
 from __future__ import annotations
 
+from alembic import op
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Column,
     Date,
     DateTime,
     ForeignKey,
-    Index,
     Integer,
     String,
     UniqueConstraint,
-    func,
     text,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
-from alembic import op
-
 
 # revision identifiers, used by Alembic.
 revision = "20251001_000002_data_model"
@@ -89,7 +85,12 @@ def upgrade() -> None:
     op.create_table(
         "methodology_aliases",
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("methodology_id", Integer, ForeignKey("methodologies.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            "methodology_id",
+            Integer,
+            ForeignKey("methodologies.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         Column("alias", String(255), nullable=False),
         Column("normalized_alias", String(255), nullable=False),
         Column("weight", Integer, nullable=False, server_default=text("100")),
@@ -104,7 +105,12 @@ def upgrade() -> None:
     op.create_table(
         "methodology_points",
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("methodology_id", Integer, ForeignKey("methodologies.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            "methodology_id",
+            Integer,
+            ForeignKey("methodologies.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         Column("position", Integer, nullable=False),
         Column("label", String(512), nullable=False),
         Column("point_type", methodology_point_type, nullable=False, server_default="bool"),
@@ -160,7 +166,12 @@ def upgrade() -> None:
     op.create_table(
         "etalon_certifications",
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("etalon_device_id", Integer, ForeignKey("etalon_devices.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            "etalon_device_id",
+            Integer,
+            ForeignKey("etalon_devices.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         Column("certificate_no", String(128), nullable=False),
         Column("verification_date", Date, nullable=True),
         Column("valid_to", Date, nullable=True),
@@ -191,8 +202,18 @@ def upgrade() -> None:
         Column("modification", String(255), nullable=True),
         Column("manufacture_year", Integer, nullable=True),
         Column("owner_id", Integer, ForeignKey("owners.id", ondelete="SET NULL"), nullable=True),
-        Column("methodology_id", Integer, ForeignKey("methodologies.id", ondelete="SET NULL"), nullable=True),
-        Column("registry_entry_id", Integer, ForeignKey("verification_registry_entries.id", ondelete="SET NULL"), nullable=True),
+        Column(
+            "methodology_id",
+            Integer,
+            ForeignKey("methodologies.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        Column(
+            "registry_entry_id",
+            Integer,
+            ForeignKey("verification_registry_entries.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         Column("certificate_no", String(128), nullable=True),
         Column("certificate_valid_to", Date, nullable=True),
         Column("vri_id", String(64), nullable=True),
@@ -225,15 +246,30 @@ def upgrade() -> None:
 
     op.add_column(
         "protocols",
-        Column("registry_entry_id", Integer, ForeignKey("verification_registry_entries.id", ondelete="SET NULL"), nullable=True),
+        Column(
+            "registry_entry_id",
+            Integer,
+            ForeignKey("verification_registry_entries.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
     )
     op.add_column(
         "protocols",
-        Column("measuring_instrument_id", Integer, ForeignKey("measuring_instruments.id", ondelete="SET NULL"), nullable=True),
+        Column(
+            "measuring_instrument_id",
+            Integer,
+            ForeignKey("measuring_instruments.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
     )
     op.add_column(
         "protocols",
-        Column("etalon_certification_id", Integer, ForeignKey("etalon_certifications.id", ondelete="SET NULL"), nullable=True),
+        Column(
+            "etalon_certification_id",
+            Integer,
+            ForeignKey("etalon_certifications.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
     )
 
     op.create_index(

@@ -1,10 +1,10 @@
 import io
+from pathlib import Path
 
 import httpx
 import pytest
 import respx
 from openpyxl import Workbook
-from pathlib import Path
 
 from app.services.arshin_client import ARSHIN_BASE
 from app.utils.excel import CERTIFICATE_HEADER_KEYS
@@ -39,7 +39,7 @@ def _make_manometers_excel_row(
     verifier: str = "Большаков С.Н.",
     date: str = "15.06.2025",
     pressure: str = "101,5 кПа",
-    owner: str = "ООО \"РИ-ИНВЕСТ\"",
+    owner: str = 'ООО "РИ-ИНВЕСТ"',
 ) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -232,7 +232,9 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
     vri_id = "1-MANO"
 
     manometers_xlsx = _make_manometers_excel_row(certificate=cert, serial=serial)
-    db_xlsx = _make_manometers_db_excel(serial=serial, certificate=cert, protocol_number=protocol_num)
+    db_xlsx = _make_manometers_db_excel(
+        serial=serial, certificate=cert, protocol_number=protocol_num
+    )
 
     async def fake_pdf(html: str) -> bytes | None:
         assert "ПРОТОКОЛ" in html
@@ -328,7 +330,9 @@ async def test_manometers_pdf_files_certificate_mismatch(async_client, tmp_path,
     protocol_num = "06/001/25"
 
     manometers_xlsx = _make_manometers_excel_row(certificate=excel_cert, serial=serial)
-    db_xlsx = _make_manometers_db_excel(serial=serial, certificate=db_cert, protocol_number=protocol_num)
+    db_xlsx = _make_manometers_db_excel(
+        serial=serial, certificate=db_cert, protocol_number=protocol_num
+    )
 
     calls = {"pdf": 0}
 
