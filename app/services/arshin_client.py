@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Any
 
 import httpx
@@ -42,7 +42,7 @@ def guess_year_from_cert(cert: str) -> int | None:
 def _fmt_date_ddmmyyyy(value: Any) -> str:
     if not value:
         return ""
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime | date):
         return value.strftime("%d.%m.%Y")
 
     txt = str(value).strip()

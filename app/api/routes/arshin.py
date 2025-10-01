@@ -37,9 +37,7 @@ async def get_vri_id(
         raise HTTPException(status_code=400, detail="cert is required")
 
     year = guess_year_from_cert(cert)
-    vri_id = await fetch_vri_id_by_certificate(
-        client, cert, year=year, sem=sem, use_cache=False
-    )
+    vri_id = await fetch_vri_id_by_certificate(client, cert, year=year, sem=sem, use_cache=False)
     if not vri_id:
         # возвращаем 200 с пустым vri_id — тестам это не критично,
         # но пусть будет информативнее

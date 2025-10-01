@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_sessionmaker
-from app.services.mappings import ensure_methodology, ensure_owner, _methodology_seed, _org_seed
+from app.services.mappings import _methodology_seed, _org_seed, ensure_methodology, ensure_owner
 
 
 async def seed_owners(session: AsyncSession) -> int:

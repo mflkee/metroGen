@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,9 @@ _SERIAL_KEYS = (
     "Серийный номер",
     "serial",
 )
+
+# Public alias used by API layer for header validation
+REGISTRY_SERIAL_KEYS = _SERIAL_KEYS
 
 _VERIFICATION_DATE_KEYS = (
     "Дата поверки",
@@ -112,6 +116,7 @@ async def ingest_registry_rows(
     source_file: str,
     rows: Iterable[Mapping[str, Any]],
     source_sheet: str | None = None,
+    instrument_kind: str | None = None,
 ) -> dict[str, int]:
     """Persist registry-like rows into the database using repository helpers."""
 
@@ -136,6 +141,7 @@ async def ingest_registry_rows(
             row_index=processed,
             values={
                 "source_sheet": source_sheet,
+                "instrument_kind": instrument_kind,
                 "normalized_serial": normalized_serial or None,
                 "document_no": document_no,
                 "protocol_no": protocol_no,

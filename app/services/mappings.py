@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -131,7 +132,8 @@ async def ensure_methodology(
             (code, 100),
             *(
                 [(seed_key, 90)]
-                if seed_key and normalize_methodology_alias(seed_key) != normalize_methodology_alias(code)
+                if seed_key
+                and normalize_methodology_alias(seed_key) != normalize_methodology_alias(code)
                 else []
             ),
         ],
@@ -140,9 +142,9 @@ async def ensure_methodology(
     if seed_payload and seed_payload.get("points"):
         has_points = (
             await session.execute(
-                select(models.MethodologyPoint.id).where(
-                    models.MethodologyPoint.methodology_id == methodology.id
-                ).limit(1)
+                select(models.MethodologyPoint.id)
+                .where(models.MethodologyPoint.methodology_id == methodology.id)
+                .limit(1)
             )
         ).scalar_one_or_none()
         if has_points:
@@ -170,7 +172,9 @@ async def resolve_methodology(
     # ensure relationships are loaded (selectinload in repository handles existing ones)
     points = {
         f"p{idx}": point.label
-        for idx, point in enumerate(sorted(methodology.points, key=lambda p: (p.position, p.id or 0)), start=1)
+        for idx, point in enumerate(
+            sorted(methodology.points, key=lambda p: (p.position, p.id or 0)), start=1
+        )
     }
 
     return MethodologyInfo(

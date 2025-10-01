@@ -13,8 +13,8 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 # 2) теперь можно импортировать код приложения
-from app.utils.excel import CERTIFICATE_HEADER_KEYS
 from app.main import app as fastapi_app  # noqa: E402
+from app.utils.excel import CERTIFICATE_HEADER_KEYS  # noqa: E402
 
 
 @pytest.fixture(scope="session")

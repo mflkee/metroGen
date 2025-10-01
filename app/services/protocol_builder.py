@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Any
 
 import httpx
@@ -290,10 +290,10 @@ async def build_context(
             idx = method_full.find(target_suffix)
             core = method_full[:idx].strip()
             suffix = method_full[idx:].strip()
-            if core and not core.startswith("\""):
+            if core and not core.startswith('"'):
                 core = f'"{core}"'
             context["methodology_full"] = f"{core} {suffix}".strip()
-        elif method_full and not method_full.startswith("\""):
+        elif method_full and not method_full.startswith('"'):
             context["methodology_full"] = f'"{method_full}"'
 
     ver_dt = _parse_date(context.get("verification_date"))

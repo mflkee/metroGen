@@ -4,7 +4,6 @@ from random import uniform
 
 from .base import GenInput, TableGenerator
 
-
 SET_VALUES_MA: tuple[float, ...] = (4.0, 8.0, 12.0, 16.0, 20.0)
 SPAN_MA: float = max(SET_VALUES_MA) - min(SET_VALUES_MA)
 DELTA_LIMIT_MA: float = 0.015  # keep error within ±0.1 % относительно диапазона 16 мА
@@ -40,7 +39,10 @@ class Controller43790(TableGenerator):
             "rows": rows,
             "unit_label": "мА",
             "allowable_error": f"{allowable_pct:.2f}",
-            "allowable_note": "- ± 0,1 % (0,02 мА) - пределы допускаемой приведенной погрешности в рабочих условиях",
+            "allowable_note": (
+                "- ± 0,1 % (0,02 мА) - пределы допускаемой приведенной погрешности в "
+                "рабочих условиях"
+            ),
         }
 
 

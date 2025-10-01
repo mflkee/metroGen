@@ -1,23 +1,27 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Iterable, Mapping
 import re
+from collections.abc import Iterable, Mapping
+from datetime import date
+from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import HTMLResponse, FileResponse
+from starlette.responses import HTMLResponse
 
 from app.api.deps import get_db, get_http_client, get_semaphore
+from app.db.repositories import RegistryRepository
 from app.schemas.protocol import ProtocolContextItem, ProtocolContextListOut
 from app.services.arshin_client import ARSHIN_BASE, find_etalon_certificate
 from app.services.html_renderer import render_protocol_html
 from app.services.pdf import html_to_pdf_bytes
 from app.services.protocol_builder import (
     build_protocol_context,
-    suggest_filename,
     make_protocol_number,
+    suggest_filename,
 )
 from app.services.registry_ingest import ingest_registry_rows
 from app.utils.excel import (
@@ -26,12 +30,9 @@ from app.utils.excel import (
     read_rows_with_required_headers,
 )
 from app.utils.normalization import normalize_serial
-from app.db.repositories import RegistryRepository
 from app.utils.paths import get_dated_exports_dir, get_output_dir
-from pathlib import Path
-from datetime import date
 
-router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"]) 
+router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
 
 
 def _filename_from_protocol_number(pn: str, ext: str = ".pdf") -> str:
@@ -53,10 +54,7 @@ def _filename_from_protocol_number(pn: str, ext: str = ".pdf") -> str:
 def _controller_filename(ctx: dict[str, Any]) -> str:
     ver_date = str(ctx.get("verification_date") or "").strip()
     serial = str(
-        ctx.get("manufactureNum")
-        or ctx.get("Заводской номер")
-        or ctx.get("manufacture_num")
-        or ""
+        ctx.get("manufactureNum") or ctx.get("Заводской номер") or ctx.get("manufacture_num") or ""
     ).strip()
     mpi = ctx.get("mpi_years")
 
@@ -95,11 +93,7 @@ def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
     if not isinstance(row, Mapping):
         row = dict(row)
 
-    pairs = [
-        (str(key), row[key])
-        for key in row.keys()
-        if isinstance(key, str)
-    ]
+    pairs = [(str(key), row[key]) for key in row.keys() if isinstance(key, str)]
 
     for candidate in keys:
         norm = candidate.strip().lower()
@@ -244,6 +238,7 @@ def _unique_output_path(directory: Path, base_name: str) -> Path:
             return alternative
         counter += 1
 
+
 @router.post("/context-by-excel", response_model=ProtocolContextListOut)
 async def contexts_by_excel(
     file: UploadFile = File(...),
@@ -350,7 +345,6 @@ async def contexts_by_excel(
             it.context = ctx
 
     return ProtocolContextListOut(items=items)
-
 
 
 @router.post("/html-by-excel", response_class=HTMLResponse)
@@ -540,7 +534,9 @@ async def controllers_pdf_files(
         saved.append(str(path))
 
     if not saved and pdf_unavailable:
-        raise HTTPException(status_code=500, detail="PDF generation is unavailable (Playwright not installed)")
+        raise HTTPException(
+            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
+        )
 
     return {"files": saved, "count": len(saved), "errors": errors}
 
@@ -660,9 +656,8 @@ async def manometers_pdf_files(
         saved.append(str(path))
 
     if not saved and pdf_unavailable:
-        raise HTTPException(status_code=500, detail="PDF generation is unavailable (Playwright not installed)")
+        raise HTTPException(
+            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
+        )
 
     return {"files": saved, "count": len(saved), "errors": errors}
-
-
-

@@ -47,4 +47,3 @@ class TTLCache:
 
 # shared instance for Arshin lookups
 arshin_cache = TTLCache(ttl_seconds=900.0, max_size=4096)
-

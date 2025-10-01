@@ -3,10 +3,10 @@ from __future__ import annotations
 import base64
 import random
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache, lru_cache
 from pathlib import Path
-from typing import Iterator
 
 from app.core.config import settings
 from app.utils.paths import get_project_root
@@ -81,7 +81,7 @@ def _signature_entries() -> tuple[_SignatureEntry, ...]:
     return tuple(entries)
 
 
-@lru_cache(maxsize=None)
+@cache
 def _data_uri_for(path_str: str) -> str:
     path = Path(path_str)
     data = path.read_bytes()
