@@ -1,14 +1,19 @@
 import io
 
+import pytest
 from openpyxl import Workbook
 
-from app.utils.excel import read_column_as_list
+from app.utils.excel import (
+    CERTIFICATE_HEADER_KEYS,
+    extract_certificate_number,
+    read_column_as_list,
+)
 
 
 def test_read_column_as_list_default():
     wb = Workbook()
     ws = wb.active
-    ws["P1"] = "Номер свидетельтсва"
+    ws["P1"] = CERTIFICATE_HEADER_KEYS[-1]
     ws["P2"] = "С-ЕЖБ/05-06-2025/440144576"
     ws["P3"] = "С-ЕЖБ/05-06-2025/440144575"
     ws["P4"] = "С-ЕЖБ/05-06-2025/440144575"  # дубликат
@@ -20,3 +25,13 @@ def test_read_column_as_list_default():
         "С-ЕЖБ/05-06-2025/440144576",
         "С-ЕЖБ/05-06-2025/440144575",
     ]
+
+
+@pytest.mark.parametrize("header", CERTIFICATE_HEADER_KEYS)
+def test_extract_certificate_number(header):
+    row = {header: " С-ВЯ/15-01-2025/402123271 "}
+    assert extract_certificate_number(row) == "С-ВЯ/15-01-2025/402123271"
+
+
+def test_extract_certificate_number_missing():
+    assert extract_certificate_number({}) == ""

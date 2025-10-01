@@ -1,7 +1,7 @@
 """init schema
 
-Revision ID: 000001
-Revises: 
+Revision ID: 20250906_000001_init
+Revises:
 Create Date: 2025-09-06 00:00:01
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "000001"
+revision = "20250906_000001_init"
 down_revision = None
 branch_labels = None
 depends_on = None

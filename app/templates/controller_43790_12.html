@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Форма контроллера</title>
+  </head>
+  <body>
+    <p class="text-center">
+      Общество с ограниченной ответственностью "Многоцелевая Компания.
+      Автоматизация. Исследования. Разработки"
+    </p>
+    <p class="text-center" id="setValue_address">
+      Ханты-Мансийский автономный округ - Югра, г.о. Нижневартовск, г
+      Нижневартовск, ул Индустриальная, зд. 32, стр. 1, кабинет 14
+    </p>
+    <p class="text-center">
+      Уникальный номер записи об аккредитации в реестре аккредитованных лиц
+      №RA.RU.314356
+    </p>
+    <p class="vh-center bold spread-header">
+      ПРОТОКОЛ ПЕРИОДИЧЕСКОЙ ПОВЕРКИ №
+      <span id="setValue_protocolNumber">{{ protocol_number }}</span>
+    </p>
+    <div class="spread-bottom">
+      <p class="line text-center" id="manual_deviceInfo">
+        {{ device_info }}
+      </p>
+      <p class="undertext">
+        наименование, тип (согласно Гос. реестра СИ РФ), если в состав средства
+        измерений входят несколько автономных блоков, то привести их перечень
+      </p>
+    </div>
+    <div class="spread-bottom">
+      <div class="line">
+        <p class="vh-center" id="setValue_deviceTypeNumber">{{ mitypeNumber }}</p>
+      </div>
+      <p class="undertext">номер по Государственному реестру СИ РФ</p>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div></div>
+      <div>
+        <div class="line">
+          <p class="vh-center" id="setValue_deviceSerial">{{ manufactureNum }}</p>
+        </div>
+        <p class="undertext">
+          заводской номер (все цифры и буквы заводского номера)
+        </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Год выпуска:</p>
+      </div>
+      <div class="line">
+        <p class="vh-center" id="setValue_manufactureYear">{{ manufactureYear }}</p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Принадлежащее:</p>
+      </div>
+      <div>
+        <div class="line">
+          <p class="h-center" id="setValue_owner">{{ owner_name }}</p>
+        </div>
+        <p class="undertext">
+          наименование юридического/ фамилия имя и отчество физического лица-
+          владельца средства измерений
+        </p>
+      </div>
+    </div>
+    <div class="split-27 spread-bottom">
+      <p>Документ на методику поверки:</p>
+      <div>
+        <p class="line" id="manual_verificationMethodMain">
+          {{ methodology_full }}
+        </p>
+        <p class="undertext">наименование и номер документа</p>
+      </div>
+    </div>
+    <div class="split-17 spread-bottom">
+      <p>Средства поверки:</p>
+      <div>
+        <p class="line" id="manual_etalonsMain">
+          {{ etalon_line_combined or etalon_line_top }}
+        </p>
+        <p class="undertext">
+          Указываются эталоны единиц величин, обеспечивающие передачу размера
+          единицы величины в соответствии с поверочной схемой,
+        </p>
+      </div>
+    </div>
+    {% set temp_display = temperature_plain or temperature %}
+    {% set humidity_display = humidity_plain or humidity %}
+    <div class="split-20 spread-bottom">
+      <p>Условия поверки:</p>
+      <div>
+        <p class="line" style="display: flex; gap: 15px">
+          <span>температура окружающего воздуха</span>
+          <span>
+            <span id="setValue_temperature" data-format="N1">{{ temp_display }}</span>
+            {% if temp_display and '°' not in temp_display %}°С{% endif %}
+          </span>
+          <span>относительная влажность</span>
+          <span id="setValue_humidity" data-format="0%">
+            {{ humidity_display }}{% if humidity_display and '%' not in humidity_display %}%{% endif %}
+          </span>
+        </p>
+        <p class="undertext">
+          Указываются влияющие факторы, нормированные в НД на методику поверки,
+          с указанием конкретных показателей (значений)
+        </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div></div>
+      <div class="line">
+        <p style="display: flex; gap: 15px">
+          <span>атмосферное давление</span
+          ><span id="setValue_pressure">{{ pressure }}</span>
+        </p>
+      </div>
+    </div>
+    <div class="spread-bottom" id="manual_checkups">
+      <p class="manual_checkup">
+        1. Результат внешнего осмотра:
+        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. {{ methodology_points.p1 or '8' }} МП 20-221-2021
+      </p>
+      <p class="manual_checkup">
+        2. Опробование СИ:
+        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. {{ methodology_points.p2 or '9' }} МП 20-221-2021
+      </p>
+      <p class="manual_checkup">
+        3. Проверка ПО:
+        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. {{ methodology_points.p3 or '10' }} МП 20-221-2021
+      </p>
+      <p class="manual_checkup">
+        4. Определение метрологических характеристик:
+        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. {{ methodology_points.p4 or '11' }} МП 20-221-2021
+      </p>
+    </div>
+    <table class="spread-bottom-large" id="valuesTable">
+      <thead>
+        <tr class="header-row">
+          <th>№ канала</th>
+          <th>Заданное значение, мА</th>
+          <th>Измеренное значение, мА</th>
+          <th>Погрешность, %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in table_rows %}
+        <tr>
+          {% if loop.first %}
+          <td class="channel-cell" rowspan="{{ table_rows|length }}">{{ row.channel or '1' }}</td>
+          {% endif %}
+          <td>{{ row.set_value }}</td>
+          <td>{{ row.measured_value }}</td>
+          <td>{{ row.error_pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="undertext spread-bottom">{{ allowable_note }}</p>
+    <p class="spread-bottom-large conclusion-line">
+      Заключение: на основании результатов поверки, СИ признано
+      <span class="underline">пригодным</span> к применению
+    </p>
+    <div class="split-15">
+      <p>Дата поверки:</p>
+      <div>
+        <p class="line h-center" id="setValue_verificationDate">{{ verification_date }}</p>
+        <p class="undertext">Указывается дата поверки в формате ДД.ММ.ГГГГ.</p>
+      </div>
+    </div>
+    <div class="split-15">
+      <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
+      <div class="sign-wrapper">
+        <div
+          class="line"
+          style="display: flex; justify-content: space-around; margin-top: 60px"
+        >
+          <div>
+            <img
+              alt="ПОДПИСЬ"
+              id="sign"
+              src="{{ sign_src or '' }}"
+              style="position: absolute; width: auto; {{ sign_style or 'display: none;' }}"
+            />
+          </div>
+          <p class="v-bottom" id="setValue_worker">{{ verifier_name }}</p>
+        </div>
+        <div
+          class="undertext"
+          style="display: flex; justify-content: space-around"
+        >
+          <p>(подпись)</p>
+          <p>(фамилия, инициалы)</p>
+        </div>
+      </div>
+    </div>
+  </body>
+  <style>
+    @page {
+      size: A4 portrait;
+    }
+    body {
+      padding: 1rem 1.5rem;
+    }
+    p {
+      padding: 0;
+      margin: 0;
+      font-family: "Times New Roman";
+      font-size: 12px;
+    }
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+      margin: 0 auto;
+      font-size: 12px;
+    }
+    #valuesTable,
+    #valuesTable th,
+    #valuesTable td {
+      border: 0.5pt solid #555;
+    }
+    #valuesTable th,
+    #valuesTable td {
+      text-align: center;
+    }
+    .spread-header {
+      margin-top: 1.4rem;
+      margin-bottom: 1.4rem;
+      text-align: center;
+    }
+    .spread-bottom {
+      margin-bottom: 0.2rem;
+    }
+    .spread-bottom-large {
+      margin-bottom: 0.7rem;
+    }
+    .split-15,
+    .split-17,
+    .split-20,
+    .split-25,
+    .split-27,
+    .split-30,
+    .split-35,
+    .split-50,
+    .split-60 {
+      display: flex;
+    }
+    .split-15 > *:first-child { flex: 0 0 15%; }
+    .split-15 > *:last-child { flex: 0 0 85%; }
+    .split-17 > *:first-child { flex: 0 0 17%; }
+    .split-17 > *:last-child { flex: 0 0 83%; }
+    .split-20 > *:first-child { flex: 0 0 20%; }
+    .split-20 > *:last-child { flex: 0 0 80%; }
+    .split-25 > *:first-child { flex: 0 0 25%; }
+    .split-25 > *:last-child { flex: 0 0 75%; }
+    .split-27 > *:first-child { flex: 0 0 27%; }
+    .split-27 > *:last-child { flex: 0 0 73%; }
+    .split-30 > *:first-child { flex: 0 0 30%; }
+    .split-30 > *:last-child { flex: 0 0 70%; }
+    .split-35 > *:first-child { flex: 0 0 35%; }
+    .split-35 > *:last-child { flex: 0 0 65%; }
+    .split-50 { justify-content: space-between; }
+    .split-50 > * { flex: 1; }
+    .split-60 > *:first-child { flex: 0 0 60%; }
+    .split-60 > *:last-child { flex: 0 0 40%; }
+    .vh-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .h-center {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .h-left {
+      display: flex;
+      justify-content: flex-start;
+    }
+    .v-bottom {
+      display: flex;
+      align-items: flex-end;
+    }
+    .undertext {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      font-size: 0.5rem;
+      line-height: 1.1rem;
+    }
+    .text-center {
+      text-align: center;
+    }
+    .bold {
+      font-weight: bold;
+    }
+    .line {
+      border-bottom: 1px solid black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      min-height: 1.6rem;
+      padding: 0 0.2rem;
+      text-align: center;
+      width: 100%;
+    }
+    .manual_checkup {
+      margin-bottom: 0.3rem;
+    }
+    .sign-wrapper {
+      position: relative;
+    }
+    .channel-cell {
+      font-weight: bold;
+      vertical-align: middle;
+    }
+    .underline {
+      text-decoration: underline;
+    }
+    .conclusion-line {
+      text-align: left;
+    }
+  </style>
+</html>

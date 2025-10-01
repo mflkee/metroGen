@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Any, Iterable, Mapping
 
 from openpyxl import load_workbook
+
+
+# Excel headers we accept for certificate numbers; include common typo + correct spelling.
+CERTIFICATE_HEADER_KEYS: tuple[str, ...] = (
+    "Номер свидетельтсва",
+    "Номер свидетельства",
+    "Свидетельство о поверке",
+)
 
 
 def read_column_as_list(
@@ -33,30 +42,104 @@ def read_column_as_list(
     return uniq
 
 
-def read_rows_as_dicts(file_bytes: bytes) -> list[dict[str, object]]:
-    """
-    Читает активный лист как список словарей.
-    Первая строка — это шапка (ключи), остальное — данные.
-    Пустые строки пропускаются.
-    """
-    wb = load_workbook(filename=BytesIO(file_bytes), data_only=True)
-    ws = wb.active
+def _normalized_header(values: Iterable[str]) -> set[str]:
+    return {str(value).strip().lower() for value in values if value}
 
-    # Шапка
+
+def _extract_header(ws, header_row: int) -> list[str]:
+    header_row = max(int(header_row or 1), 1)
+    if header_row > ws.max_row:
+        return []
+
     header: list[str] = []
-    for cell in ws[1]:
+    for cell in ws[header_row]:
         val = cell.value
         header.append(str(val).strip() if val is not None else "")
+    return header
 
+
+def _sheet_rows(ws, header: list[str], start_row: int) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
-    for r in ws.iter_rows(min_row=2, values_only=True):
+    for r in ws.iter_rows(min_row=start_row, values_only=True):
         if all(v is None or str(v).strip() == "" for v in r):
             continue
         item: dict[str, object] = {}
         for i, key in enumerate(header):
             if not key:
                 continue
-            item[key] = r[i]
+            if i < len(r):
+                item[key] = r[i]
         rows.append(item)
-
     return rows
+
+
+def read_rows_as_dicts(
+    file_bytes: bytes,
+    *,
+    header_row: int = 1,
+    data_start_row: int | None = None,
+    sheet: str | None = None,
+) -> list[dict[str, object]]:
+    """
+    Читает указанный лист (по умолчанию активный) как список словарей.
+
+    :param header_row: Номер строки (1-based), содержащей заголовки.
+    :param data_start_row: Первая строка с данными; по умолчанию header_row + 1.
+    :param sheet: Имя листа. Если None — используется активный лист.
+    Пустые строки пропускаются.
+    """
+    wb = load_workbook(filename=BytesIO(file_bytes), data_only=True)
+    try:
+        ws = wb[sheet] if sheet else wb.active
+        header = _extract_header(ws, header_row)
+        start_row = int(data_start_row) if data_start_row else header_row + 1
+        return _sheet_rows(ws, header, start_row)
+    finally:
+        wb.close()
+
+
+def read_rows_with_required_headers(
+    file_bytes: bytes,
+    *,
+    header_row: int = 1,
+    data_start_row: int | None = None,
+    required_headers: tuple[str, ...] | None = None,
+) -> list[dict[str, object]]:
+    """
+    Перебирает все листы файла и возвращает строки первого листа,
+    содержащего любой из required_headers (без учёта регистра/пробелов).
+    Если подходящий лист не найден — возвращает пустой список.
+    """
+
+    wb = load_workbook(filename=BytesIO(file_bytes), data_only=True)
+    try:
+        wanted = _normalized_header(required_headers or [])
+        for ws in wb.worksheets:
+            header = _extract_header(ws, header_row)
+            if wanted:
+                normalized = _normalized_header(header)
+                if not (normalized & wanted):
+                    continue
+            start_row = int(data_start_row) if data_start_row else header_row + 1
+            rows = _sheet_rows(ws, header, start_row)
+            if rows:
+                return rows
+        return []
+    finally:
+        wb.close()
+
+
+def extract_certificate_number(row: Mapping[str, Any]) -> str:
+    """Return trimmed certificate number from supported header variants."""
+
+    normalized = {str(key).strip().lower(): value for key, value in row.items() if key}
+    for header in CERTIFICATE_HEADER_KEYS:
+        value = row.get(header)
+        if value is None:
+            value = normalized.get(header.lower())
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""

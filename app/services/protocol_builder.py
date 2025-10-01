@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, date
 from typing import Any
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.arshin_client import resolve_etalon_cert_from_details
 from app.services.generators.base import FixedPctTol, GenInput
 from app.services.generators.registry import get_by_template
-from app.services.mappings import get_inn_by_owner, get_methodology_by_code
+from app.services.mappings import resolve_methodology, resolve_owner_and_inn
 from app.services.templates import TEMPLATES, resolve_template_id
+from app.utils.signatures import get_signature_render
 
 
 def _norm_unit(s: str | None) -> str | None:
@@ -89,6 +92,15 @@ def _fmt_date_ddmmyy(s: str) -> str:
         return ""
 
 
+def _parse_date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(_fmt_date_ddmmyyyy(value), "%d.%m.%Y")
+    except Exception:
+        return None
+
+
 def _split_notation(notation: str) -> tuple[str, str]:
     if not notation:
         return "", ""
@@ -110,6 +122,10 @@ async def build_context(
     protocol_number: str | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
+    methodology_points = dict(methodology_points or {})
+    for key in ("p1", "p2", "p3", "p4"):
+        methodology_points.setdefault(key, "")
+
     vri = details.get("vriInfo", {}) or {}
     mi_single = (details.get("miInfo", {}) or {}).get("singleMI") or {}
     means = details.get("means", {}) or {}
@@ -191,15 +207,23 @@ async def build_context(
             f"действительно до {valid_date_arshin};"
         )
 
+    device_info = excel_row.get("Модификация") or mi_single.get("modification") or ""
+    mitype_type = (mi_single.get("mitypeType") or "").strip()
+    mitype_title = (mi_single.get("mitypeTitle") or "").strip()
+    if mitype_title and mitype_type:
+        device_info = f"{mitype_title} {mitype_type}"
+    elif mitype_title and not device_info:
+        device_info = mitype_title
+
     context: dict[str, Any] = {
-        "device_info": excel_row.get("Модификация") or mi_single.get("modification") or "",
+        "device_info": device_info,
         "mitypeNumber": excel_row.get("Обозначение СИ") or mi_single.get("mitypeNumber") or "",
         "manufactureNum": excel_row.get("Заводской номер") or mi_single.get("manufactureNum") or "",
         "manufactureYear": str(
             excel_row.get("Год выпуска") or mi_single.get("manufactureYear") or ""
         ),
         "owner_name": owner_name,
-        "owner_inn": owner_inn,
+        "owner_inn": owner_inn or "",
         "methodology_full": excel_row.get("_methodology_full") or vri.get("docTitle") or "",
         "methodology_points": methodology_points,
         "temperature": excel_row.get("Температура") or "",
@@ -235,6 +259,53 @@ async def build_context(
 
     template_id = resolve_template_id(method_code, mitype_number, mitype_title) or "pressure_common"
     tpl = TEMPLATES.get(template_id, {})
+    context["template_id"] = template_id
+
+    if template_id == "controller_43790_12":
+        combined_device = " ".join(x for x in [mitype_title, mitype_type] if x).strip()
+        if combined_device:
+            context["device_info"] = combined_device
+        cert_line_text = context.get("etalon_certificate_line") or ""
+        base_line = str(context.get("etalon_line") or "").replace("\n", " ").strip(" ;")
+        bottom_line = str(context.get("etalon_line_bottom") or "").replace("\n", " ").strip(" ;")
+
+        parts: list[str] = []
+        if base_line:
+            parts.append(base_line)
+        if bottom_line:
+            parts.append(bottom_line)
+
+        combined = "; ".join(parts)
+        if cert_line_text:
+            combined = f"{combined}; ({cert_line_text})" if combined else f"({cert_line_text})"
+
+        context["etalon_line_combined"] = combined
+        context["etalon_line_top"] = combined
+        context["etalon_line_bottom"] = ""
+        context["etalon_certificate_line"] = None
+
+        method_full = (context.get("methodology_full") or "").strip()
+        target_suffix = "МП 20-221-2021"
+        if method_full and target_suffix in method_full:
+            idx = method_full.find(target_suffix)
+            core = method_full[:idx].strip()
+            suffix = method_full[idx:].strip()
+            if core and not core.startswith("\""):
+                core = f'"{core}"'
+            context["methodology_full"] = f"{core} {suffix}".strip()
+        elif method_full and not method_full.startswith("\""):
+            context["methodology_full"] = f'"{method_full}"'
+
+    ver_dt = _parse_date(context.get("verification_date"))
+    val_dt = _parse_date(context.get("valid_to_date"))
+    mpi_years: int | None = None
+    if ver_dt and val_dt and val_dt >= ver_dt:
+        days = max((val_dt - ver_dt).days, 0)
+        if days == 0:
+            mpi_years = 1
+        else:
+            mpi_years = max(1, math.ceil(days / 365))
+    context["mpi_years"] = mpi_years
 
     points = int(excel_row.get("_points") or tpl.get("points", 8))
     err_tol = FixedPctTol(float(allowable_error))
@@ -267,6 +338,16 @@ async def build_context(
                 or f"{float(context['allowable_variation_pct']):.2f}",
             }
         )
+        if "allowable_note" in gout:
+            context["allowable_note"] = gout["allowable_note"]
+
+    signature = get_signature_render(context.get("verifier_name"))
+    if signature:
+        context["sign_src"] = signature.src
+        context["sign_style"] = signature.style
+    else:
+        context["sign_src"] = None
+        context["sign_style"] = "display: none;"
 
     return context
 
@@ -276,6 +357,8 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
     Совместимо со старым вызовом: await build_protocol_context(row, details, client)
     и с новым: await build_protocol_context(excel_row=..., details=..., ...)
     """
+    session: AsyncSession | None = kwargs.pop("session", None)
+
     if "excel_row" in kwargs:
         return await build_context(**kwargs)
 
@@ -283,38 +366,55 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
         excel_row: dict[str, Any] = dict(args[0] or {})
         details: dict[str, Any] = args[1] or {}
         http_client: httpx.AsyncClient | None = args[2] if len(args) >= 3 else None
+        if session is None and len(args) >= 4:
+            session = args[3]
 
         owner_name = (
             excel_row.get("Владелец СИ") or (details.get("vriInfo", {}) or {}).get("miOwner") or ""
         )
-        owner_inn = get_inn_by_owner(owner_name)
+        owner_inn: str | None = None
+        if session:
+            resolved_name, resolved_inn = await resolve_owner_and_inn(session, owner_name)
+            if resolved_name:
+                owner_name = resolved_name
+            owner_inn = resolved_inn
 
         method_short = (
             excel_row.get("Методика поверки")
             or (details.get("vriInfo", {}) or {}).get("docTitle")
             or ""
         ).strip()
-        mi_meta = get_methodology_by_code(method_short) or {}
-        excel_row["_methodology_full"] = mi_meta.get("title_full") or method_short
-        methodology_points = mi_meta.get("points") or {"p1": "5.1", "p2": "5.2.3", "p3": "5.3"}
+        default_points = {"p1": "5.1", "p2": "5.2.3", "p3": "5.3", "p4": ""}
+        methodology_points: dict[str, str] = default_points.copy()
+        allowable_hint: float | None = None
+
+        if session and method_short:
+            method_info = await resolve_methodology(session, method_short)
+        else:
+            method_info = None
+
+        if method_info:
+            excel_row["_methodology_full"] = method_info.title
+            if method_info.points:
+                methodology_points.update(method_info.points)
+            allowable_hint = method_info.allowable_variation_pct
+        else:
+            excel_row["_methodology_full"] = method_short
+            methodology_points = default_points.copy()
 
         try:
             allowable = float(
-                str(
-                    excel_row.get("Другие параметры")
-                    or mi_meta.get("allowable_variation_pct")
-                    or "1.5"
-                ).replace(",", ".")
+                str(excel_row.get("Другие параметры") or allowable_hint or "1.5").replace(",", ".")
             )
         except Exception:
-            allowable = float(mi_meta.get("allowable_variation_pct") or 1.5)
+            allowable = float(allowable_hint or 1.5)
 
         return await build_context(
             excel_row=excel_row,
             details=details,
             methodology_points=methodology_points,
             owner_name=owner_name,
-            owner_inn=owner_inn,
+            owner_inn=owner_inn or "",
             allowable_error=allowable,
             allowable_variation=allowable,
             protocol_number=None,

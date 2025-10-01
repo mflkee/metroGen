@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Форма манометра</title>
+  </head>
+  <body>
+    <p class="text-center">
+      Общество с ограниченной ответственностью "Многоцелевая Компания.
+      Автоматизация. Исследования. Разработки"
+    </p>
+    <p class="text-center" id="setValue_address">
+      Ханты-Мансийский автономный округ - Югра, г.о. Нижневартовск, г
+      Нижневартовск, ул Индустриальная, зд. 32, стр. 1, кабинет 14
+    </p>
+    <p class="text-center">
+      Уникальный номер записи об аккредитации в реестре аккредитованных лиц
+      №RA.RU.314356
+    </p>
+    <p class="vh-center bold spread-header">
+      ПРОТОКОЛ ПЕРИОДИЧЕСКОЙ ПОВЕРКИ №
+      <span id="setValue_protocolNumber">/150125/1</span>
+    </p>
+    <div class="spread-bottom">
+      <p class="line text-center" id="manual_deviceInfo">
+        
+      </p>
+      <p class="undertext">
+        наименование, тип (согласно Гос. реестра СИ РФ), если в состав средства
+        измерений входят несколько автономных блоков, то привести их перечень
+      </p>
+    </div>
+    <div class="spread-bottom">
+      <div class="line">
+        <p class="vh-center" id="setValue_deviceTypeNumber"></p>
+      </div>
+      <p class="undertext">номер по Государственному реестру СИ РФ</p>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div></div>
+      <div>
+        <div>
+          <p class="vh-center" id="setValue_deviceSerial">ABC123</p>
+        </div>
+        <p class="undertext">
+          заводской номер (все цифры и буквы заводского номера)
+        </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Год выпуска:</p>
+      </div>
+      <div class="line">
+        <p class="vh-center" id="setValue_manufactureYear"></p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Принадлежащее:</p>
+      </div>
+      <div>
+        <div class="line">
+          <p class="h-center" style="gap: 10px">
+            <span>
+              <span id="setValue_owner"></span>
+              <span>, ИНН</span>
+            </span>
+            <span id="setValue_ownerINN"></span>
+          </p>
+        </div>
+        <p class="undertext">
+          наименование юридического/ фамилия имя и отчество физического лица-
+          владельца средства измерений, ИНН/КПП
+        </p>
+      </div>
+    </div>
+    <div class="split-27 spread-bottom">
+      <p>Документ на методику поверки:</p>
+      <div>
+        <p class="line" id="manual_verificationMethodMain">
+          МИ 123-45
+        </p>
+        <p class="undertext">наименование и номер документа</p>
+      </div>
+    </div>
+    <div class="split-17 spread-bottom">
+      <p>Средства поверки:</p>
+      <div>
+        <p class="line" id="manual_etalonsMain">
+          77090.19.1Р.00761951; 77090-19; Преобразователи давления эталонные; ЭЛМЕТРО-Паскаль-04,
+        </p>
+        <p class="undertext">
+          Указываются эталоны единиц величин, обеспечивающие передачу размера
+          единицы величины в соответствии с поверочной схемой,
+        </p>
+      </div>
+    </div>
+    <div class="spread-bottom">
+      <p class="line" id="manual_etalonsAdditional">Паскаль-04; 3127; 2020; 1Р; Эталон 1-го разряда;</p>
+      <p class="undertext spread-bottom">
+        номер (все цифры и буквы регистрационного номера)
+      </p>
+      
+      <p class="line" id="manual_etalonsCertificate">свидетельство о поверке № ET-123 от 01.01.2025г.; действительно до 31.12.2025г.</p>
+      
+    </div>
+    <div class="split-20 spread-bottom">
+      <p>Условия поверки:</p>
+      <div>
+        <p class="line" style="display: flex; gap: 15px">
+          <span>температура окружающего воздуха</span>
+          <span
+            ><span id="setValue_temperature" data-format="N1"></span
+            >°С</span
+          >
+          <span>относительная влажность</span>
+          <span id="setValue_humidity" data-format="0%"></span>
+        </p>
+        <p class="undertext">
+          Указываются влияющие факторы, нормированные в НД на методику поверки,
+          с указанием конкретных показателей (значений)
+        </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div></div>
+      <div class="line">
+        <p style="display: flex; gap: 15px">
+          <span>атмосферное давление</span
+          ><span id="setValue_pressure"></span>
+        </p>
+      </div>
+    </div>
+    <div class="spread-bottom" id="manual_checkups">
+      <p class="manual_checkup">
+        1. Результат внешнего осмотра: <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. <span class="manual_checkupValue">5.1</span> методики поверки
+      </p>
+      <p class="manual_checkup">
+        2. Результат опробования: <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+        п. <span class="manual_checkupValue">5.2.3</span> методики поверки
+      </p>
+      <p class="manual_checkup">
+        3. Определение основной погрешности в соответствии с п. <span class="manual_checkupValue">5.3</span>
+        методики поверки
+      </p>
+    </div>
+    <table class="spread-bottom-large" id="valuesTable">
+      <thead>
+        <tr>
+          <th colspan="2">Показания поверяемого СИ</th>
+          <th colspan="2">Показания эталона</th>
+          <th colspan="2" rowspan="2">Приведенная погрешность, %</th>
+          <th rowspan="3">Допустимая приведенная погрешность, %</th>
+          <th rowspan="3">Вариация показаний, %</th>
+          <th rowspan="3">Допустимая вариация, %</th>
+        </tr>
+        <tr class="units-row">
+          <th colspan="2" id="measurementUnit1">None</th>
+          <th colspan="2" id="measurementUnit2">None</th>
+        </tr>
+        <tr class="header-row">
+          <th>прямой ход</th>
+          <th>обратный ход</th>
+          <th>прямой ход</th>
+          <th>обратный ход</th>
+          <th>прямой ход</th>
+          <th>обратный ход</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      </tbody>
+    </table>
+    <p class="spread-bottom-large">
+      Заключение: на основании результатов поверки, СИ признано
+      <span class="line">пригодным</span>/<span>непригодным</span>
+      к применению
+    </p>
+    <div class="split-15">
+      <p>Дата поверки:</p>
+      <div>
+        <p class="line h-center" id="setValue_verificationDate">15.01.2025</p>
+        <p class="undertext">Указывается дата поверки в формате ДД.ММ.ГГГГ.</p>
+      </div>
+    </div>
+    <div class="split-15">
+      <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
+      <div class="sign-wrapper">
+        <div
+          class="line"
+          style="display: flex; justify-content: space-around; margin-top: 60px"
+        >
+          <div>
+            <img
+              alt="ПОДПИСЬ"
+              id="sign"
+              src=""
+              style="position: absolute; width: auto; display: none;"
+            />
+          </div>
+          <p class="v-bottom" id="setValue_worker"></p>
+        </div>
+        <div
+          class="undertext"
+          style="display: flex; justify-content: space-around"
+        >
+          <p>(подпись)</p>
+          <p>(фамилия, инициалы)</p>
+        </div>
+      </div>
+    </div>
+  </body>
+  <style>
+    /* Фиксируем формат и ориентацию страницы при печати/PDF */
+    @page {
+      size: A4 portrait;
+      /* Отступы задаются также на уровне генератора PDF; здесь оставим по умолчанию */
+    }
+    body {
+      /* Уменьшаем внутренние поля, чтобы увеличить полезную ширину */
+      padding: 1rem 1.5rem;
+    }
+    p {
+      padding: 0;
+      margin: 0;
+      font-family: "Times New Roman";
+      font-size: 12px;
+    }
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+      margin: 0 auto;
+      font-size: 12px;
+    }
+    /* Единообразные тонкие границы только для таблицы значений */
+    #valuesTable,
+    #valuesTable th,
+    #valuesTable td {
+      border: 0.5pt solid #555;
+    }
+    #valuesTable th,
+    #valuesTable td {
+      text-align: center;
+    }
+    #valuesTable .units-row th,
+    #valuesTable .header-row th {
+      border-width: 0.5pt;
+    }
+    .spread-header {
+      margin-top: 1.4rem;
+      margin-bottom: 1.4rem;
+      text-align: center;
+    }
+    .spread-bottom {
+      margin-bottom: 0.2rem;
+    }
+    .spread-bottom-large {
+      margin-bottom: 0.7rem;
+    }
+    .split-15 {
+      display: flex;
+    }
+    .split-15 > *:first-child {
+      flex: 0 0 15%;
+    }
+    .split-15 > *:last-child {
+      flex: 0 0 85%;
+    }
+    .split-17 {
+      display: flex;
+    }
+    .split-17 > *:first-child {
+      flex: 0 0 17%;
+    }
+    .split-17 > *:last-child {
+      flex: 0 0 83%;
+    }
+    .split-20 {
+      display: flex;
+    }
+    .split-20 > *:first-child {
+      flex: 0 0 20%;
+    }
+    .split-20 > *:last-child {
+      flex: 0 0 80%;
+    }
+    .split-25 {
+      display: flex;
+    }
+    .split-25 > *:first-child {
+      flex: 0 0 25%;
+    }
+    .split-25 > *:last-child {
+      flex: 0 0 75%;
+    }
+    .split-27 {
+      display: flex;
+    }
+    .split-27 > *:first-child {
+      flex: 0 0 27%;
+    }
+    .split-27 > *:last-child {
+      flex: 0 0 73%;
+    }
+    .split-30 {
+      display: flex;
+    }
+    .split-30 > *:first-child {
+      flex: 0 0 30%;
+    }
+    .split-30 > *:last-child {
+      flex: 0 0 70%;
+    }
+    .split-35 {
+      display: flex;
+    }
+    .split-35 > *:first-child {
+      flex: 0 0 35%;
+    }
+    .split-35 > *:last-child {
+      flex: 0 0 65%;
+    }
+    .split-50 {
+      display: flex;
+      justify-content: space-between;
+    }
+    .split-50 > * {
+      flex: 1;
+    }
+    .split-60 {
+      display: flex;
+    }
+    .split-60 > *:first-child {
+      flex: 0 0 60%;
+    }
+    .split-60 > *:last-child {
+      flex: 0 0 40%;
+    }
+    .v-center {
+      display: flex;
+      align-items: center;
+    }
+    .v-bottom {
+      display: flex;
+      align-items: flex-end;
+    }
+    .h-center {
+      display: flex;
+      justify-content: center;
+    }
+    .h-bottom {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .vh-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .undertext {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      font-size: 0.5rem;
+    }
+    .text-stretch {
+      text-align: justify;
+    }
+    .text-center {
+      text-align: center;
+    }
+    .bold {
+      font-weight: bold;
+    }
+    .line {
+      border-bottom: 1px solid black;
+    }
+    .sign-wrapper {
+      position: relative;
+    }
+    #sign {
+      position: absolute;
+      width: auto;
+    }
+  </style>
+</html>

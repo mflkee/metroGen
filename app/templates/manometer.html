@@ -206,7 +206,12 @@
           style="display: flex; justify-content: space-around; margin-top: 60px"
         >
           <div>
-            <img alt="ПОДПИСЬ" id="sign" src="{{ sign_src or '' }}" />
+            <img
+              alt="ПОДПИСЬ"
+              id="sign"
+              src="{{ sign_src or '' }}"
+              style="position: absolute; width: auto; {{ sign_style or 'display: none;' }}"
+            />
           </div>
           <p class="v-bottom" id="setValue_worker">{{ verifier_name }}</p>
         </div>
@@ -392,11 +397,7 @@
     }
     #sign {
       position: absolute;
-      top: 30px; /* 20 - 30 */
-      left: 150px; /* 30 - 150 */
-      height: 33px; /* 31 - 33 */
       width: auto;
-      display: {{ sign_src and 'block' or 'none' }};
     }
   </style>
 </html>

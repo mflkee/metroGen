@@ -6,6 +6,9 @@ from collections.abc import AsyncIterator
 import httpx
 
 from app.core.config import settings
+from app.db.session import get_db
+
+__all__ = ("get_http_client", "get_semaphore", "get_db")
 
 # Глобальный семафор для ограничения параллельности исходящих запросов
 _SEM = asyncio.Semaphore(settings.ARSHIN_CONCURRENCY)
