@@ -2,10 +2,19 @@ from __future__ import annotations
 # isort: skip_file
 
 import os
+import sys
+import asyncio
+from pathlib import Path
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import create_engine, pool
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from app.db.base import Base
 from app.db import models as _models  # noqa: F401  # register models
 
@@ -44,13 +53,31 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = create_engine(get_url(), poolclass=pool.NullPool)
+    url = get_url()
+    if url.startswith("postgresql+asyncpg"):
+
+        async def async_run() -> None:
+            connectable: AsyncEngine = create_async_engine(
+                url, poolclass=pool.NullPool
+            )
+            async with connectable.connect() as connection:
+                await connection.run_sync(_run_migrations)
+            await connectable.dispose()
+
+        asyncio.run(async_run())
+        return
+
+    connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        _run_migrations(connection)
 
-        with context.begin_transaction():
-            context.run_migrations()
+
+def _run_migrations(connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
+
+    with context.begin_transaction():
+        context.run_migrations()
 
 
 if context.is_offline_mode():

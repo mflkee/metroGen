@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from datetime import datetime, date
 from typing import Any
 
 import httpx
@@ -36,6 +37,26 @@ def guess_year_from_cert(cert: str) -> int | None:
     if m:
         return int(m.group(3))
     return None
+
+
+def _fmt_date_ddmmyyyy(value: Any) -> str:
+    if not value:
+        return ""
+    if isinstance(value, (datetime, date)):
+        return value.strftime("%d.%m.%Y")
+
+    txt = str(value).strip()
+    try:
+        return datetime.fromisoformat(txt.replace("Z", "")).strftime("%d.%m.%Y")
+    except Exception:
+        pass
+
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(txt, fmt).strftime("%d.%m.%Y")
+        except Exception:
+            continue
+    return txt
 
 
 def _split_first_notation(s: str) -> str:
@@ -182,63 +203,104 @@ async def resolve_etalon_cert_from_details(
     либо None, если не найдено/недостаточно данных.
     """
     # Берём эталон либо из miInfo.etaMI, либо из means.mieta[0]
+    candidates: list[dict[str, Any]] = []
+    primary = _safe_get(details, ["means", "mieta"], []) or []
+    if primary:
+        candidates.extend([(item or {}).copy() for item in primary])
+
     eta = _safe_get(details, ["miInfo", "etaMI"], {}) or {}
-    if not eta:
-        mieta_list = _safe_get(details, ["means", "mieta"], []) or []
-        if mieta_list:
-            eta = (mieta_list[0] or {}).copy()
+    if eta:
+        candidates.append(eta.copy())
 
-    if not eta:
+    if not candidates:
         return None
 
-    mit_number = eta.get("mitypeNumber") or ""
-    mit_title = eta.get("mitypeTitle") or ""
-    mi_mod = eta.get("modification") or ""
-    mi_num = str(eta.get("manufactureNum") or "")
+    async def _query(params: dict[str, str]) -> dict[str, str] | None:
+        cache_key = ("eta_cert_v2", tuple(sorted((str(k), str(v)) for k, v in params.items())))
+        cached = arshin_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
-    if not (mit_number and mit_title and mi_num):
-        return None
-
-    params = {
-        "mit_number": mit_number,
-        "mit_title": mit_title,
-        "mi_modification": mi_mod,
-        "mi_number": mi_num,
-    }
-    cache_key = ("eta_cert", tuple(sorted(params.items())))
-    cached = arshin_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    if sem:
-        async with sem:
+        if sem:
+            async with sem:
+                resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
+        else:
             resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
-    else:
-        resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
-    resp.raise_for_status()
-    data = resp.json() or {}
-    items = _safe_get(data, ["result", "items"], default=[]) or []
-    if not items:
+        resp.raise_for_status()
+        data = resp.json() or {}
+        items = _safe_get(data, ["result", "items"], default=[]) or []
+        if not items:
+            return None
+
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            cert = it.get("result_docnum")
+            valid_date_raw = it.get("valid_date") or it.get("validDate")
+            if not (cert and valid_date_raw):
+                continue
+            vrf_date_raw = it.get("verification_date") or it.get("verificationDate")
+            vrf_date = _fmt_date_ddmmyyyy(vrf_date_raw)
+            valid_date = _fmt_date_ddmmyyyy(valid_date_raw)
+
+            base_line = f"свидетельство о поверке № {cert}"
+            if vrf_date:
+                base_line = f"{base_line} от {vrf_date}г."
+            line = f"{base_line}; действительно до {valid_date}г."
+            result = {
+                "docnum": cert,
+                "verification_date": vrf_date,
+                "valid_date": valid_date,
+                "line": line,
+            }
+            arshin_cache.set(cache_key, result)
+            return result
+
         return None
 
-    it = items[0] or {}
-    cert = it.get("result_docnum")
-    vrf_date = it.get("verification_date") or it.get("verificationDate")
-    valid_date = it.get("valid_date") or it.get("validDate")
+    for entry in candidates:
+        mit_number = str(entry.get("mitypeNumber") or "").strip()
+        mi_number = str(entry.get("manufactureNum") or "").strip()
+        if not (mit_number and mi_number):
+            continue
 
-    if not (cert and valid_date):
-        return None
+        base_params: dict[str, str] = {
+            "mit_number": mit_number,
+            "mi_number": mi_number,
+        }
+        mit_title = str(entry.get("mitypeTitle") or "").strip()
+        if mit_title:
+            base_params["mit_title"] = mit_title
+        mi_mod = str(entry.get("modification") or "").strip()
+        if mi_mod:
+            base_params["mi_modification"] = mi_mod
+        notation = str(entry.get("notation") or "").strip()
+        if notation:
+            base_params["mit_notation"] = notation
 
-    # Без завершающей точки с запятой в конце строки
-    line = f"свидетельство о поверке № {cert}; действительно до {valid_date}"
-    result = {
-        "docnum": cert,
-        "verification_date": vrf_date,
-        "valid_date": valid_date,
-        "line": line,
-    }
-    arshin_cache.set(cache_key, result)
-    return result
+        manufacture_year = entry.get("manufactureYear")
+        candidate_params: list[dict[str, str]] = []
+        if manufacture_year:
+            candidate_params.append({**base_params, "year": str(manufacture_year)})
+        candidate_params.append(dict(base_params))
+
+        # Optionally try guessed year from device certificate if available
+        cert_num = _safe_get(details, ["vriInfo", "applicable", "certNum"], "")
+        guessed_year = guess_year_from_cert(cert_num)
+        if guessed_year and guessed_year != manufacture_year:
+            candidate_params.insert(0, {**base_params, "year": str(guessed_year)})
+
+        seen_queries: set[tuple[tuple[str, str], ...]] = set()
+        for params in candidate_params:
+            key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
+            if key in seen_queries:
+                continue
+            seen_queries.add(key)
+            result = await _query(params)
+            if result:
+                return result
+
+    return None
 
 
 # Алиас для совместимости со старым импортом в protocols.py

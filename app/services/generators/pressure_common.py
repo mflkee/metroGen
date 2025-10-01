@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from random import uniform
-import math
 
 
 def _fmt_fixed(x: float, digits: int) -> str:

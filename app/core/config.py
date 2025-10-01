@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     USER_AGENT: str = "arshin-fastapi/0.1"
     DATABASE_URL: str | None = None
     EXPORTS_DIR: str = "exports"  # base folder for saved files
+    SIGNATURES_DIR: str = "signatures"  # base folder for signature images
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

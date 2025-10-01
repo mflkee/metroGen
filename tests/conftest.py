@@ -12,7 +12,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-# 2) теперь можно импортировать приложение
+# 2) теперь можно импортировать код приложения
+from app.utils.excel import CERTIFICATE_HEADER_KEYS
 from app.main import app as fastapi_app  # noqa: E402
 
 
@@ -32,7 +33,12 @@ async def async_client(app: FastAPI):
 def make_excel():
     """Фабрика: создаёт XLSX в памяти с данными в указанной колонке/строке."""
 
-    def _make(values, column_letter="P", header="Номер свидетельтсва", start_row=2):
+    def _make(
+        values,
+        column_letter="P",
+        header: str = CERTIFICATE_HEADER_KEYS[-1],
+        start_row=2,
+    ):
         wb = Workbook()
         ws = wb.active
         ws[f"{column_letter}1"] = header

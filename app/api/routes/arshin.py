@@ -16,6 +16,7 @@ from app.services.arshin_client import (
     fetch_vri_id_by_certificate,
     guess_year_from_cert,
 )
+from app.utils.excel import CERTIFICATE_HEADER_KEYS
 
 router = APIRouter(prefix="/api/v1/resolve", tags=["arshin"])
 
@@ -81,7 +82,7 @@ async def get_vri_details(
 def _read_cert_list_from_excel(file: UploadFile) -> list[str]:
     """Читает список сертификатов из Excel.
 
-    - Ищет колонку по заголовку 'Номер свидетельтсва' (без привязки к букве столбца)
+    - Ищет колонку по заголовку 'Номер свидетельства' (или частый вариант с опечаткой)
     - Возвращает непустые значения со 2-й строки и ниже
     """
     from openpyxl import load_workbook  # локальный импорт, чтобы не грузить при старте
@@ -92,8 +93,12 @@ def _read_cert_list_from_excel(file: UploadFile) -> list[str]:
     # Найти индекс колонки по заголовку
     header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
     col_idx = None
+    accepted_headers = {header.lower() for header in CERTIFICATE_HEADER_KEYS}
     for i, v in enumerate(header_row):
-        if isinstance(v, str) and v.strip().lower() == "номер свидетельтсва":
+        if not isinstance(v, str):
+            continue
+        header = v.strip()
+        if header and header.lower() in accepted_headers:
             col_idx = i
             break
     if col_idx is None:
@@ -104,8 +109,11 @@ def _read_cert_list_from_excel(file: UploadFile) -> list[str]:
         if row is None:
             continue
         val = row[col_idx] if col_idx < len(row) else None
-        if val:
-            certs.append(str(val).strip())
+        if val is None:
+            continue
+        cert = str(val).strip()
+        if cert:
+            certs.append(cert)
     return certs
 
 

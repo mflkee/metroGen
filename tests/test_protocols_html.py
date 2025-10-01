@@ -6,12 +6,18 @@ import respx
 from openpyxl import Workbook
 
 from app.services.arshin_client import ARSHIN_BASE
+from app.utils.excel import CERTIFICATE_HEADER_KEYS
 
 
-def _make_excel_row(certificate: str, sn: str = "ABC123", date: str = "15.01.2025") -> bytes:
+def _make_excel_row(
+    certificate: str,
+    sn: str = "ABC123",
+    date: str = "15.01.2025",
+    header: str = CERTIFICATE_HEADER_KEYS[-1],
+) -> bytes:
     wb = Workbook()
     ws = wb.active
-    ws["A1"] = "Номер свидетельтсва"
+    ws["A1"] = header
     ws["B1"] = "Заводской номер"
     ws["C1"] = "Дата поверки"
 
@@ -26,7 +32,8 @@ def _make_excel_row(certificate: str, sn: str = "ABC123", date: str = "15.01.202
 
 @pytest.mark.anyio
 @respx.mock
-async def test_html_by_excel_returns_html(async_client):
+@pytest.mark.parametrize("header", CERTIFICATE_HEADER_KEYS)
+async def test_html_by_excel_returns_html(async_client, header):
     cert = "С-ВЯ/15-01-2025/402123271"
     vri_id = "1-XYZ"
 
@@ -82,7 +89,7 @@ async def test_html_by_excel_returns_html(async_client):
         )
     )
 
-    xlsx = _make_excel_row(cert)
+    xlsx = _make_excel_row(cert, header=header)
     files = {
         "file": (
             "input.xlsx",
@@ -99,4 +106,3 @@ async def test_html_by_excel_returns_html(async_client):
     assert "ABC123" in html  # serial number appears
     assert "МИ 123-45" in html  # methodology
     assert "77090-19" in html  # etalon line
-

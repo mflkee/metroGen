@@ -38,6 +38,8 @@ def _template_name_from_context(ctx: dict[str, Any]) -> str:
     tpl_id = resolve_template_id(method_code, mitype_number, mitype_title)
 
     # simple mapping id -> file
+    if tpl_id == "controller_43790_12":
+        return "controller_43790_12.html"
     if tpl_id == "pressure_common":
         return "manometer.html"
     return "manometer.html"
@@ -58,6 +60,7 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     # plain numeric environment values (strings acceptable too)
     ctx.setdefault("temperature_plain", ctx.get("temperature"))
     ctx.setdefault("humidity_plain", ctx.get("humidity"))
+    ctx.setdefault("allowable_note", "")
 
     template = _templates.get_template(name)
     return template.render(ctx)
