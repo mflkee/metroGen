@@ -30,7 +30,8 @@ dev = [
   "respx",
   "pytest-cov",
   "ruff",
-  "black"
+  "black",
+  "aiosqlite",
 ]
 
 [tool.ruff]

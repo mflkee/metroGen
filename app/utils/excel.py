@@ -14,6 +14,38 @@ CERTIFICATE_HEADER_KEYS: tuple[str, ...] = (
 )
 
 
+def extract_certificates_from_excel(file_bytes: bytes) -> list[str]:
+    """Return certificate numbers from the first sheet matching known headers."""
+    wb = load_workbook(filename=BytesIO(file_bytes), read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        header_cells = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        if not header_cells:
+            return []
+        accepted = {header.lower() for header in CERTIFICATE_HEADER_KEYS}
+        column_index: int | None = None
+        for idx, cell_value in enumerate(header_cells):
+            if isinstance(cell_value, str) and cell_value.strip().lower() in accepted:
+                column_index = idx
+                break
+        if column_index is None:
+            return []
+
+        certs: list[str] = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or column_index >= len(row):
+                continue
+            value = row[column_index]
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                certs.append(text)
+        return certs
+    finally:
+        wb.close()
+
+
 def read_column_as_list(
     file_bytes: bytes, column_letter: str = "P", start_row: int = 2
 ) -> list[str]:

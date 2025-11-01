@@ -6,6 +6,7 @@ from openpyxl import Workbook
 from app.utils.excel import (
     CERTIFICATE_HEADER_KEYS,
     extract_certificate_number,
+    extract_certificates_from_excel,
     read_column_as_list,
 )
 
@@ -35,3 +36,31 @@ def test_extract_certificate_number(header):
 
 def test_extract_certificate_number_missing():
     assert extract_certificate_number({}) == ""
+
+
+def test_extract_certificates_from_excel_active_sheet():
+    wb = Workbook()
+    ws = wb.active
+    ws.append([CERTIFICATE_HEADER_KEYS[1], "another column"])
+    ws.append(["С-ВЯ/15-01-2025/402123271", "foo"])
+    ws.append(["", "bar"])
+    ws.append(["С-ВЯ/16-01-2025/402123272", "baz"])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    certs = extract_certificates_from_excel(buf.getvalue())
+    assert certs == [
+        "С-ВЯ/15-01-2025/402123271",
+        "С-ВЯ/16-01-2025/402123272",
+    ]
+
+
+def test_extract_certificates_from_excel_missing_header():
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["header1", "header2"])
+    ws.append(["value1", "value2"])
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    assert extract_certificates_from_excel(buf.getvalue()) == []

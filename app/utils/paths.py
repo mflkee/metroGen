@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 from pathlib import Path
 
@@ -35,3 +36,23 @@ def get_output_dir() -> Path:
     out = root / "output"
     out.mkdir(parents=True, exist_ok=True)
     return out
+
+
+_INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|]')
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def sanitize_filename(
+    name: str,
+    *,
+    default: str = "file",
+    replacement: str = "-",
+) -> str:
+    """Return filesystem-safe name, keeping ASCII/UTF-8 text intact."""
+    text = (name or "").strip()
+    if not text:
+        return default
+    cleaned = _INVALID_FILENAME_CHARS.sub(replacement, text)
+    cleaned = _WHITESPACE_RE.sub(" ", cleaned).strip()
+    cleaned = cleaned.strip(".")
+    return cleaned or default

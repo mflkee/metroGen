@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import re
 from datetime import date, datetime
 from typing import Any
 
 import httpx
+from loguru import logger
 
+from app.core.config import settings
 from app.services.cache import arshin_cache
 
 # Важно: этот BASE дергается в тестах!
@@ -15,6 +18,82 @@ ARSHIN_BASE = "https://fgis.gost.ru/fundmetrology/eapi"
 
 
 # ─────────────────────────── helpers ───────────────────────────
+
+_RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+async def _request_json(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    sem: asyncio.Semaphore | None = None,
+    description: str,
+) -> dict[str, Any]:
+    attempts = max(settings.ARSHIN_RETRY_ATTEMPTS, 1)
+    backoff = max(settings.ARSHIN_RETRY_BACKOFF_BASE, 0.1)
+    max_backoff = max(settings.ARSHIN_RETRY_BACKOFF_MAX, backoff)
+    jitter = max(settings.ARSHIN_RETRY_JITTER, 0.0)
+
+    for attempt in range(1, attempts + 1):
+        try:
+            if sem:
+                async with sem:
+                    response = await client.get(url, params=params)
+            else:
+                response = await client.get(url, params=params)
+
+            if response.status_code in _RETRY_STATUS_CODES:
+                raise httpx.HTTPStatusError(
+                    f"retryable status {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response else None
+            if status not in _RETRY_STATUS_CODES or attempt == attempts:
+                logger.error(
+                    "Arshin request failed (%s) on attempt %s/%s: %s",
+                    status,
+                    attempt,
+                    attempts,
+                    description,
+                )
+                raise
+            logger.warning(
+                "Retryable Arshin status %s for %s (attempt %s/%s)",
+                status,
+                description,
+                attempt,
+                attempts,
+            )
+        except httpx.RequestError as exc:
+            if attempt == attempts:
+                logger.error(
+                    "Arshin transport error on attempt %s/%s for %s: %s",
+                    attempt,
+                    attempts,
+                    description,
+                    exc,
+                )
+                raise
+            logger.warning(
+                "Retrying Arshin transport error for %s (attempt %s/%s): %s",
+                description,
+                attempt,
+                attempts,
+                exc,
+            )
+
+        delay = min(backoff, max_backoff) + (random.uniform(0, jitter) if jitter else 0.0)
+        await asyncio.sleep(delay)
+        backoff = min(backoff * 2, max_backoff)
+
+    return {}
 
 
 def _safe_get(d: dict[str, Any], path: list[str], default: Any = None) -> Any:
@@ -93,13 +172,13 @@ async def fetch_vri_id_by_certificate(
         if cached is not None:
             return cached
 
-    if sem:
-        async with sem:
-            resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
-    else:
-        resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
-    resp.raise_for_status()
-    data = resp.json() or {}
+    data = await _request_json(
+        client,
+        f"{ARSHIN_BASE}/vri",
+        params=params,
+        sem=sem,
+        description="vri lookup",
+    )
     items = _safe_get(data, ["result", "items"], default=[])
     if not items:
         return None
@@ -118,13 +197,12 @@ async def fetch_vri_details(
     """
     Возвращает payload с ключом 'result' по vri_id.
     """
-    if sem:
-        async with sem:
-            resp = await client.get(f"{ARSHIN_BASE}/vri/{vri_id}")
-    else:
-        resp = await client.get(f"{ARSHIN_BASE}/vri/{vri_id}")
-    resp.raise_for_status()
-    data = resp.json() or {}
+    data = await _request_json(
+        client,
+        f"{ARSHIN_BASE}/vri/{vri_id}",
+        sem=sem,
+        description="vri details",
+    )
     return data.get("result") or {}
 
 
@@ -221,13 +299,13 @@ async def resolve_etalon_cert_from_details(
         if cached is not None:
             return cached
 
-        if sem:
-            async with sem:
-                resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
-        else:
-            resp = await client.get(f"{ARSHIN_BASE}/vri", params=params)
-        resp.raise_for_status()
-        data = resp.json() or {}
+        data = await _request_json(
+            client,
+            f"{ARSHIN_BASE}/vri",
+            params=params,
+            sem=sem,
+            description="etalon certificate lookup",
+        )
         items = _safe_get(data, ["result", "items"], default=[]) or []
         if not items:
             return None
