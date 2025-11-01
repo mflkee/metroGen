@@ -16,7 +16,7 @@ from app.services.arshin_client import (
     fetch_vri_id_by_certificate,
     guess_year_from_cert,
 )
-from app.utils.excel import CERTIFICATE_HEADER_KEYS
+from app.utils.excel import extract_certificates_from_excel
 
 router = APIRouter(prefix="/api/v1/resolve", tags=["arshin"])
 
@@ -77,42 +77,11 @@ async def get_vri_details(
 # ───────────────────────── excel endpoint ─────────────────────────
 
 
-def _read_cert_list_from_excel(file: UploadFile) -> list[str]:
-    """Читает список сертификатов из Excel.
-
-    - Ищет колонку по заголовку 'Номер свидетельства' (или частый вариант с опечаткой)
-    - Возвращает непустые значения со 2-й строки и ниже
-    """
-    from openpyxl import load_workbook  # локальный импорт, чтобы не грузить при старте
-
-    wb = load_workbook(file.file, read_only=True, data_only=True)
-    ws = wb.active
-
-    # Найти индекс колонки по заголовку
-    header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
-    col_idx = None
-    accepted_headers = {header.lower() for header in CERTIFICATE_HEADER_KEYS}
-    for i, v in enumerate(header_row):
-        if not isinstance(v, str):
-            continue
-        header = v.strip()
-        if header and header.lower() in accepted_headers:
-            col_idx = i
-            break
-    if col_idx is None:
+async def _certificates_from_upload(file: UploadFile) -> list[str]:
+    data = await file.read()
+    if not data:
         return []
-
-    certs: list[str] = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        if row is None:
-            continue
-        val = row[col_idx] if col_idx < len(row) else None
-        if val is None:
-            continue
-        cert = str(val).strip()
-        if cert:
-            certs.append(cert)
-    return certs
+    return extract_certificates_from_excel(data)
 
 
 @router.post("/vri-details-by-excel")
@@ -127,7 +96,9 @@ async def post_vri_details_by_excel(
       - ищем vri_id (через /vri)
       - при наличии — подтягиваем детали (через /vri/{id})
     """
-    certs = _read_cert_list_from_excel(file)
+    certs = await _certificates_from_upload(file)
+    if not certs:
+        return {"items": []}
 
     # Обрабатываем строки параллельно, ограничение — через семафор
     async def process(cert: str) -> dict[str, Any]:

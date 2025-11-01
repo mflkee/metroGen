@@ -13,6 +13,7 @@ from app.services.generators.base import FixedPctTol, GenInput
 from app.services.generators.registry import get_by_template
 from app.services.mappings import resolve_methodology, resolve_owner_and_inn
 from app.services.templates import TEMPLATES, resolve_template_id
+from app.utils.paths import sanitize_filename
 from app.utils.signatures import get_signature_render
 
 
@@ -432,7 +433,8 @@ def suggest_filename(row: dict) -> str:
         row.get("Дата поверки") or row.get("verification_date") or row.get("verificationDate") or ""
     )
     date_part = _fmt_date_ddmmyy(str(date_raw))
-    return f"{sn}-б-{date_part}-1"
+    candidate = f"{sn}-б-{date_part}-1".strip("-")
+    return sanitize_filename(candidate, default="protocol")
 
 
 def _initials3(full_name: str | None) -> str:

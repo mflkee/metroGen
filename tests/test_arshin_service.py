@@ -83,3 +83,19 @@ async def test_fetch_vri_and_details():
         assert fields["organization"].startswith("ФБУ")
         assert fields["vrfDate"] == "15.01.2025"
         assert fields["applicable"] is True
+
+
+@respx.mock
+async def test_fetch_vri_retries_on_server_error():
+    async with httpx.AsyncClient() as client:
+        route = respx.get(f"{ARSHIN_BASE}/vri").mock(
+            side_effect=[
+                httpx.Response(500, json={"message": "fail"}),
+                httpx.Response(200, json=LIST_PAYLOAD),
+            ]
+        )
+        result = await fetch_vri_id_by_certificate(
+            client, CERT, year=2025, sem=None, use_cache=False
+        )
+        assert result == VRI_ID
+        assert route.call_count == 2

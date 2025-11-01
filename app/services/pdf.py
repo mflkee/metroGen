@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from loguru import logger
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 
@@ -24,22 +25,29 @@ async def html_to_pdf_bytes(html: str) -> bytes | None:
     """
     try:
         from playwright.async_api import async_playwright
-    except Exception:
+    except Exception as exc:
+        logger.warning("Playwright is unavailable for PDF generation: %s", exc)
         return None
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page()
-        await page.set_content(html, wait_until="load")
-        # Явно фиксируем формат A4 в книжной ориентации.
-        # Указываем точные размеры страницы, чтобы исключить авто-поворот.
-        pdf_bytes = await page.pdf(
-            width="210mm",
-            height="297mm",
-            print_background=True,
-            # Уменьшаем внешние поля страницы, чтобы увеличить ширину контента
-            margin={"top": "10mm", "bottom": "10mm", "left": "8mm", "right": "8mm"},
-            landscape=False,
-        )
-        await browser.close()
-        return pdf_bytes
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            try:
+                page = await browser.new_page()
+                await page.set_content(html, wait_until="load")
+                pdf_bytes = await page.pdf(
+                    width="210mm",
+                    height="297mm",
+                    print_background=True,
+                    margin={"top": "10mm", "bottom": "10mm", "left": "8mm", "right": "8mm"},
+                    landscape=False,
+                )
+                return pdf_bytes
+            finally:
+                try:
+                    await browser.close()
+                except Exception as close_error:
+                    logger.warning("Failed to close Playwright browser: %s", close_error)
+    except Exception as exc:
+        logger.error("Playwright PDF rendering failed: %s", exc)
+        raise

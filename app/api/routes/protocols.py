@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from collections.abc import Iterable, Mapping
 from datetime import date
 from pathlib import Path
@@ -9,13 +8,18 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import HTMLResponse
 
 from app.api.deps import get_db, get_http_client, get_semaphore
 from app.db.repositories import RegistryRepository
 from app.schemas.protocol import ProtocolContextItem, ProtocolContextListOut
-from app.services.arshin_client import ARSHIN_BASE, find_etalon_certificate
+from app.services.arshin_client import (
+    fetch_vri_details,
+    fetch_vri_id_by_certificate,
+    find_etalon_certificate,
+)
 from app.services.html_renderer import render_protocol_html
 from app.services.pdf import html_to_pdf_bytes
 from app.services.protocol_builder import (
@@ -30,7 +34,7 @@ from app.utils.excel import (
     read_rows_with_required_headers,
 )
 from app.utils.normalization import normalize_serial
-from app.utils.paths import get_dated_exports_dir, get_output_dir
+from app.utils.paths import get_dated_exports_dir, get_output_dir, sanitize_filename
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
 
@@ -40,15 +44,13 @@ def _filename_from_protocol_number(pn: str, ext: str = ".pdf") -> str:
 
     Example: "БСН/150125/1" -> "БСН-150125-1.pdf"
     """
-    name = (pn or "protocol").strip()
-    # replace separators unsafe for filesystems
-    for ch in ("/", "\\"):
-        name = name.replace(ch, "-")
-    # collapse spaces
-    name = "-".join(part for part in name.split())
-    if not name.lower().endswith(ext):
-        name = f"{name}{ext}"
-    return name
+    raw_name = (pn or "").strip()
+    if raw_name.lower().endswith(ext.lower()):
+        raw_name = raw_name[: -len(ext)]
+    safe = sanitize_filename(raw_name, default="protocol")
+    if not safe.lower().endswith(ext.lower()):
+        safe = f"{safe}{ext}"
+    return safe
 
 
 def _controller_filename(ctx: dict[str, Any]) -> str:
@@ -67,8 +69,7 @@ def _controller_filename(ctx: dict[str, Any]) -> str:
         parts.append(f"(МПИ-{mpi})")
 
     name = " ".join(parts).strip() or "protocol"
-    safe_name = re.sub(r"[\\/:]+", "-", name)
-    safe_name = re.sub(r"\s+", " ", safe_name).strip()
+    safe_name = sanitize_filename(name, default="protocol")
     return safe_name
 
 
@@ -175,11 +176,8 @@ async def _build_context_from_db(
         )
 
     try:
-        async with sem:
-            search_resp = await client.get(f"{ARSHIN_BASE}/vri", params={"result_docnum": cert})
-        search_resp.raise_for_status()
-        found = (search_resp.json().get("result") or {}).get("items") or []
-        if not found:
+        vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
+        if not vri_id:
             return ProtocolContextItem(
                 certificate=cert,
                 vri_id="",
@@ -189,11 +187,16 @@ async def _build_context_from_db(
                 error="not found",
             )
 
-        vri_id = found[0]["vri_id"]
-        async with sem:
-            details_resp = await client.get(f"{ARSHIN_BASE}/vri/{vri_id}")
-        details_resp.raise_for_status()
-        details = details_resp.json().get("result") or {}
+        details = await fetch_vri_details(client, vri_id, sem=sem)
+        if not details:
+            return ProtocolContextItem(
+                certificate=cert,
+                vri_id="",
+                filename=filename,
+                context={},
+                raw_details={},
+                error="not found",
+            )
 
         et_cert = await find_etalon_certificate(client, details, sem=sem)
         if et_cert:
@@ -263,8 +266,9 @@ async def contexts_by_excel(
         return ProtocolContextListOut(items=[])
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
-        cert = extract_certificate_number(row)
-        filename = suggest_filename(row)
+        row_data = dict(row)
+        cert = extract_certificate_number(row_data)
+        filename = suggest_filename(row_data)
 
         if not cert:
             return ProtocolContextItem(
@@ -277,12 +281,8 @@ async def contexts_by_excel(
             )
 
         try:
-            # 2) найти VRI по номеру свидетельства (ограничиваем параллельность)
-            async with sem:
-                search_resp = await client.get(f"{ARSHIN_BASE}/vri", params={"result_docnum": cert})
-            search_resp.raise_for_status()
-            found = (search_resp.json().get("result") or {}).get("items") or []
-            if not found:
+            vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
+            if not vri_id:
                 return ProtocolContextItem(
                     certificate=cert,
                     vri_id="",
@@ -292,21 +292,24 @@ async def contexts_by_excel(
                     error="not found",
                 )
 
-            vri_id = found[0]["vri_id"]
-
-            # 3) детали по VRI (ограничиваем параллельность)
-            async with sem:
-                details_resp = await client.get(f"{ARSHIN_BASE}/vri/{vri_id}")
-            details_resp.raise_for_status()
-            details = details_resp.json().get("result") or {}
+            details = await fetch_vri_details(client, vri_id, sem=sem)
+            if not details:
+                return ProtocolContextItem(
+                    certificate=cert,
+                    vri_id="",
+                    filename=filename,
+                    context={},
+                    raw_details={},
+                    error="not found",
+                )
 
             # 4) авто-поиск свидетельства эталона с учётом семафора
             et_cert = await find_etalon_certificate(client, details, sem=sem)
             if et_cert:
-                row["_resolved_etalon_cert"] = et_cert  # билдер это подхватит
+                row_data["_resolved_etalon_cert"] = et_cert  # билдер это подхватит
 
             # 5) собрать контекст
-            ctx = await build_protocol_context(row, details, client, session=session)
+            ctx = await build_protocol_context(row_data, details, client, session=session)
 
             # 6) имя файла — по контексту или по исходной строке
             fname = suggest_filename(ctx) or filename
@@ -344,6 +347,14 @@ async def contexts_by_excel(
             ctx["protocol_number"] = pn
             it.context = ctx
 
+    success_count = sum(1 for it in items if not it.error)
+    logger.info(
+        "contexts_by_excel: processed=%d success=%d errors=%d",
+        len(items),
+        success_count,
+        len(items) - success_count,
+    )
+
     return ProtocolContextListOut(items=items)
 
 
@@ -366,34 +377,24 @@ async def html_by_excel(
     if not rows:
         raise HTTPException(status_code=400, detail="no rows")
 
-    row = rows[0]
-    cert = extract_certificate_number(row)
+    row_data = dict(rows[0])
+    cert = extract_certificate_number(row_data)
     if not cert:
         raise HTTPException(status_code=400, detail="certificate number is empty")
 
-    # 1) найти VRI по номеру свидетельства
-    async with sem:
-        search_resp = await client.get(f"{ARSHIN_BASE}/vri", params={"result_docnum": cert})
-    search_resp.raise_for_status()
-    found = (search_resp.json().get("result") or {}).get("items") or []
-    if not found:
+    vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
+    if not vri_id:
         raise HTTPException(status_code=404, detail="not found")
 
-    vri_id = found[0]["vri_id"]
+    details = await fetch_vri_details(client, vri_id, sem=sem)
+    if not details:
+        raise HTTPException(status_code=404, detail="not found")
 
-    # 2) детали по VRI
-    async with sem:
-        details_resp = await client.get(f"{ARSHIN_BASE}/vri/{vri_id}")
-    details_resp.raise_for_status()
-    details = details_resp.json().get("result") or {}
-
-    # 3) авто-поиск свидетельства эталона
     et_cert = await find_etalon_certificate(client, details, sem=sem)
     if et_cert:
-        row["_resolved_etalon_cert"] = et_cert
+        row_data["_resolved_etalon_cert"] = et_cert
 
-    # 4) собрать контекст
-    ctx = await build_protocol_context(row, details, client, session=session)
+    ctx = await build_protocol_context(row_data, details, client, session=session)
 
     # Номер протокола: ИНИ/ДДММГГГГ/N (для одиночного запроса N=1)
     proto_num = make_protocol_number(
@@ -408,7 +409,7 @@ async def html_by_excel(
 
     # Сохраняем файл в output/<filename>.html
     out_dir = get_output_dir()
-    base_name = suggest_filename(ctx) or suggest_filename(row) or "protocol"
+    base_name = suggest_filename(ctx) or suggest_filename(row_data) or "protocol"
     if not base_name.lower().endswith(".html"):
         base_name = f"{base_name}.html"
     out_path = _unique_output_path(out_dir, base_name)
@@ -538,6 +539,13 @@ async def controllers_pdf_files(
             status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
         )
 
+    logger.info(
+        "controllers_pdf_files: saved=%d errors=%d pdf_unavailable=%s",
+        len(saved),
+        len(errors),
+        pdf_unavailable,
+    )
+
     return {"files": saved, "count": len(saved), "errors": errors}
 
 
@@ -659,5 +667,12 @@ async def manometers_pdf_files(
         raise HTTPException(
             status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
         )
+
+    logger.info(
+        "manometers_pdf_files: saved=%d errors=%d pdf_unavailable=%s",
+        len(saved),
+        len(errors),
+        pdf_unavailable,
+    )
 
     return {"files": saved, "count": len(saved), "errors": errors}

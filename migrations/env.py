@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db import models as _models  # noqa: E402,F401  # register models
 
@@ -32,11 +33,16 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    url = os.getenv("DATABASE_URL")
-    if not url:
-        # fallback for local runs
-        return "sqlite:///dev.db"
-    return url
+    env_url = os.getenv("DATABASE_URL")
+    if env_url:
+        return env_url
+
+    settings_url = getattr(settings, "DATABASE_URL", None)
+    if settings_url:
+        return settings_url
+
+    # fallback for local runs
+    return "sqlite:///dev.db"
 
 
 def run_migrations_offline() -> None:

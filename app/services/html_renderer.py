@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from jinja2 import StrictUndefined
 from starlette.templating import Jinja2Templates
 
 from app.services.templates import resolve_template_id
@@ -25,6 +26,7 @@ def _build_renderer() -> Jinja2Templates:
     templates = Jinja2Templates(directory=str(_TPL_DIR))
     # register filters
     templates.env.filters["fmt2"] = _fmt2
+    templates.env.undefined = StrictUndefined
     return templates
 
 

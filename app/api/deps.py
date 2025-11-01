@@ -20,9 +20,21 @@ async def get_http_client() -> AsyncIterator[httpx.AsyncClient]:
     Такой подход упрощает тестирование с respx (моки подхватываются всегда)
     и не создаёт зависимостей от времени импорта.
     """
+    timeout = httpx.Timeout(
+        timeout=settings.ARSHIN_TIMEOUT,
+        connect=settings.ARSHIN_TIMEOUT,
+        read=settings.ARSHIN_TIMEOUT,
+        write=settings.ARSHIN_TIMEOUT,
+        pool=settings.ARSHIN_TIMEOUT,
+    )
+    limits = httpx.Limits(
+        max_connections=settings.ARSHIN_CONCURRENCY * 2,
+        max_keepalive_connections=settings.ARSHIN_CONCURRENCY,
+    )
     async with httpx.AsyncClient(
         headers={"User-Agent": settings.USER_AGENT},
-        timeout=settings.ARSHIN_TIMEOUT,
+        timeout=timeout,
+        limits=limits,
     ) as client:
         yield client
 
