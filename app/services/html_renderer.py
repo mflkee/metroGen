@@ -63,6 +63,16 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("temperature_plain", ctx.get("temperature"))
     ctx.setdefault("humidity_plain", ctx.get("humidity"))
     ctx.setdefault("allowable_note", "")
+    ctx.setdefault("table_rows", [])
+
+    if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
+        pct = ctx.get("allowable_variation_pct")
+        if isinstance(pct, int | float):
+            ctx["allowable_variation"] = f"{pct:.2f}"
+        elif isinstance(pct, str):
+            ctx["allowable_variation"] = pct
+        else:
+            ctx["allowable_variation"] = ""
 
     template = _templates.get_template(name)
     return template.render(ctx)
