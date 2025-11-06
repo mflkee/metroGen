@@ -41,9 +41,9 @@ def test_get_signature_render_returns_data(monkeypatch, tmp_path):
     height_match = re.search(r"height:\s*([-0-9.]+)px", render.style)
     rotation_match = re.search(r"transform:\s*rotate\(([-0-9.]+)deg\)", render.style)
 
-    assert top_match and 36.0 <= float(top_match.group(1)) <= 40.0
-    assert left_match and 40.0 <= float(left_match.group(1)) <= 56.0
-    assert height_match and 24.0 <= float(height_match.group(1)) <= 28.0
+    assert top_match and 18.0 <= float(top_match.group(1)) <= 22.0
+    assert left_match and 36.0 <= float(left_match.group(1)) <= 64.0
+    assert height_match and 20.0 <= float(height_match.group(1)) <= 36.0
     assert rotation_match and -2.5 <= float(rotation_match.group(1)) <= 2.5
 
 

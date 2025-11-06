@@ -14,17 +14,24 @@ from app.utils.paths import get_project_root
 _SIGN_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 # Базовая геометрия и небольшая вариация, чтобы подпись всегда помещалась внутри строки.
-_TOP_BASE = 38.0
+_TOP_BASE = 16.0
 _TOP_JITTER = 2.0  # ±px
 
-_LEFT_BASE = 48.0
-_LEFT_JITTER = 8.0
+_LEFT_BASE = 52.0
+_LEFT_JITTER = 12.0
 
-_HEIGHT_BASE = 26.0
-_HEIGHT_JITTER = 2.0
+_HEIGHT_BASE = 44.0
+_HEIGHT_JITTER = 8.0
 
 _ROTATION_BASE = 0.0
 _ROTATION_JITTER = 2.5
+
+_HEIGHT_SCALE_OVERRIDES: dict[tuple[str, ...], float] = {
+    ("большаков",): 0.65,
+}
+_TOP_OFFSET_OVERRIDES: dict[tuple[str, ...], float] = {
+    ("большаков",): 4.0,
+}
 
 
 @dataclass(frozen=True)
@@ -105,6 +112,34 @@ def _with_jitter(base: float, jitter: float) -> float:
     return base + _RNG.uniform(-jitter, jitter)
 
 
+def _match_override(
+    overrides: dict[tuple[str, ...], float],
+    name: str,
+    entry: _SignatureEntry,
+) -> float | None:
+    tokens_name = set(_normalize(name).split())
+    tokens_entry = set(entry.normalized_tokens)
+    for key_tokens, value in overrides.items():
+        key_set = set(key_tokens)
+        if key_set <= tokens_name or key_set <= tokens_entry:
+            return value
+    return None
+
+
+def _height_scale_for(name: str, entry: _SignatureEntry) -> float:
+    matched = _match_override(_HEIGHT_SCALE_OVERRIDES, name, entry)
+    if matched is None:
+        return 1.0
+    return max(0.3, float(matched))
+
+
+def _top_offset_for(name: str, entry: _SignatureEntry) -> float:
+    matched = _match_override(_TOP_OFFSET_OVERRIDES, name, entry)
+    if matched is None:
+        return 0.0
+    return float(matched)
+
+
 def _best_matching_entries(name: str) -> list[_SignatureEntry]:
     target_normalized = _normalize(name)
     if not target_normalized:
@@ -147,9 +182,11 @@ def get_signature_render(verifier_name: str | None) -> SignatureRender | None:
     entry = _RNG.choice(candidates)
     src = _data_uri_for(str(entry.path))
 
-    top = _with_jitter(_TOP_BASE, _TOP_JITTER)
+    top = _with_jitter(_TOP_BASE, _TOP_JITTER) + _top_offset_for(verifier_name, entry)
     left = _with_jitter(_LEFT_BASE, _LEFT_JITTER)
-    height = max(10.0, _with_jitter(_HEIGHT_BASE, _HEIGHT_JITTER))
+    scale = _height_scale_for(verifier_name, entry)
+    raw_height = _with_jitter(_HEIGHT_BASE, _HEIGHT_JITTER)
+    height = max(10.0, raw_height * scale)
     rotation = _with_jitter(_ROTATION_BASE, _ROTATION_JITTER)
 
     style = (

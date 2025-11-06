@@ -111,6 +111,18 @@ def _split_notation(notation: str) -> tuple[str, str]:
     return first, second
 
 
+def _split_point_label(value: str) -> tuple[str, str]:
+    text = (value or "").strip()
+    if not text:
+        return "", ""
+
+    parts = re.split(r"\s*[–—-]\s*", text, maxsplit=1)
+    if len(parts) == 2 and parts[0]:
+        return parts[0].strip(), parts[1].strip()
+
+    return text, ""
+
+
 async def build_context(
     *,
     excel_row: dict[str, Any],
@@ -129,12 +141,15 @@ async def build_context(
     for idx, item in enumerate(methodology_point_items or [], start=1):
         if not isinstance(item, dict):
             continue
-        code = str(item.get("code") or methodology_points.get(f"p{idx}", "") or "").strip()
+        raw_code = str(item.get("code") or methodology_points.get(f"p{idx}", "") or "").strip()
+        code_value, label_description = _split_point_label(raw_code)
         description = str(item.get("description") or "").strip()
+        if not description:
+            description = label_description
         point_items.append(
             {
                 "position": int(item.get("position") or idx),
-                "code": code,
+                "code": code_value,
                 "description": description,
                 "point_type": str(item.get("point_type") or "clause").lower(),
             }
@@ -146,11 +161,14 @@ async def build_context(
             key=lambda k: int(k[1:]) if k[1:].isdigit() else 0,
         )
         for idx, key in enumerate(point_keys, start=1):
+            raw_label = str(methodology_points.get(key) or "").strip()
+            code_value, description = _split_point_label(raw_label)
+            methodology_points[key] = code_value
             point_items.append(
                 {
                     "position": idx,
-                    "code": str(methodology_points.get(key) or "").strip(),
-                    "description": "",
+                    "code": code_value,
+                    "description": description,
                     "point_type": "clause",
                 }
             )

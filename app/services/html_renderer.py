@@ -1,6 +1,7 @@
 from __future__ import annotations
 # isort: skip_file
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,28 @@ def _build_renderer() -> Jinja2Templates:
 
 
 _templates = _build_renderer()
+
+
+_TEMP_VALUE_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+
+
+def _normalize_temperature_plain(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    match = _TEMP_VALUE_RE.search(text)
+    if not match:
+        return text
+    numeric = match.group(0).replace(",", ".")
+    try:
+        number = float(numeric)
+    except ValueError:
+        cleaned = match.group(0)
+    else:
+        cleaned = f"{number:.1f}".rstrip("0").rstrip(".")
+    if not cleaned:
+        cleaned = match.group(0)
+    return cleaned.replace(".", ",")
 
 
 def _template_name_from_context(ctx: dict[str, Any]) -> str:
@@ -73,6 +96,8 @@ def render_protocol_html(context: dict[str, Any]) -> str:
             ctx["allowable_variation"] = pct
         else:
             ctx["allowable_variation"] = ""
+
+    ctx["temperature_plain"] = _normalize_temperature_plain(ctx.get("temperature_plain"))
 
     template = _templates.get_template(name)
     return template.render(ctx)
