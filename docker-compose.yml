@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: metrologenerator
+      POSTGRES_USER: metrologenerator
+      POSTGRES_PASSWORD: metrologenerator
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metrologenerator -d metrologenerator"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://metrologenerator:metrologenerator@db:5432/metrologenerator
+      ARSHIN_TIMEOUT: "30"
+      ARSHIN_CONCURRENCY: "8"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./exports:/app/exports
+      - ./output:/app/output
+      - ./data:/app/data
+
+volumes:
+  pgdata:
