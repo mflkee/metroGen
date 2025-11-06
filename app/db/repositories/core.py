@@ -40,6 +40,11 @@ class BaseRepository:
 
 
 class OwnerRepository(BaseRepository):
+    async def get_by_id(self, owner_id: int) -> models.Owner | None:
+        stmt = select(models.Owner).where(models.Owner.id == owner_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_name(self, name: str) -> models.Owner | None:
         if not name:
             return None

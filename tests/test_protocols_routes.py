@@ -241,7 +241,13 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
-    monkeypatch.setattr("app.api.routes.protocols.get_dated_exports_dir", lambda _day: tmp_path)
+
+    def _fake_named_exports_dir(name: str) -> Path:
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr("app.api.routes.protocols.get_named_exports_dir", _fake_named_exports_dir)
 
     respx.get(f"{ARSHIN_BASE}/vri").mock(
         side_effect=[
@@ -300,7 +306,7 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ),
         "db_file": (
-            "db.xlsx",
+            "09 БД.xlsx",
             db_xlsx,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ),
@@ -317,8 +323,8 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-manometer%"
-    assert saved_path.parent == tmp_path
-    assert saved_path.name == "06-001-25.pdf"
+    assert saved_path.parent == tmp_path / "PDF Манометры 09"
+    assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"
 
 
 @pytest.mark.anyio
@@ -341,7 +347,13 @@ async def test_manometers_pdf_files_certificate_mismatch(async_client, tmp_path,
         return b"%PDF%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
-    monkeypatch.setattr("app.api.routes.protocols.get_dated_exports_dir", lambda _day: tmp_path)
+
+    def _fake_named_exports_dir(name: str) -> Path:
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr("app.api.routes.protocols.get_named_exports_dir", _fake_named_exports_dir)
 
     files = {
         "manometers_file": (
@@ -350,7 +362,7 @@ async def test_manometers_pdf_files_certificate_mismatch(async_client, tmp_path,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ),
         "db_file": (
-            "db.xlsx",
+            "09 БД.xlsx",
             db_xlsx,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ),

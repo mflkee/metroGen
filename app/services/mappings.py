@@ -88,6 +88,18 @@ def _match_seed(code: str) -> tuple[str, dict[str, Any]] | tuple[None, None]:
     return None, None
 
 
+def _split_point_label(label: str) -> tuple[str, str | None]:
+    text = (label or "").strip()
+    if not text:
+        return "", None
+
+    parts = re.split(r"\s*[–—-]\s*", text, maxsplit=1)
+    if len(parts) == 2 and parts[0]:
+        return parts[0].strip(), parts[1].strip() or None
+
+    return text, None
+
+
 async def ensure_owner(
     session: AsyncSession,
     name: str | None,
@@ -259,12 +271,13 @@ async def resolve_methodology(
         sorted(methodology.points, key=lambda p: (p.position, p.id or 0)), start=1
     ):
         label = point.label or ""
-        description = point.default_text or label or None
+        code_value, label_description = _split_point_label(label)
+        description = point.default_text or label_description or None
         point_type = str(getattr(point, "point_type", "") or "").lower() or "clause"
         point_items.append(
             MethodologyPointView(
                 position=index,
-                code=label,
+                code=code_value,
                 description=description,
                 point_type=point_type,
             )
@@ -272,7 +285,7 @@ async def resolve_methodology(
 
     # ensure relationships are loaded (selectinload in repository handles existing ones)
     points = {
-        f"p{idx}": point.label
+        f"p{idx}": _split_point_label(point.label)[0]
         for idx, point in enumerate(
             sorted(methodology.points, key=lambda p: (p.position, p.id or 0)), start=1
         )

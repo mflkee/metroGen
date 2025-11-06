@@ -27,6 +27,15 @@ def get_dated_exports_dir(today: date | None = None) -> Path:
     return target
 
 
+def get_named_exports_dir(name: str) -> Path:
+    """Return export directory named after `name`, creating it if missing."""
+    base = get_exports_base()
+    safe_name = sanitize_filename(name, default="exports")
+    target = base / safe_name
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
 def get_output_dir() -> Path:
     """Папка для временного сохранения HTML/сырого вывода до внедрения БД.
 

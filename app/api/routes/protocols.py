@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Iterable, Mapping
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,43 +35,43 @@ from app.utils.excel import (
     read_rows_with_required_headers,
 )
 from app.utils.normalization import normalize_serial
-from app.utils.paths import get_dated_exports_dir, get_output_dir, sanitize_filename
+from app.utils.paths import get_named_exports_dir, get_output_dir, sanitize_filename
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
 
 
-def _filename_from_protocol_number(pn: str, ext: str = ".pdf") -> str:
-    """Make a filesystem-safe filename from a protocol number.
+def _parse_date_value(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
 
-    Example: "БСН/150125/1" -> "БСН-150125-1.pdf"
-    """
-    raw_name = (pn or "").strip()
-    if raw_name.lower().endswith(ext.lower()):
-        raw_name = raw_name[: -len(ext)]
-    safe = sanitize_filename(raw_name, default="protocol")
-    if not safe.lower().endswith(ext.lower()):
-        safe = f"{safe}{ext}"
-    return safe
 
-
-def _controller_filename(ctx: dict[str, Any]) -> str:
-    ver_date = str(ctx.get("verification_date") or "").strip()
-    serial = str(
-        ctx.get("manufactureNum") or ctx.get("Заводской номер") or ctx.get("manufacture_num") or ""
-    ).strip()
-    mpi = ctx.get("mpi_years")
-
-    parts: list[str] = []
-    if ver_date:
-        parts.append(ver_date)
-    if serial:
-        parts.append(f"№ {serial}")
-    if mpi:
-        parts.append(f"(МПИ-{mpi})")
-
-    name = " ".join(parts).strip() or "protocol"
-    safe_name = sanitize_filename(name, default="protocol")
-    return safe_name
+def _extract_equipment_label_from_sources(
+    *sources: Mapping[str, Any] | None,
+) -> str:
+    for source in sources:
+        if not source:
+            continue
+        if not isinstance(source, Mapping):
+            source = dict(source)  # type: ignore[assignment]
+        for key in ("Наименование СИ", "Тип СИ", "ТипСИ", "Тип"):
+            value = source.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+    return ""
 
 
 SERIAL_SOURCE_KEYS: tuple[str, ...] = (
@@ -82,12 +83,137 @@ SERIAL_SOURCE_KEYS: tuple[str, ...] = (
     "Серийный номер",
 )
 
+
+def _extract_month_from_filename(filename: str | None) -> str | None:
+    if not filename:
+        return None
+    stem = Path(filename).stem
+
+    pattern = re.compile(r"(0[1-9]|1[0-2])")
+    for match in pattern.finditer(stem):
+        start, end = match.span(1)
+        left = stem[start - 1] if start > 0 else ""
+        right = stem[end] if end < len(stem) else ""
+        if left.isdigit() or right.isdigit():
+            continue
+        return match.group(1)
+
+    for token in re.findall(r"\d+", stem):
+        if len(token) == 2:
+            value = int(token)
+            if 1 <= value <= 12:
+                return f"{value:02d}"
+        if len(token) in (6, 8):
+            value = int(token[-2:])
+            if 1 <= value <= 12:
+                return f"{value:02d}"
+    return None
+
+
 DB_SERIAL_KEYS: tuple[str, ...] = (
     "Заводской №/ Буквенно-цифровое обозначение",
     "Заводской номер",
     "Заводской №",
     "Серийный номер",
 )
+
+
+CONTEXT_SERIAL_KEYS: tuple[str, ...] = (
+    "manufactureNum",
+    "manufacture_num",
+    "serial_number",
+    "serial",
+) + SERIAL_SOURCE_KEYS
+
+
+def _context_serial(ctx: Mapping[str, Any]) -> str:
+    for key in CONTEXT_SERIAL_KEYS:
+        value = ctx.get(key) if isinstance(ctx, Mapping) else None
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _context_mpi(ctx: Mapping[str, Any]) -> int | None:
+    value = ctx.get("mpi_years") if isinstance(ctx, Mapping) else None
+    if value is None:
+        return None
+    try:
+        mpi = int(value)
+    except (TypeError, ValueError):
+        return None
+    return mpi if mpi > 0 else None
+
+
+def _determine_equipment_label(ctx: Mapping[str, Any], default: str) -> str:
+    for key in (
+        "equipment_label",
+        "Наименование СИ",
+        "Тип СИ",
+        "ТипСИ",
+        "device_info",
+        "mitype_title",
+    ):
+        value = ctx.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return default
+
+
+def _extract_month_from_context(ctx: Mapping[str, Any]) -> str:
+    protocol_number = str(ctx.get("protocol_number") or "").strip()
+    if protocol_number:
+        normalized = re.split(r"[\\/-]+", protocol_number)
+        for part in normalized:
+            digits = "".join(ch for ch in part if ch.isdigit())
+            if not digits:
+                continue
+            month_candidate = int(digits[:2])
+            if 1 <= month_candidate <= 12:
+                return f"{month_candidate:02d}"
+    ver_date = _parse_date_value(ctx.get("verification_date") or ctx.get("Дата поверки"))
+    if ver_date:
+        return f"{ver_date.month:02d}"
+    return f"{date.today().month:02d}"
+
+
+def _exports_folder_label(
+    ctx: Mapping[str, Any],
+    default_equipment: str,
+    *,
+    forced_month: str | None = None,
+    use_default_only: bool = False,
+) -> str:
+    equipment = default_equipment if use_default_only else _determine_equipment_label(
+        ctx, default_equipment
+    )
+    month = forced_month or _extract_month_from_context(ctx)
+    return f"PDF {equipment} {month}".strip()
+
+
+def _context_pdf_filename(ctx: Mapping[str, Any]) -> str:
+    ver_date = _parse_date_value(ctx.get("verification_date") or ctx.get("Дата поверки"))
+    date_part = ver_date.isoformat() if ver_date else "unknown-date"
+    serial = _context_serial(ctx)
+    mpi = _context_mpi(ctx)
+
+    parts: list[str] = [date_part]
+    if serial:
+        parts.append(f"№ {serial}")
+    if mpi:
+        parts.append(f"(МПИ-{mpi})")
+
+    name = " ".join(parts).strip() or "protocol"
+    safe_name = sanitize_filename(name, default="protocol")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = f"{safe_name}.pdf"
+    return safe_name
 
 
 def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
@@ -205,6 +331,9 @@ async def _build_context_from_db(
         ctx = await build_protocol_context(row_data, details, client, session=session)
         if protocol_number:
             ctx["protocol_number"] = protocol_number
+        equipment_label = _extract_equipment_label_from_sources(db_row, row_data)
+        if equipment_label:
+            ctx.setdefault("equipment_label", equipment_label)
 
         fname = suggest_filename(ctx) or filename
 
@@ -482,15 +611,31 @@ async def controllers_pdf_files(
         )
 
     items: list[ProtocolContextItem] = await asyncio.gather(*(process_row(r) for r in rows))
+    total_items = len(items)
 
     exports_dir: Path | None = None
+    exports_label: str | None = None
+    forced_month = _extract_month_from_filename(db_file.filename)
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
 
+    logger.info(
+        "controllers_pdf_files: starting export for {} devices (forced_month={})",
+        total_items,
+        forced_month or "auto",
+    )
+
     for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
         ctx = it.context or {}
         serial = _extract_first_value(src_row, SERIAL_SOURCE_KEYS)
+        logger.info(
+            "controllers_pdf_files: processing row={}/{} serial={} certificate={}",
+            idx,
+            total_items,
+            serial or "-",
+            it.certificate or "-",
+        )
 
         if it.error or not ctx:
             errors.append(
@@ -500,6 +645,12 @@ async def controllers_pdf_files(
                     "certificate": it.certificate,
                     "reason": it.error or "empty context",
                 }
+            )
+            logger.warning(
+                "controllers_pdf_files: skipped serial={} row={} reason={}",
+                serial or "-",
+                idx,
+                it.error or "empty context",
             )
             continue
 
@@ -524,23 +675,41 @@ async def controllers_pdf_files(
             )
             continue
 
-        if exports_dir is None:
-            exports_dir = get_dated_exports_dir(date.today())
+        folder_label = _exports_folder_label(
+            ctx,
+            default_equipment="Контроллеры",
+            forced_month=forced_month,
+            use_default_only=True,
+        )
+        if exports_dir is None or folder_label != exports_label:
+            exports_dir = get_named_exports_dir(folder_label)
+            exports_label = folder_label
 
-        base_name = _controller_filename(ctx)
-        if not base_name.lower().endswith(".pdf"):
-            base_name = f"{base_name}.pdf"
+        base_name = _context_pdf_filename(ctx)
         path = _unique_output_path(exports_dir, base_name)
         path.write_bytes(pdf_bytes)
         saved.append(str(path))
+        logger.info(
+            "controllers_pdf_files: saved serial={} path={}",
+            serial or "-",
+            path,
+        )
 
     if not saved and pdf_unavailable:
         raise HTTPException(
             status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
         )
 
+    failed_serials = [str(item.get("serial") or "-") for item in errors]
+    if failed_serials:
+        logger.warning(
+            "controllers_pdf_files: failed serials={}",
+            ", ".join(failed_serials),
+        )
+
     logger.info(
-        "controllers_pdf_files: saved=%d errors=%d pdf_unavailable=%s",
+        "controllers_pdf_files summary: total={} success={} failed={} pdf_unavailable={}",
+        total_items,
         len(saved),
         len(errors),
         pdf_unavailable,
@@ -613,15 +782,31 @@ async def manometers_pdf_files(
         )
 
     items: list[ProtocolContextItem] = await asyncio.gather(*(process_row(r) for r in rows))
+    total_items = len(items)
 
     exports_dir: Path | None = None
+    exports_label: str | None = None
+    forced_month = _extract_month_from_filename(db_file.filename)
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
 
+    logger.info(
+        "manometers_pdf_files: starting export for {} devices (forced_month={})",
+        total_items,
+        forced_month or "auto",
+    )
+
     for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
         ctx = it.context or {}
         serial = _extract_first_value(src_row, SERIAL_SOURCE_KEYS)
+        logger.info(
+            "manometers_pdf_files: processing row={}/{} serial={} certificate={}",
+            idx,
+            total_items,
+            serial or "-",
+            it.certificate or "-",
+        )
 
         if it.error or not ctx:
             errors.append(
@@ -631,6 +816,12 @@ async def manometers_pdf_files(
                     "certificate": it.certificate,
                     "reason": it.error or "empty context",
                 }
+            )
+            logger.warning(
+                "manometers_pdf_files: skipped serial={} row={} reason={}",
+                serial or "-",
+                idx,
+                it.error or "empty context",
             )
             continue
 
@@ -655,21 +846,41 @@ async def manometers_pdf_files(
             )
             continue
 
-        if exports_dir is None:
-            exports_dir = get_dated_exports_dir(date.today())
+        folder_label = _exports_folder_label(
+            ctx,
+            default_equipment="Манометры",
+            forced_month=forced_month,
+            use_default_only=True,
+        )
+        if exports_dir is None or folder_label != exports_label:
+            exports_dir = get_named_exports_dir(folder_label)
+            exports_label = folder_label
 
-        base_name = _filename_from_protocol_number(ctx.get("protocol_number") or "", ".pdf")
+        base_name = _context_pdf_filename(ctx)
         path = _unique_output_path(exports_dir, base_name)
         path.write_bytes(pdf_bytes)
         saved.append(str(path))
+        logger.info(
+            "manometers_pdf_files: saved serial={} path={}",
+            serial or "-",
+            path,
+        )
 
     if not saved and pdf_unavailable:
         raise HTTPException(
             status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
         )
 
+    failed_serials = [str(item.get("serial") or "-") for item in errors]
+    if failed_serials:
+        logger.warning(
+            "manometers_pdf_files: failed serials={}",
+            ", ".join(failed_serials),
+        )
+
     logger.info(
-        "manometers_pdf_files: saved=%d errors=%d pdf_unavailable=%s",
+        "manometers_pdf_files summary: total={} success={} failed={} pdf_unavailable={}",
+        total_items,
         len(saved),
         len(errors),
         pdf_unavailable,
