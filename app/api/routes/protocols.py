@@ -216,6 +216,23 @@ def _context_pdf_filename(ctx: Mapping[str, Any]) -> str:
     return safe_name
 
 
+def _entries_to_index(entries: Mapping[str, list[Any]]) -> dict[str, Mapping[str, Any]]:
+    index: dict[str, Mapping[str, Any]] = {}
+    for serial, records in entries.items():
+        if not records:
+            continue
+        entry = records[0]
+        payload = dict(getattr(entry, "payload", {}) or {})
+        document_no = getattr(entry, "document_no", None)
+        protocol_no = getattr(entry, "protocol_no", None)
+        if document_no and not payload.get("Документ"):
+            payload["Документ"] = document_no
+        if protocol_no and not payload.get("номер_протокола"):
+            payload["номер_протокола"] = protocol_no
+        index[serial] = payload
+    return index
+
+
 def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
     if not isinstance(row, Mapping):
         row = dict(row)
@@ -550,57 +567,53 @@ async def html_by_excel(
 @router.post("/controllers/pdf-files")
 async def controllers_pdf_files(
     controllers_file: UploadFile = File(...),
-    db_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
     client: httpx.AsyncClient = Depends(get_http_client),
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
     controllers_data = await controllers_file.read()
-    db_data = await db_file.read()
+    db_data = await db_file.read() if db_file is not None else None
 
     if not controllers_data:
         raise HTTPException(status_code=400, detail="empty controllers file")
-    if not db_data:
+    if db_file is not None and not db_data:
         raise HTTPException(status_code=400, detail="empty db file")
 
     rows = read_rows_as_dicts(controllers_data)
     if not rows:
         return {"files": [], "count": 0}
 
-    db_rows = read_rows_with_required_headers(
-        db_data,
-        header_row=5,
-        data_start_row=6,
-        required_headers=DB_SERIAL_KEYS,
-    )
-    if not db_rows:
-        raise HTTPException(status_code=400, detail="db file has no serial entries")
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
 
-    await ingest_registry_rows(
-        session,
-        source_file=db_file.filename or "registry.xlsx",
-        rows=db_rows,
-        source_sheet="controllers",
-    )
+        await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="controllers",
+        )
 
     registry_repo = RegistryRepository(session)
+
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS))
+        for row in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
         normalized_serial = normalize_serial(serial)
-        db_row: Mapping[str, Any] | None = None
-
-        if normalized_serial:
-            entries = await registry_repo.find_active_by_serial(normalized_serial)
-            if entries:
-                entry = entries[0]
-                payload = dict(entry.payload or {})
-                if entry.document_no and not payload.get("Документ"):
-                    payload["Документ"] = entry.document_no
-                if entry.protocol_no and not payload.get("номер_протокола"):
-                    payload["номер_протокола"] = entry.protocol_no
-                db_row = payload
-
+        db_row: Mapping[str, Any] | None = db_index.get(normalized_serial or "")
         return await _build_context_from_db(
             row,
             db_row=db_row,
@@ -610,12 +623,14 @@ async def controllers_pdf_files(
             strict_certificate_match=False,
         )
 
-    items: list[ProtocolContextItem] = await asyncio.gather(*(process_row(r) for r in rows))
+    items: list[ProtocolContextItem] = []
+    for row in rows:
+        items.append(await process_row(row))
     total_items = len(items)
 
     exports_dir: Path | None = None
     exports_label: str | None = None
-    forced_month = _extract_month_from_filename(db_file.filename)
+    forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
@@ -721,57 +736,53 @@ async def controllers_pdf_files(
 @router.post("/manometers/pdf-files")
 async def manometers_pdf_files(
     manometers_file: UploadFile = File(...),
-    db_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
     client: httpx.AsyncClient = Depends(get_http_client),
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
     manometers_data = await manometers_file.read()
-    db_data = await db_file.read()
+    db_data = await db_file.read() if db_file is not None else None
 
     if not manometers_data:
         raise HTTPException(status_code=400, detail="empty manometers file")
-    if not db_data:
+    if db_file is not None and not db_data:
         raise HTTPException(status_code=400, detail="empty db file")
 
     rows = read_rows_as_dicts(manometers_data)
     if not rows:
         return {"files": [], "count": 0, "errors": []}
 
-    db_rows = read_rows_with_required_headers(
-        db_data,
-        header_row=5,
-        data_start_row=6,
-        required_headers=DB_SERIAL_KEYS,
-    )
-    if not db_rows:
-        raise HTTPException(status_code=400, detail="db file has no serial entries")
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
 
-    await ingest_registry_rows(
-        session,
-        source_file=db_file.filename or "registry.xlsx",
-        rows=db_rows,
-        source_sheet="manometers",
-    )
+        await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="manometers",
+        )
 
     registry_repo = RegistryRepository(session)
+
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS))
+        for row in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
         normalized_serial = normalize_serial(serial)
-        db_row: Mapping[str, Any] | None = None
-
-        if normalized_serial:
-            entries = await registry_repo.find_active_by_serial(normalized_serial)
-            if entries:
-                entry = entries[0]
-                payload = dict(entry.payload or {})
-                if entry.document_no and not payload.get("Документ"):
-                    payload["Документ"] = entry.document_no
-                if entry.protocol_no and not payload.get("номер_протокола"):
-                    payload["номер_протокола"] = entry.protocol_no
-                db_row = payload
-
+        db_row: Mapping[str, Any] | None = db_index.get(normalized_serial or "")
         return await _build_context_from_db(
             row,
             db_row=db_row,
@@ -781,12 +792,14 @@ async def manometers_pdf_files(
             strict_certificate_match=True,
         )
 
-    items: list[ProtocolContextItem] = await asyncio.gather(*(process_row(r) for r in rows))
+    items: list[ProtocolContextItem] = []
+    for row in rows:
+        items.append(await process_row(row))
     total_items = len(items)
 
     exports_dir: Path | None = None
     exports_label: str | None = None
-    forced_month = _extract_month_from_filename(db_file.filename)
+    forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
