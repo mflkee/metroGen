@@ -379,3 +379,112 @@ async def test_manometers_pdf_files_certificate_mismatch(async_client, tmp_path,
     assert error["reason"] == "certificate mismatch between excel and db"
     assert error["serial"] == serial
     assert calls["pdf"] == 0
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_path, monkeypatch):
+    cert = "С-ЕЖБ/05-06-2025/443771099"
+    serial = "03607"
+    protocol_num = "06/001/25"
+    vri_id = "1-MANO"
+
+    manometers_xlsx = _make_manometers_excel_row(certificate=cert, serial=serial)
+    db_xlsx = _make_manometers_db_excel(
+        serial=serial, certificate=cert, protocol_number=protocol_num
+    )
+
+    async def fake_pdf(html: str) -> bytes | None:
+        return b"%PDF-manometer%"
+
+    monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+
+    def _fake_named_exports_dir(name: str) -> Path:
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr("app.api.routes.protocols.get_named_exports_dir", _fake_named_exports_dir)
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        side_effect=[
+            httpx.Response(200, json={"result": {"items": [{"vri_id": vri_id}]}}),
+            httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "items": [
+                            {
+                                "result_docnum": "ET-123",
+                                "verification_date": "01.01.2025",
+                                "valid_date": "31.12.2025",
+                            }
+                        ]
+                    }
+                },
+            ),
+        ]
+    )
+
+    respx.get(f"{ARSHIN_BASE}/vri/{vri_id}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "means": {
+                        "mieta": [
+                            {
+                                "regNumber": "77090.19.1Р.00761951",
+                                "mitypeNumber": "77090-19",
+                                "mitypeTitle": "Преобразователи давления эталонные",
+                                "notation": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+                                "manufactureNum": "3127",
+                                "manufactureYear": 2020,
+                                "rankCode": "1Р",
+                                "rankTitle": "Эталон 1-го разряда",
+                            }
+                        ]
+                    },
+                    "vriInfo": {
+                        "docTitle": "МИ 123-45",
+                        "vrfDate": "15.06.2025",
+                        "validDate": "14.06.2026",
+                        "applicable": {"certNum": cert},
+                    },
+                }
+            },
+        )
+    )
+
+    import_response = await async_client.post(
+        "/api/v1/registry/import",
+        files={
+            "db_file": (
+                "06 БД.xlsx",
+                db_xlsx,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert import_response.status_code == 200
+
+    response = await async_client.post(
+        "/api/v1/protocols/manometers/pdf-files",
+        files={
+            "manometers_file": (
+                "manometers.xlsx",
+                manometers_xlsx,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["errors"] == []
+    saved_path = Path(body["files"][0])
+    assert saved_path.exists()
+    assert saved_path.read_bytes() == b"%PDF-manometer%"
+    assert saved_path.parent == tmp_path / "PDF Манометры 06"
+    assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"

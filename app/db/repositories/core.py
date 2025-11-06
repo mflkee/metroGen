@@ -14,6 +14,7 @@ from app.db.repositories.utils import (
     normalize_methodology_alias,
     normalize_owner_alias,
 )
+from app.utils.normalization import normalize_serial
 
 __all__ = (
     "BaseRepository",
@@ -319,6 +320,27 @@ class RegistryRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_active_by_serials(
+        self, normalized_serials: Iterable[str]
+    ) -> dict[str, list[models.VerificationRegistryEntry]]:
+        serial_list = [normalize_serial(value) for value in normalized_serials]
+        filtered = [serial for serial in {s for s in serial_list if s}]
+        if not filtered:
+            return {}
+
+        stmt = select(models.VerificationRegistryEntry).where(
+            models.VerificationRegistryEntry.normalized_serial.in_(filtered),
+            models.VerificationRegistryEntry.is_active.is_(True),
+        )
+        result = await self.session.execute(stmt)
+
+        mapping: dict[str, list[models.VerificationRegistryEntry]] = {
+            serial: [] for serial in filtered
+        }
+        for entry in result.scalars():
+            if entry.normalized_serial:
+                mapping.setdefault(entry.normalized_serial, []).append(entry)
+        return mapping
 
 class InstrumentRepository(BaseRepository):
     async def find_by_serial(self, normalized_serial: str) -> list[models.MeasuringInstrument]:
