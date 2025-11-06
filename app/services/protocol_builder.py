@@ -116,6 +116,7 @@ async def build_context(
     excel_row: dict[str, Any],
     details: dict[str, Any],
     methodology_points: dict[str, str],
+    methodology_point_items: list[dict[str, Any]] | None = None,
     owner_name: str,
     owner_inn: str | None,
     allowable_error: float,
@@ -124,6 +125,36 @@ async def build_context(
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     methodology_points = dict(methodology_points or {})
+    point_items: list[dict[str, Any]] = []
+    for idx, item in enumerate(methodology_point_items or [], start=1):
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("code") or methodology_points.get(f"p{idx}", "") or "").strip()
+        description = str(item.get("description") or "").strip()
+        point_items.append(
+            {
+                "position": int(item.get("position") or idx),
+                "code": code,
+                "description": description,
+                "point_type": str(item.get("point_type") or "clause").lower(),
+            }
+        )
+
+    if not point_items:
+        point_keys = sorted(
+            (key for key in methodology_points if key.startswith("p")),
+            key=lambda k: int(k[1:]) if k[1:].isdigit() else 0,
+        )
+        for idx, key in enumerate(point_keys, start=1):
+            point_items.append(
+                {
+                    "position": idx,
+                    "code": str(methodology_points.get(key) or "").strip(),
+                    "description": "",
+                    "point_type": "clause",
+                }
+            )
+
     for key in ("p1", "p2", "p3", "p4"):
         methodology_points.setdefault(key, "")
 
@@ -227,6 +258,7 @@ async def build_context(
         "owner_inn": owner_inn or "",
         "methodology_full": excel_row.get("_methodology_full") or vri.get("docTitle") or "",
         "methodology_points": methodology_points,
+        "methodology_point_items": point_items,
         "temperature": excel_row.get("Температура") or "",
         "pressure": excel_row.get("Давление") or "",
         "humidity": excel_row.get("Влажность") or "",
@@ -387,6 +419,27 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
         ).strip()
         default_points = {"p1": "5.1", "p2": "5.2.3", "p3": "5.3", "p4": ""}
         methodology_points: dict[str, str] = default_points.copy()
+        default_point_items = [
+            {
+                "position": 1,
+                "code": "5.1",
+                "description": "Результат внешнего осмотра",
+                "point_type": "bool",
+            },
+            {
+                "position": 2,
+                "code": "5.2.3",
+                "description": "Результат опробования",
+                "point_type": "bool",
+            },
+            {
+                "position": 3,
+                "code": "5.3",
+                "description": "Определение основной погрешности",
+                "point_type": "clause",
+            },
+        ]
+        methodology_point_items = [dict(item) for item in default_point_items]
         allowable_hint: float | None = None
 
         if session and method_short:
@@ -398,10 +451,21 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             excel_row["_methodology_full"] = method_info.title
             if method_info.points:
                 methodology_points.update(method_info.points)
+            if method_info.point_items:
+                methodology_point_items = [
+                    {
+                        "position": item.position,
+                        "code": item.code,
+                        "description": item.description or "",
+                        "point_type": (item.point_type or "clause").lower(),
+                    }
+                    for item in method_info.point_items
+                ]
             allowable_hint = method_info.allowable_variation_pct
         else:
             excel_row["_methodology_full"] = method_short
             methodology_points = default_points.copy()
+            methodology_point_items = [dict(item) for item in default_point_items]
 
         try:
             allowable = float(
@@ -414,6 +478,7 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             excel_row=excel_row,
             details=details,
             methodology_points=methodology_points,
+            methodology_point_items=methodology_point_items,
             owner_name=owner_name,
             owner_inn=owner_inn or "",
             allowable_error=allowable,

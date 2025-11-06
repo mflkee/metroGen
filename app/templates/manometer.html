@@ -134,18 +134,40 @@
       </div>
     </div>
     <div class="spread-bottom" id="manual_checkups">
-      <p class="manual_checkup">
-        1. Результат внешнего осмотра: <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
-      </p>
-      <p class="manual_checkup">
-        2. Результат опробования: <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. <span class="manual_checkupValue">{{ methodology_points.p2 }}</span> методики поверки
-      </p>
-      <p class="manual_checkup">
-        3. Определение основной погрешности в соответствии с п. <span class="manual_checkupValue">{{ methodology_points.p3 }}</span>
-        методики поверки
-      </p>
+      {% if methodology_point_items %}
+        {% for item in methodology_point_items %}
+          {% set description = item.description or '' %}
+          {% if item.point_type == 'bool' %}
+            <p class="manual_checkup">
+              {{ loop.index }}. {{ description or 'Результат проверки' }}:
+              <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+              п. <span class="manual_checkupValue">{{ item.code }}</span> методики поверки
+            </p>
+          {% else %}
+            <p class="manual_checkup">
+              {{ loop.index }}. {{ description or 'Проверка' }} в соответствии с п.
+              <span class="manual_checkupValue">{{ item.code }}</span>
+              методики поверки
+            </p>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="manual_checkup">
+          1. Результат внешнего осмотра:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
+        </p>
+        <p class="manual_checkup">
+          2. Результат опробования:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p2 }}</span> методики поверки
+        </p>
+        <p class="manual_checkup">
+          3. Определение основной погрешности в соответствии с п.
+          <span class="manual_checkupValue">{{ methodology_points.p3 }}</span>
+          методики поверки
+        </p>
+      {% endif %}
     </div>
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
