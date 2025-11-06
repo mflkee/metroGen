@@ -104,21 +104,19 @@ def _build_points(checkups: dict[str, dict[str, str]]) -> list[MethodologyPointP
     points: list[MethodologyPointPayload] = []
     for index, (name, payload) in enumerate(checkups.items(), start=1):
         value = (payload or {}).get("Value")
-        label_source = []
-        if value:
-            label_source.append(value.strip())
-        if name:
-            label_source.append(name.strip())
-        label = " - ".join(filter(None, label_source)) or f"Item {index}"
+        name_clean = (name or "").strip()
+        label = (value or "").strip() or name_clean or f"Item {index}"
         point_type = TYPE_MAP.get(
             (payload or {}).get("Type"),
             MethodologyPointType.CLAUSE,
         )
+        default_text = name_clean if name_clean and name_clean != label else None
         points.append(
             MethodologyPointPayload(
                 position=index,
                 label=label,
                 point_type=point_type,
+                default_text=default_text,
             )
         )
     return points

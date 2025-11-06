@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -22,12 +22,21 @@ from app.db.repositories.utils import normalize_methodology_alias
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
+@dataclass
+class MethodologyPointView:
+    position: int
+    code: str
+    description: str | None
+    point_type: str
+
+
 @dataclass(slots=True)
 class MethodologyInfo:
     code: str
     title: str
     allowable_variation_pct: float | None
     points: dict[str, str]
+    point_items: list[MethodologyPointView] = field(default_factory=list)
 
 
 def _sanitize_methodology_code(value: str | None) -> str:
@@ -124,16 +133,49 @@ async def ensure_methodology(
 
     sanitized_code = _sanitize_methodology_code(code)
     repo = MethodologyRepository(session)
+    seed_key, seed_payload = _match_seed(sanitized_code or code)
+
+    async def _ensure_seed_defaults(methodology: models.Methodology) -> models.Methodology:
+        if seed_payload:
+            title_full = seed_payload.get("title_full")
+            if title_full and not (methodology.title or "").strip():
+                methodology.title = title_full
+
+            allowable = seed_payload.get("allowable_variation_pct")
+            if allowable is not None and methodology.allowable_variation_pct is None:
+                methodology.allowable_variation_pct = allowable
+
+            if seed_payload.get("points") and not methodology.points:
+                points_payload = [
+                    MethodologyPointPayload(position=index, label=value)
+                    for index, (_, value) in enumerate(
+                        sorted(seed_payload["points"].items()), start=1
+                    )
+                ]
+                await repo.replace_points(methodology, points_payload)
+
+            if (
+                seed_key
+                and normalize_methodology_alias(seed_key)
+                != normalize_methodology_alias(methodology.code)
+            ):
+                await repo.ensure_aliases(methodology, [(seed_key, 85)])
+
+        if code and normalize_methodology_alias(code) != normalize_methodology_alias(
+            methodology.code
+        ):
+            await repo.ensure_aliases(methodology, [(code, 90)])
+        return methodology
 
     for candidate in (code, sanitized_code):
         if not candidate:
             continue
         methodology = await repo.get_by_code(candidate)
         if methodology:
-            return methodology
+            return await _ensure_seed_defaults(methodology)
         methodology = await repo.get_by_alias(candidate)
         if methodology:
-            return methodology
+            return await _ensure_seed_defaults(methodology)
 
     normalized = normalize_methodology_alias(code)
     if normalized:
@@ -154,9 +196,8 @@ async def ensure_methodology(
         result = await session.execute(stmt)
         methodology = result.unique().scalar_one_or_none()
         if methodology:
-            return methodology
+            return await _ensure_seed_defaults(methodology)
 
-    seed_key, seed_payload = _match_seed(sanitized_code or code)
     title = seed_payload.get("title_full") if seed_payload else code
     allowable = seed_payload.get("allowable_variation_pct") if seed_payload else None
     document = seed_payload.get("document") if seed_payload else None
@@ -177,7 +218,9 @@ async def ensure_methodology(
     alias_candidates: list[tuple[str, int]] = [(store_code, 100)]
     if code and code != store_code:
         alias_candidates.append((code, 90))
-    if seed_key and normalize_methodology_alias(seed_key) != normalize_methodology_alias(store_code):
+    if seed_key and normalize_methodology_alias(seed_key) != normalize_methodology_alias(
+        store_code
+    ):
         alias_candidates.append((seed_key, 85))
     await repo.ensure_aliases(methodology, alias_candidates)
 
@@ -211,6 +254,22 @@ async def resolve_methodology(
     if methodology is None:
         return None
 
+    point_items: list[MethodologyPointView] = []
+    for index, point in enumerate(
+        sorted(methodology.points, key=lambda p: (p.position, p.id or 0)), start=1
+    ):
+        label = point.label or ""
+        description = point.default_text or label or None
+        point_type = str(getattr(point, "point_type", "") or "").lower() or "clause"
+        point_items.append(
+            MethodologyPointView(
+                position=index,
+                code=label,
+                description=description,
+                point_type=point_type,
+            )
+        )
+
     # ensure relationships are loaded (selectinload in repository handles existing ones)
     points = {
         f"p{idx}": point.label
@@ -224,6 +283,7 @@ async def resolve_methodology(
         title=methodology.title or methodology.code,
         allowable_variation_pct=methodology.allowable_variation_pct,
         points=points,
+        point_items=point_items,
     )
 
 
