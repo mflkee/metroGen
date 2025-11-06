@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import models
@@ -28,6 +28,21 @@ class MethodologyInfo:
     title: str
     allowable_variation_pct: float | None
     points: dict[str, str]
+
+
+def _sanitize_methodology_code(value: str | None) -> str:
+    """Trim methodology identifiers to fit DB constraints."""
+    if not value:
+        return ""
+
+    text = value.strip()
+    text = text.strip('" ')
+    text = text.strip("«»")
+    if len(text) <= 128 and text:
+        return text
+
+    shortened = text[:128].rstrip(" ,;")
+    return shortened or text[:128]
 
 
 @lru_cache(maxsize=1)
@@ -107,37 +122,64 @@ async def ensure_methodology(
     if not code:
         return None
 
+    sanitized_code = _sanitize_methodology_code(code)
     repo = MethodologyRepository(session)
-    methodology = await repo.get_by_code(code)
-    if methodology:
-        return methodology
 
-    seed_key, seed_payload = _match_seed(code)
+    for candidate in (code, sanitized_code):
+        if not candidate:
+            continue
+        methodology = await repo.get_by_code(candidate)
+        if methodology:
+            return methodology
+        methodology = await repo.get_by_alias(candidate)
+        if methodology:
+            return methodology
+
+    normalized = normalize_methodology_alias(code)
+    if normalized:
+        normalized_compact = normalized.replace(" и ", " ")
+        alias_compact = func.replace(models.MethodologyAlias.normalized_alias, " и ", " ")
+        stmt = (
+            select(models.Methodology)
+            .join(models.MethodologyAlias)
+            .where(
+                or_(
+                    func.strpos(normalized_compact, alias_compact) > 0,
+                    func.strpos(alias_compact, normalized_compact) > 0,
+                )
+            )
+            .order_by(func.length(models.MethodologyAlias.normalized_alias).desc())
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        methodology = result.unique().scalar_one_or_none()
+        if methodology:
+            return methodology
+
+    seed_key, seed_payload = _match_seed(sanitized_code or code)
     title = seed_payload.get("title_full") if seed_payload else code
     allowable = seed_payload.get("allowable_variation_pct") if seed_payload else None
     document = seed_payload.get("document") if seed_payload else None
     notes = seed_payload.get("notes") if seed_payload else None
 
+    store_code = sanitized_code or code[:128].strip()
+    if not store_code:
+        return None
+
     methodology = await repo.upsert_methodology(
-        code=code,
+        code=store_code,
         title=title or code,
         document=document,
         notes=notes,
         allowable_variation_pct=allowable,
     )
 
-    await repo.ensure_aliases(
-        methodology,
-        [
-            (code, 100),
-            *(
-                [(seed_key, 90)]
-                if seed_key
-                and normalize_methodology_alias(seed_key) != normalize_methodology_alias(code)
-                else []
-            ),
-        ],
-    )
+    alias_candidates: list[tuple[str, int]] = [(store_code, 100)]
+    if code and code != store_code:
+        alias_candidates.append((code, 90))
+    if seed_key and normalize_methodology_alias(seed_key) != normalize_methodology_alias(store_code):
+        alias_candidates.append((seed_key, 85))
+    await repo.ensure_aliases(methodology, alias_candidates)
 
     if seed_payload and seed_payload.get("points"):
         has_points = (
@@ -148,14 +190,14 @@ async def ensure_methodology(
             )
         ).scalar_one_or_none()
         if has_points:
-            return await repo.get_by_code(code)
+            return await repo.get_by_code(store_code)
         points_payload = [
             MethodologyPointPayload(position=index, label=value)
             for index, (_, value) in enumerate(sorted(seed_payload["points"].items()), start=1)
         ]
         await repo.replace_points(methodology, points_payload)
 
-    return await repo.get_by_code(code)
+    return await repo.get_by_code(store_code)
 
 
 async def resolve_methodology(
