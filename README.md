@@ -1,28 +1,28 @@
-Protocol generator for mkair
+Генератор протоколов для mkair. FastAPI-приложение находится в каталоге `app/` (роуты в `app/api/routes/`, схемы — `app/schemas/`, сервисы — `app/services/`, утилиты — `app/utils/`, общие настройки и логирование — `app/core/`).
 
-Quick start
-- Install deps: `uv sync` (preferred) or `pip install -e .[dev]`
-- Run API: `uvicorn app.main:app --reload` → http://127.0.0.1:8000
-- Run tests: `pytest -q` or with coverage `pytest --cov=app -q`
+Быстрый старт
+1. Скопируйте `app/.env.example` в корень как `.env` и задайте локальные секреты: `DATABASE_URL`, `ARSHIN_TIMEOUT`, `ARSHIN_CONCURRENCY`, `USER_AGENT` и т.д.
+2. Установите зависимости строго по лок-файлу: `uv sync` (предпочтительно) или `pip install -e .[dev]`.
+3. Примените миграции: `uv run alembic upgrade head`.
+4. (Опционально) Один раз заполните справочники: `uv run python -m app.db.seed`. Приложение делает то же при старте, поэтому команда нужна в основном для CI и первичной настройки.
+5. Запустите API локально: `uvicorn app.main:app --reload` → http://127.0.0.1:8000.
 
-Database setup
-- Copy `app/.env.example` to `.env` and set `DATABASE_URL` (e.g. `postgresql+asyncpg://postgres:password@localhost:5432/metrologenerator`).
-- Apply migrations before the first run: `uv run alembic upgrade head`.
-- Seed lookup data (owners, methodologies) once: `uv run python -m app.db.seed`. The FastAPI app also seeds automatically on startup, so the manual command is optional when bootstrapping CI/local environments.
-- Controllers/manometers endpoints ingest the provided registry Excel into Postgres (rows are normalized before upsert), so repeated uploads reuse cached data.
+Docker
+- Полная сборка и запуск: `docker compose up --build`. В образ копируются `pyproject.toml` и `uv.lock`, поэтому обновляйте лок-файл командой `uv sync` при изменении зависимостей.
+- Скрипт `docker-entrypoint.sh` внутри контейнера запускает миграции и поднимает Uvicorn; при необходимости можно переопределить entrypoint.
 
-Database overview
-- Core registry data lives in the new PostgreSQL tables created by Alembic migrations.
-- `verification_registry_entries` caches rows from the official БД выгрузки with lookup indexes on serial, документ and протокол.
-- `measuring_instruments` stores parsed приборы from рабочие Excel файлы and links them to owners, methodologies and registry entries.
-- `etalon_devices` + `etalon_certifications` persist эталоны returned by Аршин so repeated генерации reuse cached certificates.
-- `methodologies`, `methodology_aliases`, `methodology_points` describe МП, their псевдонимы и набор пунктов (переключатель bool/клауза/custom).
-- `owners` and `owner_aliases` replace Python маппинги, giving a single источник правды (название + ИНН).
+База данных
+- Роуты контроллеров/манометров принимают Excel из реестра, нормализуют строки и делают upsert в Postgres, поэтому повторные загрузки идемпотентны.
+- `verification_registry_entries` кеширует строки выгрузки с индексами по номеру, документу и протоколу.
+- `measuring_instruments` связывает приборы с владельцами, методиками и записями реестра.
+- `etalon_devices` и `etalon_certifications` сохраняют ответы Аршина для повторного использования.
+- `methodologies`, `methodology_aliases`, `methodology_points` описывают перечень МП, псевдонимы и набор пунктов (флаги/клаузулы/custom).
+- `owners` и `owner_aliases` заменяют Python-словари, давая единый источник истины (название + ИНН).
 
-Code style
-- Lint/format via Ruff: `ruff check .` and `ruff format .`
-- Optionally Black: `black .`
+Тесты и линтеры
+- Тесты: `pytest -q`, при необходимости покрытия `pytest --cov=app -q`.
+- Линтеры/формат: `ruff check .` и `ruff format .`; при желании дополнительно `black .`.
 
 Pre-commit
-- Install: `pip install pre-commit` then `pre-commit install`
-- Hooks: Ruff (lint+format), optional Black (see `.pre-commit-config.yaml`)
+- Установка хуков: `pip install pre-commit && pre-commit install`.
+- Запускаются Ruff (линт/формат) и опционально Black (см. `.pre-commit-config.yaml`).

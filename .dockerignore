@@ -6,6 +6,7 @@ __pycache__/
 *.log
 *.pid
 *.lock
+!uv.lock
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
