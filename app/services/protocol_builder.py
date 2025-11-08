@@ -123,6 +123,33 @@ def _split_point_label(value: str) -> tuple[str, str]:
     return text, ""
 
 
+def _clean_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def _first_nonempty(*values: Any) -> str:
+    for value in values:
+        text = _clean_str(value)
+        if text:
+            return text
+    return ""
+
+
+_DEFAULT_POINT_DESCRIPTIONS = {
+    1: "Результат внешнего осмотра",
+    2: "Результат опробования",
+    3: "Определение основной погрешности",
+}
+
+
+def _fallback_point_description(position: int, idx: int) -> str:
+    return _DEFAULT_POINT_DESCRIPTIONS.get(position) or _DEFAULT_POINT_DESCRIPTIONS.get(idx) or ""
+
+
 async def build_context(
     *,
     excel_row: dict[str, Any],
@@ -143,15 +170,17 @@ async def build_context(
             continue
         raw_code = str(item.get("code") or methodology_points.get(f"p{idx}", "") or "").strip()
         code_value, label_description = _split_point_label(raw_code)
-        description = str(item.get("description") or "").strip()
+        description = str(item.get("description") or "").strip() or label_description
+        position = int(item.get("position") or idx)
+        point_type = str(item.get("point_type") or "clause").lower()
         if not description:
-            description = label_description
+            description = _fallback_point_description(position, idx)
         point_items.append(
             {
-                "position": int(item.get("position") or idx),
+                "position": position,
                 "code": code_value,
                 "description": description,
-                "point_type": str(item.get("point_type") or "clause").lower(),
+                "point_type": point_type,
             }
         )
 
@@ -164,6 +193,11 @@ async def build_context(
             raw_label = str(methodology_points.get(key) or "").strip()
             code_value, description = _split_point_label(raw_label)
             methodology_points[key] = code_value
+            fallback_pos = idx
+            if key and key[1:].isdigit():
+                fallback_pos = int(key[1:])
+            if not description:
+                description = _fallback_point_description(fallback_pos, idx)
             point_items.append(
                 {
                     "position": idx,
@@ -257,16 +291,27 @@ async def build_context(
             f"действительно до {valid_date_arshin};"
         )
 
-    device_info = excel_row.get("Модификация") or mi_single.get("modification") or ""
     mitype_type = (mi_single.get("mitypeType") or "").strip()
     mitype_title = (mi_single.get("mitypeTitle") or "").strip()
-    if mitype_title and mitype_type:
-        device_info = f"{mitype_title} {mitype_type}"
-    elif mitype_title and not device_info:
-        device_info = mitype_title
+    device_type_name = _first_nonempty(
+        excel_row.get("Наименование типа СИ"),
+        excel_row.get("Наименование СИ"),
+        excel_row.get("Тип СИ"),
+        excel_row.get("Тип"),
+        mitype_title,
+    )
+    device_modification = _first_nonempty(
+        excel_row.get("Модификация"),
+        mi_single.get("modification"),
+        mitype_type,
+    )
+    device_info_parts = [part for part in (device_type_name, device_modification) if part]
+    device_info = ", ".join(device_info_parts)
 
     context: dict[str, Any] = {
         "device_info": device_info,
+        "device_type_name": device_type_name,
+        "device_modification": device_modification,
         "mitypeNumber": excel_row.get("Обозначение СИ") or mi_single.get("mitypeNumber") or "",
         "manufactureNum": excel_row.get("Заводской номер") or mi_single.get("manufactureNum") or "",
         "manufactureYear": str(
