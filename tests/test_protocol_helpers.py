@@ -29,3 +29,50 @@ def test_extract_month_from_filename(filename, expected):
 )
 def test_normalize_temperature_plain(value, expected):
     assert html_renderer._normalize_temperature_plain(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("ctx", "forced_month", "use_default_only", "expected"),
+    [
+        (
+            {"equipment_label": "Манометры ПВ", "verification_date": "2025-06-15"},
+            None,
+            False,
+            "PDF Манометры ПВ 06",
+        ),
+        (
+            {"device_info": "Манометры TM", "verification_date": "2025-02-01"},
+            "03",
+            False,
+            "PDF Манометры TM 03",
+        ),
+        (
+            {"equipment_label": "Манометры TM", "verification_date": "2025-02-01"},
+            None,
+            True,
+            "PDF Манометры 02",
+        ),
+    ],
+)
+def test_exports_folder_label(ctx, forced_month, use_default_only, expected):
+    result = protocols._exports_folder_label(
+        ctx,
+        default_equipment="Манометры",
+        forced_month=forced_month,
+        use_default_only=use_default_only,
+    )
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    ("ctx", "expected"),
+    [
+        (
+            {"verification_date": "2025-06-15", "Заводской номер": "04200", "mpi_years": 2},
+            "2025-06-15 № 04200 (МПИ-2).pdf",
+        ),
+        ({}, "unknown-date.pdf"),
+    ],
+)
+def test_context_pdf_filename(ctx, expected):
+    assert protocols._context_pdf_filename(ctx) == expected
