@@ -200,3 +200,65 @@ async def test_build_context_includes_all_etalons_from_details():
     assert entries[1]["reg_number"] == "REG-2"
     assert entries[1]["certificate_line"].startswith("свидетельство о поверке № ET-2")
     assert ctx["etalon_lines"][0].startswith("REG-1; TYPE-1")
+
+
+@pytest.mark.anyio
+async def test_build_context_uses_arshin_range_when_excel_missing():
+    excel_row = {
+        "Обозначение СИ": "13535-93",
+        "Заводской номер": "03607",
+        "Методика поверки": "МИ 2124-90",
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "13535-93"}},
+        "info": {"additional_info": "0 .. 10 кг/см²"},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО НПП",
+        owner_inn="",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    assert ctx["range_min"] == 0
+    assert ctx["range_max"] == 10
+    assert ctx["unit"] == "кгс/см²"
+    assert ctx["range_source"] == "arshin"
+
+
+@pytest.mark.anyio
+async def test_build_context_selects_controller_template():
+    excel_row = {
+        "Обозначение СИ": "43790-12",
+        "Заводской номер": "CTRL-01",
+        "Методика поверки": "МИ 5555-55",
+        "Прочие сведения": "4 .. 20 мА",
+    }
+    details = {
+        "miInfo": {
+            "singleMI": {
+                "mitypeTitle": "Контроллер 43790-12",
+                "mitypeNumber": "43790-12",
+            }
+        },
+        "vriInfo": {"vrfDate": "01.03.2025", "validDate": "01.03.2026"},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО Контур",
+        owner_inn="7701234567",
+        allowable_error=0.1,
+        allowable_variation=0.1,
+    )
+
+    assert ctx["template_id"] == "controller_43790_12"
+    assert ctx["allowable_note"].startswith("- ± 0,1 %")
+    assert ctx["table_rows"], "controller generator should build table rows"

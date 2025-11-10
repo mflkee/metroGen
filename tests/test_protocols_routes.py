@@ -528,6 +528,45 @@ async def test_manometers_pdf_files_prefers_matching_month(async_client, tmp_pat
 
 @pytest.mark.anyio
 @respx.mock
+async def test_controllers_pdf_files_fail_when_pdf_unavailable(async_client, monkeypatch):
+    controllers_xlsx = _make_manometers_excel_row(certificate="C-1", serial="001")
+    db_xlsx = _make_manometers_db_excel(serial="001", certificate="C-1", protocol_number="01/25")
+
+    async def fake_pdf(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        side_effect=[
+            httpx.Response(200, json={"result": {"items": [{"vri_id": "CTRL-1"}]}}),
+            httpx.Response(200, json={"result": {"items": []}}),
+        ]
+    )
+    respx.get(f"{ARSHIN_BASE}/vri/CTRL-1").mock(
+        return_value=httpx.Response(200, json={"result": {"means": {"mieta": []}, "vriInfo": {}}})
+    )
+
+    files = {
+        "controllers_file": (
+            "controllers.xlsx",
+            controllers_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "db_file": (
+            "db.xlsx",
+            db_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    }
+
+    response = await async_client.post("/api/v1/protocols/controllers/pdf-files", files=files)
+    assert response.status_code == 500
+    assert response.json()["detail"].startswith("PDF generation is unavailable")
+
+
+@pytest.mark.anyio
+@respx.mock
 async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_path, monkeypatch):
     cert = "С-ЕЖБ/05-06-2025/443771099"
     serial = "03607"

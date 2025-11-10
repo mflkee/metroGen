@@ -137,3 +137,23 @@ async def test_create_methodology_with_explicit_point_types(async_client):
 
     response = await async_client.post("/api/v1/methodologies", json=payload)
     assert response.status_code == 201
+
+
+@pytest.mark.anyio
+async def test_create_methodology_requires_points(async_client):
+    payload = {"code": "МИ 0000-00", "title": "Без точек", "points": []}
+    response = await async_client.post("/api/v1/methodologies", json=payload)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "points are required"
+
+
+@pytest.mark.anyio
+async def test_create_methodology_rejects_empty_labels(async_client):
+    payload = {
+        "code": "МИ 0001-00",
+        "title": "Пустые точки",
+        "points": [{"position": 1, "label": "   "}],
+    }
+    response = await async_client.post("/api/v1/methodologies", json=payload)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "at least one point must have non-empty label"
