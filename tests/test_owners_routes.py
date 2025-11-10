@@ -29,3 +29,20 @@ async def test_create_and_update_owner(async_client):
     body = response.json()
     assert body["name"] == new_name
     assert body["inn"] == "8901001822"
+
+
+@pytest.mark.anyio
+async def test_create_owner_strips_payload(async_client):
+    payload = {"name": "  ООО \"Промтест\"  ", "inn": "  "}
+    response = await async_client.post("/api/v1/owners", json=payload)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == 'ООО "Промтест"'
+    assert body["inn"] is None
+
+
+@pytest.mark.anyio
+async def test_update_owner_not_found(async_client):
+    response = await async_client.patch("/api/v1/owners/999999", json={"name": "Нет"})
+    assert response.status_code == 404
+    assert response.json()["detail"] == "owner not found"
