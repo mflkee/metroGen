@@ -80,10 +80,32 @@ def _make_manometers_db_excel(
     ws["H5"] = "Заводской №/ Буквенно-цифровое обозначение"
     ws["L5"] = "Документ"
     ws["P5"] = "номер_протокола"
+    ws["G5"] = "Дата поверки"
 
     ws["H6"] = serial
     ws["L6"] = certificate
     ws["P6"] = protocol_number
+    ws["G6"] = "05.06.2025"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _make_manometers_db_excel_multi(rows: list[dict[str, str]]) -> bytes:
+    wb = Workbook()
+    ws = wb.active
+
+    ws["G5"] = "Дата поверки"
+    ws["H5"] = "Заводской №/ Буквенно-цифровое обозначение"
+    ws["L5"] = "Документ"
+    ws["P5"] = "номер_протокола"
+
+    for offset, payload in enumerate(rows, start=6):
+        ws[f"G{offset}"] = payload.get("verification_date")
+        ws[f"H{offset}"] = payload.get("serial")
+        ws[f"L{offset}"] = payload.get("certificate")
+        ws[f"P{offset}"] = payload.get("protocol_number")
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -379,6 +401,129 @@ async def test_manometers_pdf_files_certificate_mismatch(async_client, tmp_path,
     assert error["reason"] == "certificate mismatch between excel and db"
     assert error["serial"] == serial
     assert calls["pdf"] == 0
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_manometers_pdf_files_prefers_matching_month(async_client, tmp_path, monkeypatch):
+    serial = "03607"
+    july_cert = "С-ЕЖБ/05-07-2025/443771777"
+    aug_cert = "С-ЕЖБ/05-08-2025/443771888"
+    july_protocol = "07/001/25"
+    aug_protocol = "08/001/25"
+
+    manometers_xlsx = _make_manometers_excel_row(
+        certificate=july_cert, serial=serial, date="15.07.2025"
+    )
+    db_xlsx = _make_manometers_db_excel_multi(
+        [
+            {
+                "serial": serial,
+                "certificate": aug_cert,
+                "protocol_number": aug_protocol,
+                "verification_date": "05.08.2025",
+            },
+            {
+                "serial": serial,
+                "certificate": july_cert,
+                "protocol_number": july_protocol,
+                "verification_date": "05.07.2025",
+            },
+        ]
+    )
+
+    async def fake_pdf(html: str) -> bytes | None:
+        return b"%PDF-month%"
+
+    monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+
+    def _fake_named_exports_dir(name: str) -> Path:
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr("app.api.routes.protocols.get_named_exports_dir", _fake_named_exports_dir)
+
+    vri_id = "1-MONTH"
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        side_effect=[
+            httpx.Response(200, json={"result": {"items": [{"vri_id": vri_id}]}}),
+            httpx.Response(
+                200,
+                json={
+                    "result": {
+                        "items": [
+                            {
+                                "result_docnum": "ET-123",
+                                "verification_date": "01.07.2025",
+                                "valid_date": "31.12.2025",
+                            }
+                        ]
+                    }
+                },
+            ),
+        ]
+    )
+
+    respx.get(f"{ARSHIN_BASE}/vri/{vri_id}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "means": {
+                        "mieta": [
+                            {
+                                "regNumber": "77090.19.1Р.00761951",
+                                "mitypeNumber": "77090-19",
+                                "mitypeTitle": "Преобразователи давления эталонные",
+                                "notation": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+                                "manufactureNum": "3127",
+                                "manufactureYear": 2020,
+                                "rankCode": "1Р",
+                                "rankTitle": "Эталон 1-го разряда",
+                            }
+                        ]
+                    },
+                    "vriInfo": {
+                        "docTitle": "МИ 123-45",
+                        "vrfDate": "15.07.2025",
+                        "validDate": "14.07.2026",
+                        "applicable": {"certNum": july_cert},
+                    },
+                }
+            },
+        )
+    )
+
+    files = {
+        "manometers_file": (
+            "manometers.xlsx",
+            manometers_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "db_file": (
+            "07 БД.xlsx",
+            db_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    }
+
+    response = await async_client.post("/api/v1/protocols/manometers/pdf-files", files=files)
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["count"] == 1
+    assert body["errors"] == []
+
+    cert_calls = [
+        call
+        for call in respx.calls
+        if call.request.url.path.endswith("/vri")
+        and call.request.url.params.get("result_docnum")
+    ]
+    assert any(
+        call.request.url.params.get("result_docnum") == july_cert for call in cert_calls
+    ), "expected lookup using July certificate"
 
 
 @pytest.mark.anyio

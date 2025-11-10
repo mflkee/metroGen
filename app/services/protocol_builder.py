@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 from datetime import date, datetime
-from typing import Any, Mapping
+from typing import Any
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -367,7 +368,10 @@ async def build_context(
     etalon_entries = [
         entry
         for entry in raw_entries
-        if any(entry.get(key) for key in ("reg_number", "mitype_number", "mitype_title", "notation_full"))
+        if any(
+            entry.get(key)
+            for key in ("reg_number", "mitype_number", "mitype_title", "notation_full")
+        )
     ]
 
     # Свидетельства эталонов: из Excel/кэша или авто-поиск
@@ -503,7 +507,9 @@ async def build_context(
                     combined_segments.append(segment)
         else:
             base_line = str(context.get("etalon_line") or "").replace("\n", " ").strip(" ;")
-            bottom_line = str(context.get("etalon_line_bottom") or "").replace("\n", " ").strip(" ;")
+            bottom_line = (
+                str(context.get("etalon_line_bottom") or "").replace("\n", " ").strip(" ;")
+            )
             cert_line_text = context.get("etalon_certificate_line") or ""
             parts: list[str] = []
             if base_line:

@@ -15,16 +15,14 @@ def get_project_root() -> Path:
 def get_exports_base() -> Path:
     root = get_project_root()
     base = root / settings.EXPORTS_DIR
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+    return _ensure_dir(base)
 
 
 def get_dated_exports_dir(today: date | None = None) -> Path:
     d = today or date.today()
     base = get_exports_base()
     target = base / d.isoformat()
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    return _ensure_dir(target)
 
 
 def get_named_exports_dir(name: str) -> Path:
@@ -32,8 +30,7 @@ def get_named_exports_dir(name: str) -> Path:
     base = get_exports_base()
     safe_name = sanitize_filename(name, default="exports")
     target = base / safe_name
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+    return _ensure_dir(target)
 
 
 def get_output_dir() -> Path:
@@ -43,8 +40,7 @@ def get_output_dir() -> Path:
     """
     root = get_project_root()
     out = root / "output"
-    out.mkdir(parents=True, exist_ok=True)
-    return out
+    return _ensure_dir(out)
 
 
 _INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|]')
@@ -65,3 +61,13 @@ def sanitize_filename(
     cleaned = _WHITESPACE_RE.sub(" ", cleaned).strip()
     cleaned = cleaned.strip(".")
     return cleaned or default
+
+
+def _ensure_dir(path: Path, mode: int = 0o777) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.chmod(mode)
+    except OSError:
+        # If filesystem disallows chmod (e.g., on Windows/readonly volumes), ignore silently.
+        pass
+    return path

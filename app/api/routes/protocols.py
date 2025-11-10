@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -216,21 +216,76 @@ def _context_pdf_filename(ctx: Mapping[str, Any]) -> str:
     return safe_name
 
 
-def _entries_to_index(entries: Mapping[str, list[Any]]) -> dict[str, Mapping[str, Any]]:
-    index: dict[str, Mapping[str, Any]] = {}
+def _registry_entry_sort_key(entry: Mapping[str, Any]) -> tuple:
+    ver_date = entry.get("verification_date") or date.min
+    loaded_at = entry.get("loaded_at") or datetime.min
+    row_index = entry.get("row_index") or 0
+    return (ver_date, loaded_at, row_index)
+
+
+def _serialize_registry_entry(entry: Any) -> dict[str, Any]:
+    payload = dict(getattr(entry, "payload", {}) or {})
+    document_no = getattr(entry, "document_no", None)
+    protocol_no = getattr(entry, "protocol_no", None)
+    if document_no and not payload.get("Документ"):
+        payload["Документ"] = document_no
+    if protocol_no and not payload.get("номер_протокола"):
+        payload["номер_протокола"] = protocol_no
+
+    return {
+        "payload": payload,
+        "verification_date": getattr(entry, "verification_date", None),
+        "valid_to": getattr(entry, "valid_to", None),
+        "source_file": getattr(entry, "source_file", None),
+        "row_index": getattr(entry, "row_index", None),
+        "loaded_at": getattr(entry, "loaded_at", None),
+    }
+
+
+def _entries_to_index(entries: Mapping[str, list[Any]]) -> dict[str, list[dict[str, Any]]]:
+    index: dict[str, list[dict[str, Any]]] = {}
     for serial, records in entries.items():
         if not records:
             continue
-        entry = records[0]
-        payload = dict(getattr(entry, "payload", {}) or {})
-        document_no = getattr(entry, "document_no", None)
-        protocol_no = getattr(entry, "protocol_no", None)
-        if document_no and not payload.get("Документ"):
-            payload["Документ"] = document_no
-        if protocol_no and not payload.get("номер_протокола"):
-            payload["номер_протокола"] = protocol_no
-        index[serial] = payload
+        serialized = [_serialize_registry_entry(entry) for entry in records if entry]
+        if not serialized:
+            continue
+        serialized.sort(key=_registry_entry_sort_key, reverse=True)
+        index[serial] = serialized
     return index
+
+
+def _row_verification_date(row: Mapping[str, Any]) -> date | None:
+    for key in ("Дата поверки", "verification_date", "verificationDate"):
+        value = row.get(key)
+        parsed = _parse_date_value(value)
+        if parsed:
+            return parsed
+    return None
+
+
+def _select_registry_entry(
+    entries: Sequence[Mapping[str, Any]] | None, desired_date: date | None
+) -> Mapping[str, Any] | None:
+    if not entries:
+        return None
+
+    if desired_date:
+        for entry in entries:
+            entry_date = entry.get("verification_date")
+            if isinstance(entry_date, date) and entry_date == desired_date:
+                return entry
+
+        for entry in entries:
+            entry_date = entry.get("verification_date")
+            if (
+                isinstance(entry_date, date)
+                and entry_date.year == desired_date.year
+                and entry_date.month == desired_date.month
+            ):
+                return entry
+
+    return entries[0]
 
 
 def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
@@ -255,8 +310,8 @@ def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
 async def _build_context_from_db(
     row: Mapping[str, Any],
     *,
-    db_index: Mapping[str, Mapping[str, Any]] | None = None,
-    db_row: Mapping[str, Any] | None = None,
+    db_index: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    db_entries: Sequence[Mapping[str, Any]] | None = None,
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
     session: AsyncSession,
@@ -277,9 +332,12 @@ async def _build_context_from_db(
             error="serial number is empty",
         )
 
-    if db_row is None and db_index is not None:
-        db_row = db_index.get(serial_key)
-    if not db_row:
+    candidates = list(db_entries or [])
+    if not candidates and db_index is not None:
+        candidates = list(db_index.get(serial_key) or [])
+
+    selected_entry = _select_registry_entry(candidates, _row_verification_date(row_data))
+    if not selected_entry:
         return ProtocolContextItem(
             certificate="",
             vri_id="",
@@ -288,6 +346,8 @@ async def _build_context_from_db(
             raw_details={},
             error="serial number not found in db",
         )
+
+    db_row = dict(selected_entry.get("payload") or {})
 
     cert = str(db_row.get("Документ") or "").strip()
     if not cert:
@@ -319,7 +379,7 @@ async def _build_context_from_db(
         )
 
     try:
-        vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
+        vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem, use_cache=False)
         if not vri_id:
             return ProtocolContextItem(
                 certificate=cert,
@@ -616,10 +676,10 @@ async def controllers_pdf_files(
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
         normalized_serial = normalize_serial(serial)
-        db_row: Mapping[str, Any] | None = db_index.get(normalized_serial or "")
+        db_entries = db_index.get(normalized_serial or "")
         return await _build_context_from_db(
             row,
-            db_row=db_row,
+            db_entries=db_entries,
             client=client,
             sem=sem,
             session=session,
@@ -785,10 +845,10 @@ async def manometers_pdf_files(
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
         normalized_serial = normalize_serial(serial)
-        db_row: Mapping[str, Any] | None = db_index.get(normalized_serial or "")
+        db_entries = db_index.get(normalized_serial or "")
         return await _build_context_from_db(
             row,
-            db_row=db_row,
+            db_entries=db_entries,
             client=client,
             sem=sem,
             session=session,

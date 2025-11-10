@@ -2,7 +2,6 @@ import pytest
 
 from app.services.protocol_builder import build_context
 
-
 _DEFAULT_POINTS = {"p1": "5.1", "p2": "5.2", "p3": "5.3"}
 
 
@@ -17,7 +16,9 @@ async def test_build_context_merges_type_and_modification_in_device_info():
         "Методика поверки": "МИ 2124-90",
     }
     details = {
-        "miInfo": {"singleMI": {"mitypeTitle": "Манометры показывающие", "mitypeNumber": "13535-93"}},
+        "miInfo": {
+            "singleMI": {"mitypeTitle": "Манометры показывающие", "mitypeNumber": "13535-93"}
+        },
         "vriInfo": {},
     }
 
@@ -77,7 +78,9 @@ async def test_build_context_restores_default_point_descriptions_when_missing():
         "Методика поверки": "МИ 2124-90",
     }
     details = {
-        "miInfo": {"singleMI": {"mitypeTitle": "Манометры показывающие", "mitypeNumber": "13535-93"}},
+        "miInfo": {
+            "singleMI": {"mitypeTitle": "Манометры показывающие", "mitypeNumber": "13535-93"}
+        },
         "vriInfo": {},
     }
     items = [
