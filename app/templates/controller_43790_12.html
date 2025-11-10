@@ -79,12 +79,25 @@
         <p class="undertext">наименование и номер документа</p>
       </div>
     </div>
+    {% set etalons = etalon_entries %}
     <div class="split-17 spread-bottom">
       <p>Средства поверки:</p>
       <div>
-        <p class="line" id="manual_etalonsMain">
-          {{ etalon_line_combined or etalon_line_top }}
-        </p>
+        {% if etalons %}
+          {% for entry in etalons %}
+            <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>{{ entry.line_top }}</p>
+            {% if entry.line_bottom %}
+              <p class="line">{{ entry.line_bottom }}</p>
+            {% endif %}
+            {% if entry.certificate_line %}
+              <p class="line">{{ entry.certificate_line }}</p>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <p class="line" id="manual_etalonsMain">
+            {{ etalon_line_combined or etalon_line_top }}
+          </p>
+        {% endif %}
         <p class="undertext">
           Указываются эталоны единиц величин, обеспечивающие передачу размера
           единицы величины в соответствии с поверочной схемой,

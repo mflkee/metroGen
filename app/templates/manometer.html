@@ -85,12 +85,18 @@
         <p class="undertext">наименование и номер документа</p>
       </div>
     </div>
+    {% set etalons = etalon_entries %}
+    {% set first_etalon = etalons[0] if etalons else None %}
     <div class="split-17 spread-bottom">
       <p>Средства поверки:</p>
       <div>
+        {% if first_etalon %}
+        <p class="line" id="manual_etalonsMain">{{ first_etalon.line_top }}</p>
+        {% else %}
         <p class="line" id="manual_etalonsMain">
           {{ etalon_line_top }}
         </p>
+        {% endif %}
         <p class="undertext">
           Указываются эталоны единиц величин, обеспечивающие передачу размера
           единицы величины в соответствии с поверочной схемой,
@@ -98,12 +104,31 @@
       </div>
     </div>
     <div class="spread-bottom">
+      {% if first_etalon %}
+      <p class="line" id="manual_etalonsAdditional">{{ first_etalon.line_bottom }}</p>
+      {% else %}
       <p class="line" id="manual_etalonsAdditional">{{ etalon_line_bottom }}</p>
+      {% endif %}
       <p class="undertext spread-bottom">
         номер (все цифры и буквы регистрационного номера)
       </p>
-      {% if etalon_certificate_line %}
+      {% if first_etalon and first_etalon.certificate_line %}
+      <p class="line" id="manual_etalonsCertificate">{{ first_etalon.certificate_line }}</p>
+      {% elif etalon_certificate_line %}
       <p class="line" id="manual_etalonsCertificate">{{ etalon_certificate_line }}</p>
+      {% endif %}
+      {% if etalons and etalons|length > 1 %}
+      <div class="etalon-extra">
+        {% for entry in etalons[1:] %}
+        <p class="line">{{ entry.line_top }}</p>
+        {% if entry.line_bottom %}
+        <p class="line">{{ entry.line_bottom }}</p>
+        {% endif %}
+        {% if entry.certificate_line %}
+        <p class="line">{{ entry.certificate_line }}</p>
+        {% endif %}
+        {% endfor %}
+      </div>
       {% endif %}
     </div>
     <div class="split-20 spread-bottom">
@@ -348,6 +373,12 @@
     }
     .split-30 > *:last-child {
       flex: 0 0 70%;
+    }
+    .etalon-extra {
+      margin-top: 0.2rem;
+    }
+    .etalon-extra p {
+      margin-top: 0.1rem;
     }
     .split-35 {
       display: flex;

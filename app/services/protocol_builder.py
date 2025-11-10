@@ -3,12 +3,12 @@ from __future__ import annotations
 import math
 import re
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Mapping
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.arshin_client import resolve_etalon_cert_from_details
+from app.services.arshin_client import resolve_etalon_certs_from_details
 from app.services.generators.base import FixedPctTol, GenInput
 from app.services.generators.registry import get_by_template
 from app.services.mappings import resolve_methodology, resolve_owner_and_inn
@@ -28,19 +28,43 @@ def _norm_unit(s: str | None) -> str | None:
     return t
 
 
+_RANGE_EXPR_RE = re.compile(
+    r"""
+    \(?\s*
+    (?P<lo>[+-]?\d+(?:[.,]\d+)?)
+    \s*(?:-|\.{2,})\s*
+    (?P<hi>[+-]?\d+(?:[.,]\d+)?)
+    \s*\)?\s*
+    (?P<unit>.+)?
+    """,
+    re.VERBOSE,
+)
+
+
+def _normalized_range_text(value: str) -> str:
+    text = value.replace("−", "-").replace("–", "-").replace("—", "-")
+    text = text.replace("…", "..")
+    text = re.sub(r"\bдо\b", "-", text, flags=re.IGNORECASE)
+    return text
+
+
+def _parse_range_text(text: str | None) -> tuple[float | None, float | None, str | None]:
+    if not text:
+        return None, None, None
+    normalized = _normalized_range_text(text.strip())
+    match = _RANGE_EXPR_RE.search(normalized)
+    if not match:
+        return None, None, None
+    lo = float(match.group("lo").replace(",", "."))
+    hi = float(match.group("hi").replace(",", "."))
+    unit = _norm_unit((match.group("unit") or "").strip())
+    return lo, hi, unit or None
+
+
 def _parse_range_and_unit(
     additional_info: str | None,
 ) -> tuple[float | None, float | None, str | None]:
-    if not additional_info:
-        return None, None, None
-    txt = additional_info.strip()
-    m = re.search(r"(-?\d+(?:[.,]\d+)?)\s*[-–]\s*(-?\d+(?:[.,]\d+)?)\s*\)?\s*(.+)?", txt)
-    if not m:
-        return None, None, None
-    lo = float(m.group(1).replace(",", "."))
-    hi = float(m.group(2).replace(",", "."))
-    unit = _norm_unit((m.group(3) or "").strip())
-    return lo, hi, unit or None
+    return _parse_range_text(additional_info)
 
 
 def _fmt_date_ddmmyyyy(s: object) -> str:
@@ -150,6 +174,106 @@ def _fallback_point_description(position: int, idx: int) -> str:
     return _DEFAULT_POINT_DESCRIPTIONS.get(position) or _DEFAULT_POINT_DESCRIPTIONS.get(idx) or ""
 
 
+def _etalon_sources(details: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    sources: list[Mapping[str, Any]] = []
+    means = details.get("means") or {}
+    if isinstance(means, Mapping):
+        for entry in means.get("mieta") or []:
+            if isinstance(entry, Mapping):
+                sources.append(entry)
+    eta = (details.get("miInfo") or {}).get("etaMI")
+    if isinstance(eta, Mapping):
+        sources.append(eta)
+    return sources
+
+
+def _build_etalon_entry(raw: Mapping[str, Any]) -> dict[str, Any]:
+    et_reg = _clean_str(raw.get("regNumber"))
+    et_mitype_num = _clean_str(raw.get("mitypeNumber"))
+    et_title = _clean_str(raw.get("mitypeTitle"))
+    notation_full = _clean_str(raw.get("notation"))
+    notation_first, notation_second = _split_notation(notation_full)
+    et_mod = _clean_str(raw.get("modification"))
+    et_num = _clean_str(raw.get("manufactureNum"))
+    et_year = _clean_str(raw.get("manufactureYear"))
+    et_rank_code = _clean_str(raw.get("rankCode"))
+    et_rank_title = _clean_str(raw.get("rankTitle"))
+    et_schema = _clean_str(raw.get("schemaTitle"))
+
+    line_top = "; ".join(x for x in [et_reg, et_mitype_num, et_title, notation_first] if x)
+    if line_top and notation_second:
+        line_top = f"{line_top},"
+    line_bottom_parts = [
+        notation_second or "",
+        et_mod,
+        et_num,
+        et_year,
+        et_rank_code,
+        et_rank_title,
+        et_schema,
+    ]
+    line_bottom = "; ".join(x for x in line_bottom_parts if x)
+    if line_bottom and not line_bottom.endswith(";"):
+        line_bottom = f"{line_bottom};"
+
+    line_full = "; ".join(x for x in [et_reg, et_mitype_num, et_title, notation_full] if x)
+
+    return {
+        "reg_number": et_reg,
+        "mitype_number": et_mitype_num,
+        "mitype_title": et_title,
+        "notation_full": notation_full,
+        "notation_first": notation_first,
+        "notation_second": notation_second,
+        "modification": et_mod,
+        "manufacture_num": et_num,
+        "manufacture_year": et_year,
+        "rank_code": et_rank_code,
+        "rank_title": et_rank_title,
+        "schema_title": et_schema,
+        "line_full": line_full,
+        "line_top": line_top,
+        "line_bottom": line_bottom,
+        "certificate_line": None,
+        "certificate": None,
+    }
+
+
+def _match_certificate_for_entry(
+    entry: Mapping[str, Any],
+    certificates: list[Mapping[str, Any]],
+    used_indices: set[int],
+) -> Mapping[str, Any] | None:
+    entry_serial = _clean_str(entry.get("manufacture_num"))
+    entry_reg = _clean_str(entry.get("reg_number"))
+
+    def _value_matches(cert: Mapping[str, Any], key: str, target: str | None) -> bool:
+        if not target:
+            return False
+        value = _clean_str(cert.get(key))
+        return value == target
+
+    for idx, cert in enumerate(certificates):
+        if idx in used_indices:
+            continue
+        if _value_matches(cert, "manufacture_num", entry_serial):
+            used_indices.add(idx)
+            return cert
+
+    for idx, cert in enumerate(certificates):
+        if idx in used_indices:
+            continue
+        if _value_matches(cert, "reg_number", entry_reg):
+            used_indices.add(idx)
+            return cert
+
+    for idx, cert in enumerate(certificates):
+        if idx not in used_indices:
+            used_indices.add(idx)
+            return cert
+    return None
+
+
 async def build_context(
     *,
     excel_row: dict[str, Any],
@@ -212,8 +336,6 @@ async def build_context(
 
     vri = details.get("vriInfo", {}) or {}
     mi_single = (details.get("miInfo", {}) or {}).get("singleMI") or {}
-    means = details.get("means", {}) or {}
-    mieta_list = means.get("mieta") or []
 
     # Даты
     vrf_date = vri.get("vrfDate")
@@ -226,16 +348,13 @@ async def build_context(
     unit = None
     range_source = None
 
-    rng_txt = (excel_row.get("Прочие сведения") or "").strip()
-    if rng_txt:
-        m = re.search(
-            r"\(?\s*(-?\d+(?:[.,]\d+)?)\s*[-–]\s*(-?\d+(?:[.,]\d+)?)\s*\)?\s*(.+)$", rng_txt
-        )
-        if m:
-            range_min = float(m.group(1).replace(",", "."))
-            range_max = float(m.group(2).replace(",", "."))
-            unit = _norm_unit(m.group(3))
-            range_source = "excel"
+    rng_txt = _clean_str(excel_row.get("Прочие сведения"))
+    parsed_lo, parsed_hi, parsed_unit = _parse_range_text(rng_txt)
+    if parsed_lo is not None and parsed_hi is not None:
+        range_min = parsed_lo
+        range_max = parsed_hi
+        unit = parsed_unit
+        range_source = "excel"
 
     if range_min is None or range_max is None or not unit:
         lo, hi, u = _parse_range_and_unit((details.get("info") or {}).get("additional_info"))
@@ -243,45 +362,51 @@ async def build_context(
             range_min, range_max, unit = lo, hi, _norm_unit(u)
             range_source = range_source or "arshin"
 
-    # Эталон (берём первый)
-    et = mieta_list[0] if mieta_list else {}
-    et_reg = et.get("regNumber") or ""
-    et_mitype_num = et.get("mitypeNumber") or ""
-    et_title = et.get("mitypeTitle") or ""
-    notation_full = (et.get("notation") or "").strip()
-    notation_first, notation_second = _split_notation(notation_full)
-    et_mod = et.get("modification") or ""
-    et_num = et.get("manufactureNum") or ""
-    et_year = str(et.get("manufactureYear") or "")
-    et_rank_code = et.get("rankCode") or ""
-    et_rank_title = et.get("rankTitle") or ""
-    et_schema = et.get("schemaTitle") or ""
-
-    etalon_line = "; ".join(x for x in [et_reg, et_mitype_num, et_title, notation_full] if x)
-    etalon_line_top = "; ".join(x for x in [et_reg, et_mitype_num, et_title, notation_first] if x)
-    if notation_second:
-        etalon_line_top = f"{etalon_line_top},"
-    bottom_parts = [
-        notation_second or "",
-        et_mod,
-        et_num,
-        et_year,
-        et_rank_code,
-        et_rank_title,
-        et_schema,
+    # Эталоны: собираем все доступные источники
+    raw_entries = [_build_etalon_entry(entry) for entry in _etalon_sources(details)]
+    etalon_entries = [
+        entry
+        for entry in raw_entries
+        if any(entry.get(key) for key in ("reg_number", "mitype_number", "mitype_title", "notation_full"))
     ]
-    etalon_line_bottom = "; ".join([x for x in bottom_parts if x])
-    if etalon_line_bottom and not etalon_line_bottom.endswith(";"):
-        etalon_line_bottom += ";"
 
-    # Свидетельство эталона: из Excel кэш или авто-поиск
-    et_cert = excel_row.get("_resolved_etalon_cert") or {}
-    if not et_cert and http_client:
+    # Свидетельства эталонов: из Excel/кэша или авто-поиск
+    resolved_certs = excel_row.get("_resolved_etalon_certs")
+    etalon_certs: list[dict[str, Any]] = []
+    if isinstance(resolved_certs, list):
+        etalon_certs = [dict(item) for item in resolved_certs if isinstance(item, Mapping)]
+    elif isinstance(resolved_certs, Mapping):
+        etalon_certs = [dict(resolved_certs)]
+
+    if not etalon_certs:
+        single_cert = excel_row.get("_resolved_etalon_cert")
+        if isinstance(single_cert, Mapping):
+            etalon_certs = [dict(single_cert)]
+
+    if not etalon_certs and http_client:
         try:
-            et_cert = await resolve_etalon_cert_from_details(http_client, details)
+            etalon_certs = await resolve_etalon_certs_from_details(http_client, details)
+            excel_row["_resolved_etalon_certs"] = etalon_certs
+            if etalon_certs:
+                excel_row["_resolved_etalon_cert"] = etalon_certs[0]
         except Exception:
-            et_cert = {}
-    et_cert_line = (et_cert or {}).get("line")
+            etalon_certs = []
+
+    used_cert_indices: set[int] = set()
+    for entry in etalon_entries:
+        cert_match = _match_certificate_for_entry(entry, etalon_certs, used_cert_indices)
+        if cert_match:
+            entry["certificate"] = cert_match
+            entry["certificate_line"] = cert_match.get("line")
+
+    primary_entry = etalon_entries[0] if etalon_entries else {}
+    etalon_line = primary_entry.get("line_full", "")
+    etalon_line_top = primary_entry.get("line_top", "")
+    etalon_line_bottom = primary_entry.get("line_bottom", "")
+    et_rank_code = primary_entry.get("rank_code") or ""
+    et_rank_title = primary_entry.get("rank_title") or ""
+    primary_cert = primary_entry.get("certificate") or (etalon_certs[0] if etalon_certs else None)
+    et_cert_line = primary_entry.get("certificate_line") or (primary_cert or {}).get("line")
 
     # Свидетельство поверяемого СИ
     device_cert_line = None
@@ -331,10 +456,13 @@ async def build_context(
         "range_source": range_source,
         "measurement_range": {"min": range_min, "max": range_max},
         "measurement_unit": unit,
+        "etalon_entries": etalon_entries,
+        "etalon_certificates": etalon_certs,
+        "etalon_lines": [entry["line_full"] for entry in etalon_entries if entry.get("line_full")],
         "etalon_line": etalon_line,
         "etalon_line_top": etalon_line_top,
         "etalon_line_bottom": etalon_line_bottom,
-        "etalon_certificate": et_cert or None,
+        "etalon_certificate": primary_cert or None,
         "etalon_certificate_line": et_cert_line,
         "etalon_rank_code": et_rank_code or None,
         "etalon_rank_title": et_rank_title or None,
@@ -361,24 +489,38 @@ async def build_context(
         combined_device = " ".join(x for x in [mitype_title, mitype_type] if x).strip()
         if combined_device:
             context["device_info"] = combined_device
-        cert_line_text = context.get("etalon_certificate_line") or ""
-        base_line = str(context.get("etalon_line") or "").replace("\n", " ").strip(" ;")
-        bottom_line = str(context.get("etalon_line_bottom") or "").replace("\n", " ").strip(" ;")
+        entries = context.get("etalon_entries") or []
+        combined_segments: list[str] = []
+        if entries:
+            for entry in entries:
+                seg_parts = [
+                    entry.get("line_top") or "",
+                    entry.get("line_bottom") or "",
+                    entry.get("certificate_line") or "",
+                ]
+                segment = "; ".join(part.strip(" ;") for part in seg_parts if part)
+                if segment:
+                    combined_segments.append(segment)
+        else:
+            base_line = str(context.get("etalon_line") or "").replace("\n", " ").strip(" ;")
+            bottom_line = str(context.get("etalon_line_bottom") or "").replace("\n", " ").strip(" ;")
+            cert_line_text = context.get("etalon_certificate_line") or ""
+            parts: list[str] = []
+            if base_line:
+                parts.append(base_line)
+            if bottom_line:
+                parts.append(bottom_line)
+            combined = "; ".join(parts)
+            if cert_line_text:
+                combined = f"{combined}; ({cert_line_text})" if combined else f"({cert_line_text})"
+            if combined:
+                combined_segments.append(combined)
 
-        parts: list[str] = []
-        if base_line:
-            parts.append(base_line)
-        if bottom_line:
-            parts.append(bottom_line)
-
-        combined = "; ".join(parts)
-        if cert_line_text:
-            combined = f"{combined}; ({cert_line_text})" if combined else f"({cert_line_text})"
-
-        context["etalon_line_combined"] = combined
-        context["etalon_line_top"] = combined
-        context["etalon_line_bottom"] = ""
-        context["etalon_certificate_line"] = None
+        context["etalon_line_combined"] = " / ".join(combined_segments)
+        if not entries:
+            context["etalon_line_top"] = context["etalon_line_combined"]
+            context["etalon_line_bottom"] = ""
+            context["etalon_certificate_line"] = None
 
         method_full = (context.get("methodology_full") or "").strip()
         target_suffix = "МП 20-221-2021"
