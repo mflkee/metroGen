@@ -267,31 +267,53 @@ async def resolve_etalon_cert_from_details(
     details: dict[str, Any],
     sem: asyncio.Semaphore | None = None,
 ) -> dict[str, str] | None:
-    """
-    Автопоиск свидетельства эталона:
-    GET /vri?mit_number=...&mit_title=...&mi_modification=...&mi_number=...
+    certs = await resolve_etalon_certs_from_details(client, details, sem=sem)
+    return certs[0] if certs else None
 
-    Возвращает:
-      {
-        "docnum": "...",
-        "verification_date": "ДД.ММ.ГГГГ",
-        "valid_date": "ДД.ММ.ГГГГ",
-        "line": "свидетельство о поверке № <docnum>; действительно до <valid_date>;"
-      }
-    либо None, если не найдено/недостаточно данных.
-    """
-    # Берём эталон либо из miInfo.etaMI, либо из means.mieta[0]
+
+def _iter_etalon_sources(details: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return all eta sources from details (means.mieta + miInfo.etaMI)."""
     candidates: list[dict[str, Any]] = []
     primary = _safe_get(details, ["means", "mieta"], []) or []
-    if primary:
-        candidates.extend([(item or {}).copy() for item in primary])
+    for item in primary:
+        if isinstance(item, dict):
+            candidates.append(item.copy())
 
     eta = _safe_get(details, ["miInfo", "etaMI"], {}) or {}
     if eta:
-        candidates.append(eta.copy())
+        candidates.append(dict(eta))
+    return candidates
 
+
+async def resolve_etalon_certs_from_details(
+    client: httpx.AsyncClient,
+    details: dict[str, Any],
+    sem: asyncio.Semaphore | None = None,
+) -> list[dict[str, str]]:
+    """
+    Автопоиск свидетельств эталонов:
+    GET /vri?mit_number=...&mit_title=...&mi_modification=...&mi_number=...
+
+    Возвращает:
+      [
+        {
+          "docnum": "...",
+          "verification_date": "ДД.ММ.ГГГГ",
+          "valid_date": "ДД.ММ.ГГГГ",
+          "line": "...",
+          "reg_number": "...",
+          "manufacture_num": "...",
+          "mitype_number": "...",
+        },
+        ...
+      ]
+    либо пустой список, если ничего не найдено.
+    """
+    candidates = _iter_etalon_sources(details)
     if not candidates:
-        return None
+        return []
+
+    results: list[dict[str, str]] = []
 
     async def _query(params: dict[str, str]) -> dict[str, str] | None:
         cache_key = ("eta_cert_v2", tuple(sorted((str(k), str(v)) for k, v in params.items())))
@@ -336,7 +358,10 @@ async def resolve_etalon_cert_from_details(
 
         return None
 
+    seen_queries: set[tuple[tuple[str, str], ...]] = set()
+
     for entry in candidates:
+        reg_number = str(entry.get("regNumber") or "").strip()
         mit_number = str(entry.get("mitypeNumber") or "").strip()
         mi_number = str(entry.get("manufactureNum") or "").strip()
         if not (mit_number and mi_number):
@@ -368,7 +393,6 @@ async def resolve_etalon_cert_from_details(
         if guessed_year and guessed_year != manufacture_year:
             candidate_params.insert(0, {**base_params, "year": str(guessed_year)})
 
-        seen_queries: set[tuple[tuple[str, str], ...]] = set()
         for params in candidate_params:
             key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
             if key in seen_queries:
@@ -376,9 +400,15 @@ async def resolve_etalon_cert_from_details(
             seen_queries.add(key)
             result = await _query(params)
             if result:
-                return result
+                enriched = dict(result)
+                enriched.setdefault("reg_number", reg_number)
+                enriched.setdefault("manufacture_num", mi_number)
+                enriched.setdefault("mitype_number", mit_number)
+                enriched.setdefault("mitype_title", base_params.get("mit_title", ""))
+                results.append(enriched)
+                break
 
-    return None
+    return results
 
 
 # Алиас для совместимости со старым импортом в protocols.py
@@ -388,4 +418,13 @@ async def find_etalon_certificate(
     details: dict[str, Any],
     sem: asyncio.Semaphore | None = None,
 ) -> dict[str, str] | None:
-    return await resolve_etalon_cert_from_details(client, details, sem=sem)
+    certs = await resolve_etalon_certs_from_details(client, details, sem=sem)
+    return certs[0] if certs else None
+
+
+async def find_etalon_certificates(
+    client: httpx.AsyncClient,
+    details: dict[str, Any],
+    sem: asyncio.Semaphore | None = None,
+) -> list[dict[str, str]]:
+    return await resolve_etalon_certs_from_details(client, details, sem=sem)

@@ -488,3 +488,82 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
     assert saved_path.read_bytes() == b"%PDF-manometer%"
     assert saved_path.parent == tmp_path / "PDF Манометры 06"
     assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_contexts_by_excel_includes_multiple_etalons(async_client, monkeypatch):
+    cert = "С-ВЯ/15-01-2025/402123777"
+    vri_id = "1-MULTI"
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        return_value=httpx.Response(200, json={"result": {"items": [{"vri_id": vri_id}]}})
+    )
+
+    respx.get(f"{ARSHIN_BASE}/vri/{vri_id}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "means": {
+                        "mieta": [
+                            {
+                                "regNumber": "77090.19.1Р.000111",
+                                "mitypeNumber": "77090-19",
+                                "mitypeTitle": "Эталон давления №1",
+                                "notation": "ЭЛМЕТРО-Паскаль-04",
+                                "manufactureNum": "E-001",
+                            },
+                            {
+                                "regNumber": "77090.19.1Р.000222",
+                                "mitypeNumber": "77090-19",
+                                "mitypeTitle": "Эталон давления №2",
+                                "notation": "ЭЛМЕТРО-Паскаль-05",
+                                "manufactureNum": "E-002",
+                            },
+                        ]
+                    },
+                    "vriInfo": {
+                        "docTitle": "МИ 123-45",
+                        "vrfDate": "15.01.2025",
+                        "validDate": "14.01.2026",
+                        "applicable": {"certNum": cert},
+                    },
+                }
+            },
+        )
+    )
+
+    async def fake_find_certs(client, details, sem=None):
+        return [
+            {
+                "line": "свидетельство о поверке № ET-001; действительно до 31.12.2025;",
+                "manufacture_num": "E-001",
+                "reg_number": "77090.19.1Р.000111",
+            },
+            {
+                "line": "свидетельство о поверке № ET-002; действительно до 31.12.2025;",
+                "manufacture_num": "E-002",
+                "reg_number": "77090.19.1Р.000222",
+            },
+        ]
+
+    monkeypatch.setattr("app.api.routes.protocols.find_etalon_certificates", fake_find_certs)
+
+    xlsx = _make_protocols_excel_row(cert)
+    files = {
+        "file": (
+            "input.xlsx",
+            xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    }
+    response = await async_client.post("/api/v1/protocols/context-by-excel", files=files)
+
+    assert response.status_code == 200
+    ctx = response.json()["items"][0]["context"]
+    entries = ctx["etalon_entries"]
+    assert len(entries) == 2
+    assert entries[0]["reg_number"].endswith("000111")
+    assert entries[1]["reg_number"].endswith("000222")
+    assert entries[1]["certificate_line"].startswith("свидетельство о поверке № ET-002")

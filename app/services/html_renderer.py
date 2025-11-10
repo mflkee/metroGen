@@ -87,6 +87,9 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("humidity_plain", ctx.get("humidity"))
     ctx.setdefault("allowable_note", "")
     ctx.setdefault("table_rows", [])
+    ctx.setdefault("etalon_entries", [])
+    ctx.setdefault("etalon_lines", [])
+    ctx.setdefault("etalon_certificates", [])
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")

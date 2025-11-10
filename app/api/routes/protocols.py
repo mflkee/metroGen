@@ -19,7 +19,7 @@ from app.schemas.protocol import ProtocolContextItem, ProtocolContextListOut
 from app.services.arshin_client import (
     fetch_vri_details,
     fetch_vri_id_by_certificate,
-    find_etalon_certificate,
+    find_etalon_certificates,
 )
 from app.services.html_renderer import render_protocol_html
 from app.services.pdf import html_to_pdf_bytes
@@ -341,9 +341,10 @@ async def _build_context_from_db(
                 error="not found",
             )
 
-        et_cert = await find_etalon_certificate(client, details, sem=sem)
-        if et_cert:
-            row_data["_resolved_etalon_cert"] = et_cert
+        et_certs = await find_etalon_certificates(client, details, sem=sem)
+        if et_certs:
+            row_data["_resolved_etalon_certs"] = et_certs
+            row_data["_resolved_etalon_cert"] = et_certs[0]
 
         ctx = await build_protocol_context(row_data, details, client, session=session)
         if protocol_number:
@@ -449,10 +450,11 @@ async def contexts_by_excel(
                     error="not found",
                 )
 
-            # 4) авто-поиск свидетельства эталона с учётом семафора
-            et_cert = await find_etalon_certificate(client, details, sem=sem)
-            if et_cert:
-                row_data["_resolved_etalon_cert"] = et_cert  # билдер это подхватит
+            # 4) авто-поиск свидетельств эталонов с учётом семафора
+            et_certs = await find_etalon_certificates(client, details, sem=sem)
+            if et_certs:
+                row_data["_resolved_etalon_certs"] = et_certs
+                row_data["_resolved_etalon_cert"] = et_certs[0]  # билдер подхватит первое
 
             # 5) собрать контекст
             ctx = await build_protocol_context(row_data, details, client, session=session)
@@ -536,9 +538,10 @@ async def html_by_excel(
     if not details:
         raise HTTPException(status_code=404, detail="not found")
 
-    et_cert = await find_etalon_certificate(client, details, sem=sem)
-    if et_cert:
-        row_data["_resolved_etalon_cert"] = et_cert
+    et_certs = await find_etalon_certificates(client, details, sem=sem)
+    if et_certs:
+        row_data["_resolved_etalon_certs"] = et_certs
+        row_data["_resolved_etalon_cert"] = et_certs[0]
 
     ctx = await build_protocol_context(row_data, details, client, session=session)
 
