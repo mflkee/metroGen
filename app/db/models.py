@@ -14,10 +14,10 @@ from sqlalchemy import (
     String,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.types import JSONBType
 
 
 class Template(Base):
@@ -27,7 +27,7 @@ class Template(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     path: Mapped[str] = mapped_column(String(255), nullable=False)
     supported_fields: Mapped[dict[str, Any] | list[str] | None] = mapped_column(
-        JSONB, nullable=True
+        JSONBType(), nullable=True
     )
 
     protocols: Mapped[list[Protocol]] = relationship(back_populates="template")
@@ -76,7 +76,7 @@ class VerificationRegistryEntry(Base):
     instrument_kind: Mapped[str | None] = mapped_column(String(64), index=True)
     verification_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
@@ -156,7 +156,7 @@ class EtalonDevice(Base):
     rank_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     rank_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     schema_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
 
     certifications: Mapped[list[EtalonCertification]] = relationship(
         back_populates="device", cascade="all, delete-orphan"
@@ -176,7 +176,7 @@ class EtalonCertification(Base):
     source: Mapped[str] = mapped_column(
         String(64), nullable=False, default="arshin", server_default=text("'arshin'")
     )
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
 
     device: Mapped[EtalonDevice] = relationship(back_populates="certifications")
     protocols: Mapped[list[Protocol]] = relationship(back_populates="etalon_certification")
@@ -202,7 +202,7 @@ class MeasuringInstrument(Base):
     certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
     certificate_valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     vri_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=text("now()")
     )
@@ -255,7 +255,7 @@ class Protocol(Base):
         ForeignKey("etalon_certifications.id", ondelete="SET NULL"), nullable=True
     )
 
-    context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    context: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
 
     owner: Mapped[Owner | None] = relationship(back_populates="protocols")
     template: Mapped[Template | None] = relationship(back_populates="protocols")

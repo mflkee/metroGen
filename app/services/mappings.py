@@ -8,8 +8,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db import models
 from app.db.repositories import (
@@ -193,13 +194,18 @@ async def ensure_methodology(
     if normalized:
         normalized_compact = normalized.replace(" и ", " ")
         alias_compact = func.replace(models.MethodologyAlias.normalized_alias, " и ", " ")
+        normalized_literal = literal(normalized_compact)
         stmt = (
             select(models.Methodology)
+            .options(
+                selectinload(models.Methodology.points),
+                selectinload(models.Methodology.aliases),
+            )
             .join(models.MethodologyAlias)
             .where(
                 or_(
-                    func.strpos(normalized_compact, alias_compact) > 0,
-                    func.strpos(alias_compact, normalized_compact) > 0,
+                    alias_compact.like(f"%{normalized_compact}%"),
+                    normalized_literal.like(literal("%") + alias_compact + literal("%")),
                 )
             )
             .order_by(func.length(models.MethodologyAlias.normalized_alias).desc())
