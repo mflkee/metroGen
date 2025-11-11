@@ -5,6 +5,17 @@ from app.services.protocol_builder import build_context
 _DEFAULT_POINTS = {"p1": "5.1", "p2": "5.2", "p3": "5.3"}
 
 
+def test_owner_name_fallback_uses_alternative_headers():
+    from app.services import protocol_builder as pb
+
+    row = {
+        "Организация": 'ООО "РИ-ИНВЕСТ"',
+        "Владелец": "",
+        "Владелец СИ": "",
+    }
+    assert pb._owner_name_from_row(row) == 'ООО "РИ-ИНВЕСТ"'
+
+
 @pytest.mark.anyio
 async def test_build_context_merges_type_and_modification_in_device_info():
     excel_row = {
