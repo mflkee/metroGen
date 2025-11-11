@@ -116,17 +116,25 @@ async def ensure_owner(
     if owner is None:
         owner = await repo.get_by_name(name)
 
+    seed_payload = _org_seed().get(name) or {}
+    fallback_inn = inn_hint or seed_payload.get("inn")
+
     if owner is None:
-        fallback_inn = inn_hint or (_org_seed().get(name) or {}).get("inn")
         owner = models.Owner(name=name, inn=fallback_inn)
         await repo.add(owner)
     else:
         if inn_hint and owner.inn != inn_hint:
             owner.inn = inn_hint
+        elif fallback_inn and not owner.inn:
+            owner.inn = fallback_inn
 
     alias_values = list(aliases or [])
     if name not in alias_values:
         alias_values.append(name)
+    extra_aliases = seed_payload.get("aliases") or []
+    for alias in extra_aliases:
+        if alias not in alias_values:
+            alias_values.append(alias)
     if alias_values:
         await repo.ensure_aliases(owner, alias_values)
     return owner
