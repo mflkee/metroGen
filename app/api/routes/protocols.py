@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import HTMLResponse
 
 from app.api.deps import get_db, get_http_client, get_semaphore
@@ -40,6 +40,15 @@ from app.utils.normalization import normalize_serial
 from app.utils.paths import get_named_exports_dir, get_output_dir, sanitize_filename
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
+
+
+def _make_worker_session_factory(
+    session: AsyncSession,
+) -> async_sessionmaker[AsyncSession]:
+    bind = session.bind
+    if bind is None:
+        raise RuntimeError("database session is not bound to an engine")
+    return async_sessionmaker(bind=bind, class_=AsyncSession, expire_on_commit=False)
 
 
 def _parse_date_value(value: object) -> date | None:
@@ -326,12 +335,7 @@ async def _build_contexts_concurrently(
     progress_every = max(total // 10, 1)
     started = time.perf_counter()
 
-    logger.info(
-        "%s: starting context build for %d rows (concurrency=%d)",
-        label,
-        total,
-        concurrency,
-    )
+    logger.info(f"{label}: starting context build for {total} rows (concurrency={concurrency})")
 
     async def run(row: dict[str, Any]) -> ProtocolContextItem:
         nonlocal completed
@@ -347,11 +351,8 @@ async def _build_contexts_concurrently(
                 log_now = True
         if log_now:
             logger.info(
-                "%s: prepared %d/%d contexts (%.2fs elapsed)",
-                label,
-                current,
-                total,
-                time.perf_counter() - started,
+                f"{label}: prepared {current}/{total} contexts "
+                f"({time.perf_counter() - started:.2f}s elapsed)"
             )
         return result
 
@@ -365,7 +366,7 @@ async def _build_context_from_db(
     db_entries: Sequence[Mapping[str, Any]] | None = None,
     client: httpx.AsyncClient,
     sem: asyncio.Semaphore,
-    session: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
     strict_certificate_match: bool = False,
 ) -> ProtocolContextItem:
     row_data = dict(row)
@@ -457,7 +458,13 @@ async def _build_context_from_db(
             row_data["_resolved_etalon_certs"] = et_certs
             row_data["_resolved_etalon_cert"] = et_certs[0]
 
-        ctx = await build_protocol_context(row_data, details, client, session=session)
+        async with session_factory() as worker_session:
+            ctx = await build_protocol_context(
+                row_data,
+                details,
+                client,
+                session=worker_session,
+            )
         if protocol_number:
             ctx["protocol_number"] = protocol_number
         equipment_label = _extract_equipment_label_from_sources(db_row, row_data)
@@ -522,6 +529,7 @@ async def contexts_by_excel(
     rows = read_rows_as_dicts(data)
     if not rows:
         return ProtocolContextListOut(items=[])
+    session_factory = _make_worker_session_factory(session)
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         row_data = dict(row)
@@ -568,7 +576,13 @@ async def contexts_by_excel(
                 row_data["_resolved_etalon_cert"] = et_certs[0]  # билдер подхватит первое
 
             # 5) собрать контекст
-            ctx = await build_protocol_context(row_data, details, client, session=session)
+            async with session_factory() as worker_session:
+                ctx = await build_protocol_context(
+                    row_data,
+                    details,
+                    client,
+                    session=worker_session,
+                )
 
             # 6) имя файла — по контексту или по исходной строке
             fname = suggest_filename(ctx) or filename
@@ -607,11 +621,9 @@ async def contexts_by_excel(
             it.context = ctx
 
     success_count = sum(1 for it in items if not it.error)
+    total = len(items)
     logger.info(
-        "contexts_by_excel: processed=%d success=%d errors=%d",
-        len(items),
-        success_count,
-        len(items) - success_count,
+        f"contexts_by_excel: processed={total} success={success_count} errors={total - success_count}"
     )
 
     return ProtocolContextListOut(items=items)
@@ -700,9 +712,8 @@ async def controllers_pdf_files(
         return {"files": [], "count": 0}
 
     logger.info(
-        "controllers_pdf_files: loaded %d controller rows (db_file=%s)",
-        len(rows),
-        "yes" if db_file else "no",
+        f"controllers_pdf_files: loaded {len(rows)} controller rows "
+        f"(db_file={'yes' if db_file else 'no'})"
     )
 
     if db_data is not None:
@@ -716,9 +727,8 @@ async def controllers_pdf_files(
             raise HTTPException(status_code=400, detail="db file has no serial entries")
 
         logger.info(
-            "controllers_pdf_files: ingesting %d registry rows from %s",
-            len(db_rows),
-            db_file.filename or "registry.xlsx",
+            f"controllers_pdf_files: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
         )
         ingest_started = time.perf_counter()
         ingest_result = await ingest_registry_rows(
@@ -728,10 +738,10 @@ async def controllers_pdf_files(
             source_sheet="controllers",
         )
         logger.info(
-            "controllers_pdf_files: registry ingest finished processed=%d deactivated=%d (%.2fs)",
-            ingest_result.get("processed", 0),
-            ingest_result.get("deactivated", 0),
-            time.perf_counter() - ingest_started,
+            "controllers_pdf_files: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
         )
 
     registry_repo = RegistryRepository(session)
@@ -744,10 +754,10 @@ async def controllers_pdf_files(
     db_index = _entries_to_index(registry_entries)
     registry_matches = sum(len(v) for v in registry_entries.values())
     logger.info(
-        "controllers_pdf_files: registry index ready serials=%d entries=%d",
-        len(lookup_serials),
-        registry_matches,
+        "controllers_pdf_files: registry index ready "
+        f"serials={len(lookup_serials)} entries={registry_matches}"
     )
+    session_factory = _make_worker_session_factory(session)
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
@@ -758,7 +768,7 @@ async def controllers_pdf_files(
             db_entries=db_entries,
             client=client,
             sem=sem,
-            session=session,
+            session_factory=session_factory,
             strict_certificate_match=False,
         )
 
@@ -772,10 +782,9 @@ async def controllers_pdf_files(
     total_items = len(items)
     success_contexts = sum(1 for item in items if not item.error)
     logger.info(
-        "controllers_pdf_files: contexts ready success=%d failed=%d (%.2fs)",
-        success_contexts,
-        total_items - success_contexts,
-        build_elapsed,
+        "controllers_pdf_files: contexts ready "
+        f"success={success_contexts} failed={total_items - success_contexts} "
+        f"({build_elapsed:.2f}s)"
     )
 
     exports_dir: Path | None = None
@@ -786,20 +795,16 @@ async def controllers_pdf_files(
     errors: list[dict[str, object]] = []
 
     logger.info(
-        "controllers_pdf_files: starting export for {} devices (forced_month={})",
-        total_items,
-        forced_month or "auto",
+        "controllers_pdf_files: starting export for "
+        f"{total_items} devices (forced_month={forced_month or 'auto'})"
     )
 
     for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
         ctx = it.context or {}
         serial = _extract_first_value(src_row, SERIAL_SOURCE_KEYS)
         logger.info(
-            "controllers_pdf_files: processing row={}/{} serial={} certificate={}",
-            idx,
-            total_items,
-            serial or "-",
-            it.certificate or "-",
+            "controllers_pdf_files: processing "
+            f"row={idx}/{total_items} serial={serial or '-'} certificate={it.certificate or '-'}"
         )
 
         if it.error or not ctx:
@@ -812,10 +817,8 @@ async def controllers_pdf_files(
                 }
             )
             logger.warning(
-                "controllers_pdf_files: skipped serial={} row={} reason={}",
-                serial or "-",
-                idx,
-                it.error or "empty context",
+                "controllers_pdf_files: skipped "
+                f"serial={serial or '-'} row={idx} reason={it.error or 'empty context'}"
             )
             continue
 
@@ -855,9 +858,7 @@ async def controllers_pdf_files(
         path.write_bytes(pdf_bytes)
         saved.append(str(path))
         logger.info(
-            "controllers_pdf_files: saved serial={} path={}",
-            serial or "-",
-            path,
+            f"controllers_pdf_files: saved serial={serial or '-'} path={path}"
         )
 
     if not saved and pdf_unavailable:
@@ -868,24 +869,19 @@ async def controllers_pdf_files(
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:
         logger.warning(
-            "controllers_pdf_files: failed serials={}",
-            ", ".join(failed_serials),
+            f"controllers_pdf_files: failed serials={', '.join(failed_serials)}"
         )
 
     logger.info(
-        "controllers_pdf_files summary: total={} success={} failed={} pdf_unavailable={}",
-        total_items,
-        len(saved),
-        len(errors),
-        pdf_unavailable,
+        "controllers_pdf_files summary: "
+        f"total={total_items} success={len(saved)} failed={len(errors)} "
+        f"pdf_unavailable={pdf_unavailable}"
     )
 
     total_elapsed = time.perf_counter() - overall_started
     logger.info(
-        "controllers_pdf_files: finished in %.2fs (files=%d errors=%d)",
-        total_elapsed,
-        len(saved),
-        len(errors),
+        "controllers_pdf_files: finished in "
+        f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 
     return {"files": saved, "count": len(saved), "errors": errors}
@@ -913,9 +909,8 @@ async def manometers_pdf_files(
         return {"files": [], "count": 0, "errors": []}
 
     logger.info(
-        "manometers_pdf_files: loaded %d manometer rows (db_file=%s)",
-        len(rows),
-        "yes" if db_file else "no",
+        f"manometers_pdf_files: loaded {len(rows)} manometer rows "
+        f"(db_file={'yes' if db_file else 'no'})"
     )
 
     if db_data is not None:
@@ -929,9 +924,8 @@ async def manometers_pdf_files(
             raise HTTPException(status_code=400, detail="db file has no serial entries")
 
         logger.info(
-            "manometers_pdf_files: ingesting %d registry rows from %s",
-            len(db_rows),
-            db_file.filename or "registry.xlsx",
+            f"manometers_pdf_files: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
         )
         ingest_started = time.perf_counter()
         ingest_result = await ingest_registry_rows(
@@ -941,10 +935,10 @@ async def manometers_pdf_files(
             source_sheet="manometers",
         )
         logger.info(
-            "manometers_pdf_files: registry ingest finished processed=%d deactivated=%d (%.2fs)",
-            ingest_result.get("processed", 0),
-            ingest_result.get("deactivated", 0),
-            time.perf_counter() - ingest_started,
+            "manometers_pdf_files: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
         )
 
     registry_repo = RegistryRepository(session)
@@ -957,10 +951,10 @@ async def manometers_pdf_files(
     db_index = _entries_to_index(registry_entries)
     registry_matches = sum(len(v) for v in registry_entries.values())
     logger.info(
-        "manometers_pdf_files: registry index ready serials=%d entries=%d",
-        len(lookup_serials),
-        registry_matches,
+        "manometers_pdf_files: registry index ready "
+        f"serials={len(lookup_serials)} entries={registry_matches}"
     )
+    session_factory = _make_worker_session_factory(session)
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
@@ -971,7 +965,7 @@ async def manometers_pdf_files(
             db_entries=db_entries,
             client=client,
             sem=sem,
-            session=session,
+            session_factory=session_factory,
             strict_certificate_match=True,
         )
 
@@ -985,10 +979,9 @@ async def manometers_pdf_files(
     total_items = len(items)
     success_contexts = sum(1 for item in items if not item.error)
     logger.info(
-        "manometers_pdf_files: contexts ready success=%d failed=%d (%.2fs)",
-        success_contexts,
-        total_items - success_contexts,
-        build_elapsed,
+        "manometers_pdf_files: contexts ready "
+        f"success={success_contexts} failed={total_items - success_contexts} "
+        f"({build_elapsed:.2f}s)"
     )
 
     exports_dir: Path | None = None
@@ -999,20 +992,16 @@ async def manometers_pdf_files(
     errors: list[dict[str, object]] = []
 
     logger.info(
-        "manometers_pdf_files: starting export for {} devices (forced_month={})",
-        total_items,
-        forced_month or "auto",
+        "manometers_pdf_files: starting export for "
+        f"{total_items} devices (forced_month={forced_month or 'auto'})"
     )
 
     for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
         ctx = it.context or {}
         serial = _extract_first_value(src_row, SERIAL_SOURCE_KEYS)
         logger.info(
-            "manometers_pdf_files: processing row={}/{} serial={} certificate={}",
-            idx,
-            total_items,
-            serial or "-",
-            it.certificate or "-",
+            "manometers_pdf_files: processing "
+            f"row={idx}/{total_items} serial={serial or '-'} certificate={it.certificate or '-'}"
         )
 
         if it.error or not ctx:
@@ -1025,10 +1014,8 @@ async def manometers_pdf_files(
                 }
             )
             logger.warning(
-                "manometers_pdf_files: skipped serial={} row={} reason={}",
-                serial or "-",
-                idx,
-                it.error or "empty context",
+                "manometers_pdf_files: skipped "
+                f"serial={serial or '-'} row={idx} reason={it.error or 'empty context'}"
             )
             continue
 
@@ -1068,9 +1055,7 @@ async def manometers_pdf_files(
         path.write_bytes(pdf_bytes)
         saved.append(str(path))
         logger.info(
-            "manometers_pdf_files: saved serial={} path={}",
-            serial or "-",
-            path,
+            f"manometers_pdf_files: saved serial={serial or '-'} path={path}"
         )
 
     if not saved and pdf_unavailable:
@@ -1081,24 +1066,19 @@ async def manometers_pdf_files(
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:
         logger.warning(
-            "manometers_pdf_files: failed serials={}",
-            ", ".join(failed_serials),
+            f"manometers_pdf_files: failed serials={', '.join(failed_serials)}"
         )
 
     logger.info(
-        "manometers_pdf_files summary: total={} success={} failed={} pdf_unavailable={}",
-        total_items,
-        len(saved),
-        len(errors),
-        pdf_unavailable,
+        "manometers_pdf_files summary: "
+        f"total={total_items} success={len(saved)} failed={len(errors)} "
+        f"pdf_unavailable={pdf_unavailable}"
     )
 
     total_elapsed = time.perf_counter() - overall_started
     logger.info(
-        "manometers_pdf_files: finished in %.2fs (files=%d errors=%d)",
-        total_elapsed,
-        len(saved),
-        len(errors),
+        "manometers_pdf_files: finished in "
+        f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 
     return {"files": saved, "count": len(saved), "errors": errors}

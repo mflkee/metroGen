@@ -170,9 +170,27 @@ _DEFAULT_POINT_DESCRIPTIONS = {
     3: "Определение основной погрешности",
 }
 
+_OWNER_NAME_KEYS: tuple[str, ...] = (
+    "Владелец СИ",
+    "Владелец",
+    "Организация",
+    "owner_name",
+)
+
 
 def _fallback_point_description(position: int, idx: int) -> str:
     return _DEFAULT_POINT_DESCRIPTIONS.get(position) or _DEFAULT_POINT_DESCRIPTIONS.get(idx) or ""
+
+
+def _owner_name_from_row(row: Mapping[str, Any]) -> str:
+    for key in _OWNER_NAME_KEYS:
+        value = row.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
 
 
 def _etalon_sources(details: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -614,7 +632,9 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             session = args[3]
 
         owner_name = (
-            excel_row.get("Владелец СИ") or (details.get("vriInfo", {}) or {}).get("miOwner") or ""
+            _owner_name_from_row(excel_row)
+            or (details.get("vriInfo", {}) or {}).get("miOwner")
+            or ""
         )
         owner_inn: str | None = None
         if session:
