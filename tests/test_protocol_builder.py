@@ -49,6 +49,26 @@ async def test_build_context_merges_type_and_modification_in_device_info():
 
 
 @pytest.mark.anyio
+async def test_build_context_raises_when_owner_inn_missing():
+    excel_row = {
+        "Обозначение СИ": "13535-93",
+        "Заводской номер": "03607",
+    }
+    details = {"miInfo": {"singleMI": {}}, "vriInfo": {}}
+
+    with pytest.raises(ValueError, match="owner INN not found"):
+        await build_context(
+            excel_row=excel_row,
+            details=details,
+            methodology_points=dict(_DEFAULT_POINTS),
+            owner_name="ООО Тест",
+            owner_inn="",
+            allowable_error=1.5,
+            allowable_variation=1.5,
+        )
+
+
+@pytest.mark.anyio
 async def test_build_context_falls_back_to_arshin_modification():
     excel_row = {
         "Обозначение СИ": "13535-93",
@@ -72,7 +92,7 @@ async def test_build_context_falls_back_to_arshin_modification():
         details=details,
         methodology_points=dict(_DEFAULT_POINTS),
         owner_name="ООО НПП",
-        owner_inn="",
+        owner_inn="7705550000",
         allowable_error=1.5,
         allowable_variation=1.5,
     )
@@ -107,7 +127,7 @@ async def test_build_context_restores_default_point_descriptions_when_missing():
         methodology_points=dict(_DEFAULT_POINTS),
         methodology_point_items=items,
         owner_name="ООО НПП",
-        owner_inn="",
+        owner_inn="7705550000",
         allowable_error=1.5,
         allowable_variation=1.5,
     )
@@ -141,7 +161,7 @@ async def test_build_context_parses_signed_ranges():
         details=details,
         methodology_points=dict(_DEFAULT_POINTS),
         owner_name="ООО НПП",
-        owner_inn="",
+        owner_inn="7705550000",
         allowable_error=1.5,
         allowable_variation=1.5,
     )
@@ -200,7 +220,7 @@ async def test_build_context_includes_all_etalons_from_details():
         details=details,
         methodology_points=dict(_DEFAULT_POINTS),
         owner_name="ООО НПП",
-        owner_inn="",
+        owner_inn="7705550000",
         allowable_error=1.5,
         allowable_variation=1.5,
     )
@@ -231,7 +251,7 @@ async def test_build_context_uses_arshin_range_when_excel_missing():
         details=details,
         methodology_points=dict(_DEFAULT_POINTS),
         owner_name="ООО НПП",
-        owner_inn="",
+        owner_inn="7705550000",
         allowable_error=1.5,
         allowable_variation=1.5,
     )

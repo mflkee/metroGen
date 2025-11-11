@@ -9,7 +9,18 @@ __all__ = (
 )
 
 # NOTE: Кириллица часто приходит с "ё". Для поиска в базе нормализуем в "е".
-_TRANSLATION_TABLE = str.maketrans({"ё": "е", "Ё": "Е"})
+_TRANSLATION_TABLE = str.maketrans(
+    {
+        "ё": "е",
+        "Ё": "Е",
+        "«": '"',
+        "»": '"',
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+    }
+)
 _NON_WORD_RE = re.compile(r"[^0-9a-zа-я]+", re.IGNORECASE)
 
 

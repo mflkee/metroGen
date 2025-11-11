@@ -306,6 +306,9 @@ async def build_context(
     protocol_number: str | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
+    if owner_name and not (owner_inn or "").strip():
+        raise ValueError(f"owner INN not found for '{owner_name}'")
+
     methodology_points = dict(methodology_points or {})
     point_items: list[dict[str, Any]] = []
     for idx, item in enumerate(methodology_point_items or [], start=1):
