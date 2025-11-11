@@ -19,8 +19,8 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+asyncpg://metrologenerator:metrologenerator@db:5432/metrologenerator
-      ARSHIN_TIMEOUT: "30"
-      ARSHIN_CONCURRENCY: "8"
+      ARSHIN_TIMEOUT: "64"
+      ARSHIN_CONCURRENCY: "48"
     depends_on:
       db:
         condition: service_healthy

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str | None = None
     EXPORTS_DIR: str = "exports"  # base folder for saved files
     SIGNATURES_DIR: str = "signatures"  # base folder for signature images
+    PROTOCOL_BUILD_CONCURRENCY: int = 16  # параллельная сборка контекстов
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

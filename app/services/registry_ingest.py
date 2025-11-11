@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from typing import Any
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import RegistryRepository
@@ -120,9 +122,16 @@ async def ingest_registry_rows(
 ) -> dict[str, int]:
     """Persist registry-like rows into the database using repository helpers."""
 
+    start_time = time.perf_counter()
     registry_repo = RegistryRepository(session)
 
     deactivated = await registry_repo.deactivate_for_source(source_file)
+    if deactivated:
+        logger.info(
+            "ingest_registry_rows[%s]: deactivated %d previous rows",
+            source_file,
+            deactivated,
+        )
 
     processed = 0
     for processed, row in enumerate(rows, start=1):
@@ -167,7 +176,22 @@ async def ingest_registry_rows(
         if methodology_raw:
             await ensure_methodology(session, methodology_raw)
 
+        if processed and processed % 250 == 0:
+            logger.info(
+                "ingest_registry_rows[%s]: processed %d rows",
+                source_file,
+                processed,
+            )
+
     if processed or deactivated:
         await session.commit()
 
+    elapsed = time.perf_counter() - start_time
+    logger.info(
+        "ingest_registry_rows[%s]: finished processed=%d deactivated=%d elapsed=%.2fs",
+        source_file,
+        processed,
+        deactivated,
+        elapsed,
+    )
     return {"processed": processed, "deactivated": deactivated}
