@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Iterable, Mapping, Sequence
+import time
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import HTMLResponse
 
 from app.api.deps import get_db, get_http_client, get_semaphore
+from app.core.config import settings
 from app.db.repositories import RegistryRepository
 from app.schemas.protocol import ProtocolContextItem, ProtocolContextListOut
 from app.services.arshin_client import (
@@ -305,6 +307,55 @@ def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
             if text:
                 return text
     return ""
+
+
+async def _build_contexts_concurrently(
+    rows: Sequence[dict[str, Any]],
+    worker: Callable[[dict[str, Any]], Awaitable[ProtocolContextItem]],
+    *,
+    label: str,
+) -> list[ProtocolContextItem]:
+    total = len(rows)
+    if total == 0:
+        return []
+
+    concurrency = max(1, int(settings.PROTOCOL_BUILD_CONCURRENCY))
+    sem = asyncio.Semaphore(concurrency)
+    lock = asyncio.Lock()
+    completed = 0
+    progress_every = max(total // 10, 1)
+    started = time.perf_counter()
+
+    logger.info(
+        "%s: starting context build for %d rows (concurrency=%d)",
+        label,
+        total,
+        concurrency,
+    )
+
+    async def run(row: dict[str, Any]) -> ProtocolContextItem:
+        nonlocal completed
+        async with sem:
+            result = await worker(row)
+
+        log_now = False
+        current = 0
+        async with lock:
+            completed += 1
+            current = completed
+            if current == total or current % progress_every == 0:
+                log_now = True
+        if log_now:
+            logger.info(
+                "%s: prepared %d/%d contexts (%.2fs elapsed)",
+                label,
+                current,
+                total,
+                time.perf_counter() - started,
+            )
+        return result
+
+    return await asyncio.gather(*(run(row) for row in rows))
 
 
 async def _build_context_from_db(
@@ -635,6 +686,7 @@ async def controllers_pdf_files(
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
+    overall_started = time.perf_counter()
     controllers_data = await controllers_file.read()
     db_data = await db_file.read() if db_file is not None else None
 
@@ -647,6 +699,12 @@ async def controllers_pdf_files(
     if not rows:
         return {"files": [], "count": 0}
 
+    logger.info(
+        "controllers_pdf_files: loaded %d controller rows (db_file=%s)",
+        len(rows),
+        "yes" if db_file else "no",
+    )
+
     if db_data is not None:
         db_rows = read_rows_with_required_headers(
             db_data,
@@ -657,11 +715,23 @@ async def controllers_pdf_files(
         if not db_rows:
             raise HTTPException(status_code=400, detail="db file has no serial entries")
 
-        await ingest_registry_rows(
+        logger.info(
+            "controllers_pdf_files: ingesting %d registry rows from %s",
+            len(db_rows),
+            db_file.filename or "registry.xlsx",
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
             session,
             source_file=db_file.filename or "registry.xlsx",
             rows=db_rows,
             source_sheet="controllers",
+        )
+        logger.info(
+            "controllers_pdf_files: registry ingest finished processed=%d deactivated=%d (%.2fs)",
+            ingest_result.get("processed", 0),
+            ingest_result.get("deactivated", 0),
+            time.perf_counter() - ingest_started,
         )
 
     registry_repo = RegistryRepository(session)
@@ -672,6 +742,12 @@ async def controllers_pdf_files(
     }
     registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
     db_index = _entries_to_index(registry_entries)
+    registry_matches = sum(len(v) for v in registry_entries.values())
+    logger.info(
+        "controllers_pdf_files: registry index ready serials=%d entries=%d",
+        len(lookup_serials),
+        registry_matches,
+    )
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
@@ -686,10 +762,21 @@ async def controllers_pdf_files(
             strict_certificate_match=False,
         )
 
-    items: list[ProtocolContextItem] = []
-    for row in rows:
-        items.append(await process_row(row))
+    build_started = time.perf_counter()
+    items = await _build_contexts_concurrently(
+        rows,
+        process_row,
+        label="controllers_pdf_files",
+    )
+    build_elapsed = time.perf_counter() - build_started
     total_items = len(items)
+    success_contexts = sum(1 for item in items if not item.error)
+    logger.info(
+        "controllers_pdf_files: contexts ready success=%d failed=%d (%.2fs)",
+        success_contexts,
+        total_items - success_contexts,
+        build_elapsed,
+    )
 
     exports_dir: Path | None = None
     exports_label: str | None = None
@@ -793,6 +880,14 @@ async def controllers_pdf_files(
         pdf_unavailable,
     )
 
+    total_elapsed = time.perf_counter() - overall_started
+    logger.info(
+        "controllers_pdf_files: finished in %.2fs (files=%d errors=%d)",
+        total_elapsed,
+        len(saved),
+        len(errors),
+    )
+
     return {"files": saved, "count": len(saved), "errors": errors}
 
 
@@ -804,6 +899,7 @@ async def manometers_pdf_files(
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
+    overall_started = time.perf_counter()
     manometers_data = await manometers_file.read()
     db_data = await db_file.read() if db_file is not None else None
 
@@ -816,6 +912,12 @@ async def manometers_pdf_files(
     if not rows:
         return {"files": [], "count": 0, "errors": []}
 
+    logger.info(
+        "manometers_pdf_files: loaded %d manometer rows (db_file=%s)",
+        len(rows),
+        "yes" if db_file else "no",
+    )
+
     if db_data is not None:
         db_rows = read_rows_with_required_headers(
             db_data,
@@ -826,11 +928,23 @@ async def manometers_pdf_files(
         if not db_rows:
             raise HTTPException(status_code=400, detail="db file has no serial entries")
 
-        await ingest_registry_rows(
+        logger.info(
+            "manometers_pdf_files: ingesting %d registry rows from %s",
+            len(db_rows),
+            db_file.filename or "registry.xlsx",
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
             session,
             source_file=db_file.filename or "registry.xlsx",
             rows=db_rows,
             source_sheet="manometers",
+        )
+        logger.info(
+            "manometers_pdf_files: registry ingest finished processed=%d deactivated=%d (%.2fs)",
+            ingest_result.get("processed", 0),
+            ingest_result.get("deactivated", 0),
+            time.perf_counter() - ingest_started,
         )
 
     registry_repo = RegistryRepository(session)
@@ -841,6 +955,12 @@ async def manometers_pdf_files(
     }
     registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
     db_index = _entries_to_index(registry_entries)
+    registry_matches = sum(len(v) for v in registry_entries.values())
+    logger.info(
+        "manometers_pdf_files: registry index ready serials=%d entries=%d",
+        len(lookup_serials),
+        registry_matches,
+    )
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
         serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
@@ -855,10 +975,21 @@ async def manometers_pdf_files(
             strict_certificate_match=True,
         )
 
-    items: list[ProtocolContextItem] = []
-    for row in rows:
-        items.append(await process_row(row))
+    build_started = time.perf_counter()
+    items = await _build_contexts_concurrently(
+        rows,
+        process_row,
+        label="manometers_pdf_files",
+    )
+    build_elapsed = time.perf_counter() - build_started
     total_items = len(items)
+    success_contexts = sum(1 for item in items if not item.error)
+    logger.info(
+        "manometers_pdf_files: contexts ready success=%d failed=%d (%.2fs)",
+        success_contexts,
+        total_items - success_contexts,
+        build_elapsed,
+    )
 
     exports_dir: Path | None = None
     exports_label: str | None = None
@@ -960,6 +1091,14 @@ async def manometers_pdf_files(
         len(saved),
         len(errors),
         pdf_unavailable,
+    )
+
+    total_elapsed = time.perf_counter() - overall_started
+    logger.info(
+        "manometers_pdf_files: finished in %.2fs (files=%d errors=%d)",
+        total_elapsed,
+        len(saved),
+        len(errors),
     )
 
     return {"files": saved, "count": len(saved), "errors": errors}
