@@ -83,6 +83,8 @@ class PressureCommon(TableGenerator):
                     continue
                 if abs(m - m_round) <= 1e-6:  # шаг кратен FSV
                     points = m_round + 1
+                    if points > desired_points * 2:
+                        continue
                     score = abs(points - desired_points) + 0.1 * (
                         abs(s - approx_step) / max(approx_step, 1e-9)
                     )

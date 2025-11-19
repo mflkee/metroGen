@@ -14,12 +14,12 @@ from app.utils.paths import get_project_root
 _SIGN_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 # Вертикальная точка опоры относительно нижней границы слота.
-_BOTTOM_BASE = 6.5
-_BOTTOM_JITTER = 8.5  # px ≈ диапазон -2..15
+_BOTTOM_BASE = 10.0
+_BOTTOM_JITTER = 10.0  # px ≈ диапазон -2..15
 
 # Горизонтальная позиция задаётся в пикселях от левого края слота.
-_LEFT_BASE = 210.0
-_LEFT_JITTER = 110.0  # px ≈ диапазон 100..320
+_LEFT_BASE = 200.0
+_LEFT_JITTER = 70.0  # px ≈ диапазон 100..320
 
 # Диапазон высоты подписи (px).
 _HEIGHT_BASE = 33.0

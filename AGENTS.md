@@ -1,97 +1,89 @@
 # Агентная архитектура Metrologenerator
 
-Документ описывает реальные компоненты («агенты») сервиса генерации протоколов поверки. В нём зафиксированы роли модулей, их границы ответственности, точки интеграции и особенности обработки ошибок. Старое содержимое с общими правилами удалено и заменено архитектурным обзором.
+Документ фиксирует реальные агенты сервиса формирования протоколов поверки: их роли, границы, зависимости и характер обработки ошибок. Его цель — чтобы новый разработчик видел, какие модули за что отвечают и как они стыкуются друг с другом.
 
 ## Ключевые сущности и артефакты
-- **ProtocolContextItem (`app/schemas/protocol.py`)** — контракт, которым обмениваются сборщики контекста и слои экспорта. Содержит сертификат, `vri_id`, файл и полный контекст.
-- **SQLAlchemy-модели (`app/db/models.py`)** — Owners, Methodologies, VerificationRegistryEntry, Etalon* и Protocol. Репозитории в `app/db/repositories` навешивают бизнес-правила (нормализация алиасов, idempotent upsert).
-- **Аршин-пейлоады** — ответы `fetch_vri_*` и `resolve_etalon_*` из `app/services/arshin_client.py`, кешируемые в `TTLCache`.
-- **Excel-данные** — строки, полученные через `app/utils/excel.py` (`read_rows_as_dicts`, `read_rows_with_required_headers`, `extract_certificate_number`).
-- **Шаблоны (`app/services/templates.py`, `app/templates/*.html`)** и генераторы таблиц (`app/services/generators/*`). Связываются через `resolve_template_id` и `get_by_template`.
+- **ProtocolContextItem (`app/schemas/protocol.py`)** — единый контракт между сборщиком контекста и слоями экспорта. Содержит исходный сертификат, `vri_id`, подготовленный `context`, сырой ответ Аршина и поле `error`.
+- **Реляционные модели и репозитории (`app/db/models.py`, `app/db/repositories`)** — Owners/Methodologies/VerificationRegistryEntry/Etalon*/Protocol. Репозитории навешивают нормы: нормализация алиасов, idempotent upsert, деактивация устаревших записей.
+- **Аршин-пейлоады (`app/services/arshin_client.py`)** — ответы `fetch_vri_*` и `resolve_etalon_*`, кешируемые в `TTLCache` (`app/services/cache.py`) для снижения нагрузки.
+- **Excel-данные (`app/utils/excel.py`)** — чтение строк через `read_rows_as_dicts`/`read_rows_with_required_headers`, извлечение сертификатов (`extract_certificate_number`) и серийных номеров.
+- **Шаблонный слой (`app/services/templates.py`, `app/services/generators/*`, `app/templates/*.html`)** — `resolve_template_id` + `TableGenerator` → сформированная таблица, далее Jinja2/Playwright превращают контекст в HTML/PDF.
 
 ## Агентные контуры
 
 ### 1. FastAPI gateway
 - **Файлы:** `app/main.py`, `app/api/routes/*.py`, `app/api/deps.py`.
-- **Роль:** точка входа HTTP API. Настраивает lifespan-хук для автосида (`seed_from_config`), подключает роутеры, создаёт зависимости (HTTP-клиент c таймаутами и глобальный семафор, `AsyncSession`).
-- **Триггеры:** HTTP запросы. Например, `/api/v1/protocols/context-by-excel`, `/api/v1/resolve/vri-id`, `/api/v1/registry/import`.
-- **Границы:** не содержит бизнес-логики — делегирует в сервисы. Ошибки валидации переводятся в `HTTPException`. Асинхронность обеспечивается FastAPI + `asyncio`.
+- **Роль и зависимости:** поднимает FastAPI-приложение, выполняет lifespan-сид (`seed_from_config`), пробрасывает роутеры, создаёт зависимости: на каждый запрос выделяется `httpx.AsyncClient` с таймаутами/лимитами и `AsyncSession`; `get_semaphore` даёт глобальный `asyncio.Semaphore` для исходящих запросов.
+- **Триггеры/жизненный цикл:** HTTP вызовы `/api/v1/*` — от справочников до генерации PDF. Каждый запрос асинхронен, ресурсы высвобождаются по завершении.
+- **Границы и ошибки:** бизнес-логика отсутствует. Роутеры валидируют вход, некорректные данные → `HTTPException 4xx`, а необработанные ошибки фиксируются и возвращаются как 5xx. Асинхронность обеспечивает FastAPI + asyncio/SQLAlchemy.
 
 ### 2. Arshin resolve agent
 - **Файлы:** `app/api/routes/arshin.py`, `app/services/arshin_client.py`, `app/services/cache.py`.
-- **Роль:** поиск `vri_id`, деталей поверки и свидетельств эталонов через eAPI Аршин.
-- **Поведение:** `_request_json` выполняет get-запросы с экспоненциальным бэкоффом, джиттером и повторными попытками для статусов 429/5xx. Ограничение параллельности — общий `asyncio.Semaphore` из `get_semaphore`.
-- **Границы:** сервис отвечает только за сетевые вызовы/нормализацию; хранение данных остаётся на других слоях.
-- **Обработка ошибок:** HTTP ошибки логируются через `loguru`, пробрасываются в роутер, который возвращает 4xx/5xx. Сетевые ошибки превращаются в списки с `error` в выдаче Excel-эндпоинтов.
-- **Пример:** `/api/v1/resolve/vri-details-by-excel` — читает сертификаты из загруженного Excel, параллельно ищет `vri_id`, подтягивает `fetch_vri_details`, упаковывает список результатов.
+- **Роль:** поиск `vri_id`, подробностей поверки и свидетельств эталонов. Публичные ручки: `GET /vri-id`, `GET /vri/{id}`, `POST /vri-details-by-excel`.
+- **Поведение:** `_request_json` выполняет GET с экспоненциальным бэкоффом, джиттером, повторными попытками для 429/5xx. `fetch_vri_id_by_certificate`, `fetch_vri_details` и `resolve_etalon_certs_from_details` используют общий `TTLCache` и `asyncio.Semaphore` из `get_semaphore` для ограничения параллельности.
+- **Ошибки и границы:** ввод валидируется (пустой cert/vri_id → 400). HTTP ошибки логгируются через Loguru и пробрасываются, Excel-эндпоинт возвращает per-row `error`. Сервис только нормализует и доставляет данные Аршина — не пишет их в БД.
 
 ### 3. Registry intake agent
 - **Файлы:** `app/api/routes/registry.py`, `app/services/registry_ingest.py`, `app/cli.py`.
-- **Роль:** загрузка выгрузок реестра поверок и нормализация их до `VerificationRegistryEntry`.
-- **Триггеры:** HTTP POST `/api/v1/registry/import` или CLI-команда `python -m app.cli import-registry <file>`.
-- **Алгоритм:** `read_rows_with_required_headers` ищет лист с колонками заводских номеров → `ingest_registry_rows` нормализует поля (владельцы, методики, даты, серийные номера) и вызывает `RegistryRepository.upsert_entry`.
-- **Границы:** агент управляет только данными реестра; всё, что связано с контекстом протокола, остаётся в Protocol Assembly.
-- **Ошибки:** пустые файлы/неподдерживаемые шапки → HTTP 400/`ValueError`. При успешной обработке репозиторий деактивирует старые записи того же источника.
+- **Роль:** загрузка выгрузок реестра поверок, нормализация строк до `VerificationRegistryEntry` и обогащение справочников.
+- **Триггеры:** HTTP POST `/api/v1/registry/import` и CLI `python -m app.cli import-registry <file>` (с параметрами листа/заголовков/типа прибора).
+- **Поведение:** `read_rows_with_required_headers` подбирает лист с колонками серийных номеров → `ingest_registry_rows` нормализует владельцев/методики/серийники, вызывает `RegistryRepository.upsert_entry`, деактивирует предыдущие записи источника, дополнительно вызывает `ensure_owner`/`ensure_methodology` для справочников. CLI использует те же функции через `get_sessionmaker`.
+- **Ошибки и границы:** пустые файлы или отсутствие нужных колонок → `HTTP 400`/`ValueError`. Агент не строит протоколы — только поддерживает состояние реестра.
 
 ### 4. Protocol assembly agent
 - **Файлы:** `app/api/routes/protocols.py`, `app/services/protocol_builder.py`, `app/services/mappings.py`, `app/services/generators/*`, `app/services/templates.py`, `app/utils/signatures.py`.
-- **Роль:** собрать полный контекст протокола на основе Excel-строк, данных Аршина и локальной БД.
-- **Пайплайн:**  
-  1. Роутеры читают Excel (`read_rows_as_dicts`) и по каждой строке запускают `process_row`.  
-  2. Сертификат → `fetch_vri_id_by_certificate` → `fetch_vri_details`.  
-  3. `find_etalon_certificates` подбирает эталонные свидетельства.  
-  4. `build_protocol_context` объединяет детали, владельцев (`resolve_owner_and_inn`), методики (`resolve_methodology`), расчёт диапазонов, допуска и эталонных строк.  
-  5. `TableGenerator` подготавливает строку таблицы (давление или контроллеры).  
-  6. Контекст дополняется авто-номером (`make_protocol_number`), сигнатурой (`get_signature_render`), рекомендациями по имени файла (`suggest_filename`).
-- **Границы:** агент отвечает за полностью подготовленный контекст (без итогового рендера). Сторонние зависимости: HTTP клиент, `AsyncSession`. Для массовых операций `controllers_pdf_files`/`manometers_pdf_files` создают собственный `async_sessionmaker`, чтобы каждый воркер имел отдельную сессию и не блокировал flush других задач.
-- **Ошибки:** `ProtocolContextItem.error` фиксирует проблемы («certificate number is empty», `owner INN not found for "..."`, `http error: ...`). Роутеры агрегируют ошибки и продолжают работу над остальными строками; при пустом `owner_inn` экспорт намеренно прерывается для конкретной строки, чтобы не выпускать протоколы без юридических реквизитов.
-- **Триггеры:** `/context-by-excel`, `/html-by-excel`, `/controllers/pdf-files`, `/manometers/pdf-files`.
+- **Роль:** собрать полный `ProtocolContextItem` из Excel, Аршина и локальной БД, а затем подготовить HTML/PDF.
+- **Пайплайн:**
+  1. Роутеры (`/context-by-excel`, `/html-by-excel`, `/controllers|manometers/pdf-files`) читают Excel (`read_rows_as_dicts`).
+  2. `extract_certificate_number` → `fetch_vri_id_by_certificate` → `fetch_vri_details` и `find_etalon_certificates` добавляют сетевые данные. Для массовых PDF `_build_context_from_db` подбирает записи `VerificationRegistryEntry`, учитывает режим строгого совпадения сертификата и автоподстановку названий приборов.
+  3. `build_protocol_context` резолвит владельцев/ИНН (`resolve_owner_and_inn`), методики (`resolve_methodology` + загрузка точек), считает диапазоны/допуски, добавляет сигнатуры (`get_signature_render`), таблицы (`TableGenerator` из `app/services/generators`) и метаданные (`make_protocol_number`, `suggest_filename`).
+  4. `_build_contexts_concurrently` запускает обработку строк с ограничением `settings.PROTOCOL_BUILD_CONCURRENCY`; `manometers_pdf_files` задействует `_retry_context_rows` с `settings.PROTOCOL_RETRY_*` для 429/сетевых ошибок. Каждый воркер получает собственный `AsyncSession` через `_make_worker_session_factory`, чтобы избежать конфликтов flush.
+- **Ошибки и границы:** все проблемы фиксируются в `ProtocolContextItem.error` (например, `serial number is empty`, `owner INN not found`). Роутеры агрегируют ошибки и продолжают остальные строки; критические ситуации в HTML/PDF ручках → `HTTP 400/502`. Агент отвечает только за подготовку контекста и файлов, не хранит результаты в БД.
 
 ### 5. Rendering & export agent
-- **Файлы:** `app/services/html_renderer.py`, `app/services/pdf.py`, `app/templates/*.html`, `app/utils/paths.py`.
-- **Роль:** превращение контекста в HTML/PDF и сохранение на диск.
-- **HTML:** Jinja2 (`Jinja2Templates`) с кастомными фильтрами (`fmt2`). Выбор шаблона идёт через `resolve_template_id`.
-- **PDF:** `html_to_pdf_bytes` запускает Playwright Chromium; при отсутствии браузера возвращает `None`, а вызывающий код фиксирует ошибку и прекращает генерацию.
-- **Файловые операции:** `get_named_exports_dir`, `get_output_dir` и `_unique_output_path` гарантируют уникальные и безопасные пути, `sanitize_filename` защищает от недопустимых символов.
-- **Сценарии:** массовые генерации `/controllers/pdf-files` и `/manometers/pdf-files` создают подпапки вида `PDF Манометры 04`, сохраняют PDF и возвращают список путей + ошибки.
+- **Файлы:** `app/services/html_renderer.py`, `app/services/pdf.py`, `app/templates/*.html`, `app/utils/paths.py`, экспортные куски `app/api/routes/protocols.py`.
+- **Роль:** превратить контекст в HTML/PDF и сохранить на диск.
+- **Поведение:** `render_protocol_html` выбирает шаблон через `resolve_template_id`, использует `Jinja2Templates` с фильтром `fmt2` и StrictUndefined. `html_to_pdf_bytes` рендерит PDF через Playwright Chromium; если браузер недоступен, возвращает `None`, что превращается в `pdf generation unavailable` и при полном фейле → `HTTP 500`.
+- **Файловые операции:** `_exports_folder_label`, `get_named_exports_dir`, `get_output_dir`, `_unique_output_path` и `sanitize_filename` гарантируют безопасные каталоги (`PDF Манометры 04`, и т.п.) и уникальные имена (`protocol(1).pdf`). Контроллеры/манометры подбирают месяц из имени выгрузки, ведут логи прогресса и собирают списки ошибок/сохранённых путей.
 
 ### 6. Data steward agent
 - **Файлы:** `app/db/*`, `app/services/mappings.py`, `app/api/routes/methodologies.py`, `app/api/routes/owners.py`, `scripts/bootstrap_database.py`, `app/db/seed.py`.
-- **Роль:** обслуживание справочников (владельцы, методики, эталоны), обеспечение непротиворечивых алиасов и сидов.
-- **Поведение:**  
-  - `ensure_owner`/`ensure_methodology` создают записи, попутно вшивая алиасы/точки методик из `data/*.json`. Для владельцев автоматически подтягиваются ИНН и дополнительные алиасы (включая варианты с «ёлочками»), а пустые поля в существующих строках дозаписываются при первом обращении.  
-  - `/api/v1/methodologies` и `/api/v1/owners` позволяют CRUD-операции для операторов.  
-  - `bootstrap_database.py` проверяет БД, катает миграции (`alembic upgrade head`) и стопит, если не может создать базу.
-- **Границы:** этот агент не лезет в сетевые вызовы и генерацию протоколов; он гарантирует, что любое имя/методика приведены к канонической форме.
+- **Роль:** поддержка справочников владельцев/методик/эталонов и непротиворечивая нормализация алиасов.
+- **Поведение:**
+  - `ensure_owner`/`ensure_methodology` создают записи, подтягивая ИНН/алиасы из `data/*.json`, нормализуют кавычки (`normalize_owner_alias`), дозаполняют пустые поля.
+  - CRUD-роуты `/api/v1/owners` и `/api/v1/methodologies` позволяют операторам управлять сущностями, автоматически классифицируя точки (`MethodologyPointType`).
+  - `scripts/bootstrap_database.py` проверяет PostgreSQL, при необходимости создаёт базу, запускает `alembic upgrade head`, затем `seed_from_config` заполняет справочники.
+- **Границы:** не выполняет сетевые вызовы и генерацию протоколов, а гарантирует корректность справочных данных.
 
 ### 7. Automation & quality agents
-- **Файлы:** `scripts/run_quality_checks.py`, `tests/`, `scripts/import_verification_methods.py`.
-- **Роль:** поддержка качества и массовых операций.  
-  - `run_quality_checks.py` прогоняет Ruff + pytest, при необходимости пытается автофиксить.  
-  - `import_verification_methods.py` завозит новые методики из JSON, создавая точки и алиасы.  
-  - Тесты используют `pytest-asyncio` и `respx` для моков Аршин.
+- **Файлы:** `scripts/run_quality_checks.py`, `scripts/import_verification_methods.py`, `tests/`, `app/cli.py`.
+- **Роль:** обеспечить качество и массовые операции.
+- **Поведение:**
+  - `run_quality_checks.py` подгружает `.env`, проверяет `DATABASE_URL`, прогоняет Ruff format/lint (с автопочинкой по желанию) и pytest.
+  - `import_verification_methods.py` импортирует JSON выгрузку методик, создаёт точки (`MethodologyPointPayload`) и алиасы.
+  - `app/cli.py import-registry` предоставляет CLI-обёртку над реестровым агентом.
+  - Тесты используют `pytest-asyncio` и `respx` для моков Аршин/HTTP.
+- **Ошибки:** скрипты печатают прогресс и возвращают ненулевые коды при сбоях; импорт методик пропускает записи без кода/точек.
 
 ### 8. Support & observability
-- **Файлы:** `app/core/config.py`, `app/core/logging.py`, `app/services/cache.py`, `app/utils/normalization.py`, `app/utils/signatures.py`.
-- **Роль:** общесистемные сервисы — настройка, логирование, TTL-кеш, нормализация серийных номеров/имен, отрисовка подписей.
-- **Особенности:**  
-  - `Settings` подхватывает `.env`, экспортирует таймауты/конкурентность.  
-  - `setup_logging` заменяет дефолт Loguru-синк для единообразного формата.  
-  - `TTLCache` (15 минут) используется Аршин-агентом для снижения нагрузки.  
-  - `normalize_serial`/`normalize_owner_alias` обеспечивают одинаковые ключи в базе; нормализация удаляет типографские кавычки, поэтому «ООО „…“» и `ООО "…"` считаются одним владельцем.
+- **Файлы:** `app/core/config.py`, `app/core/logging.py`, `app/api/deps.py`, `app/services/cache.py`, `app/utils/excel.py`, `app/utils/normalization.py`, `app/utils/signatures.py`, `app/utils/paths.py`.
+- **Роль:** общесистемные сервисы — конфигурация, логирование, TTL-кеш, нормализация, генерация подписей и путей.
+- **Поведение:**
+  - `Settings` читает `.env`, задаёт таймауты, лимиты, директории экспорта и параметры повторов для протоколов.
+  - `setup_logging` заменяет loguru-синк на единый формат.
+  - `get_http_client` и `get_semaphore` управляют pooled HTTP клиентами и глобальной конкуренцией.
+  - `TTLCache` (15 минут, 4096 записей) используется Аршин-агентом; `normalize_serial`/`sanitize_filename`/`get_named_exports_dir` приводят данные к безопасным ключам/путям.
+  - `get_signature_render` случайно подбирает подписи по имени поверителя, добавляя стили в контекст.
 
 ## Типовые сценарии взаимодействия
-1. **Excel → контекст:**  
-   Пользователь загружает шаблон на `/api/v1/protocols/context-by-excel`. Gateway распараллеливает строки, Arshin-agent ищет `vri_id` и детали, Protocol Assembly строит `ProtocolContextItem`. Ответ — JSON с контекстами и ошибками по строкам.
-2. **Контроллеры → PDF:**  
-   `/api/v1/protocols/controllers/pdf-files` получает Excel с приборами + (опционально) выгрузку реестра. Registry intake при необходимости обновляет БД, далее Protocol Assembly забирает актуальные записи, Rendering agent генерирует HTML → PDF, сохраняет файлы и возвращает пути + ошибки. При отсутствии Playwright все элементы падают с `pdf generation unavailable`.
-3. **Импорт справочников:**  
-   `/api/v1/registry/import` или `python -m app.cli import-registry file.xlsx` загружает новые данные. Registry agent деактивирует предыдущие записи того же источника, Data steward гарантирует, что владельцы/методики заведены, что позволяет Protocol Assembly позднее сопоставлять записи по `normalized_serial`.
+1. **Excel → контекст (`/api/v1/protocols/context-by-excel`)**: FastAPI читает Excel, Arshin-agent ищет `vri_id` + детали, Protocol assembly строит `ProtocolContextItem`, ошибки остаются в `error`. Успешные строки дополняются `protocol_number`, шаблонные поля готовят Rendering-слой.
+2. **Контроллеры/манометры → PDF (`/api/v1/protocols/controllers|manometers/pdf-files`)**: по желанию обновляется реестр (`ingest_registry_rows`), затем для каждой строки `_build_context_from_db` собирает контекст, Rendering агент формирует HTML → PDF, сохраняет файлы через `get_named_exports_dir`, возвращает список путей и ошибок. При отсутствии Playwright каждый элемент фиксирует `pdf generation unavailable` и итоговая ручка отвечает 500, если не удалось сохранить ни один файл.
+3. **HTML предпросмотр (`/api/v1/protocols/html-by-excel`)**: на основе Excel-строки и (опционально) свежего реестра строится одиночный контекст, рендерится HTML, сохраняется в `output/` и возвращается пользователю. Ошибки сборки контекста → `502`.
+4. **Импорт реестра/справочников (HTTP или CLI)**: `import_registry_file` и `app/cli import-registry` приводят Excel к `VerificationRegistryEntry`, создают владельцев/методики при необходимости и деактивируют старые записи источника. `scripts/import_verification_methods.py` расширяет методики из JSON, `bootstrap_database.py` применяет миграции.
 
 ## Изменения относительно предыдущей версии
-- Документ больше не описывает общие правила коммитов/линтов — эта информация уже есть в `README.md` и `scripts/run_quality_checks.py`.
-- Добавлены восемь агентных контуров с перечислением модулей, обязанностей и способов обработки ошибок.
-- Впервые задокументированы типовые end-to-end сценарии (контекст по Excel, массовое формирование PDF, импорт реестра).
-- Добавлена явная связь между поддерживающими сервисами (кеш, сигнатуры, нормализация) и боевыми агентами, чтобы новым разработчикам было понятно, откуда брать зависимости.
-- Обновлена схема Protocol Assembly: контексты строятся с ограничением `PROTOCOL_BUILD_CONCURRENCY`, а каждый воркер открывает собственную `AsyncSession`, чтобы не возникало конфликтов flush. Ошибки с отсутствующим ИНН фиксируются на уровне контекста.
-- Data Steward теперь описывает автоматическое дозаполнение владельцев из `data/orgs.json` (алиасы, ИНН, нормализация кавычек), что важно для соответствия юридическим требованиям.
+- Добавлены уточнения по конкуренции (`PROTOCOL_BUILD_CONCURRENCY`, `_retry_context_rows`), изоляции `AsyncSession` и правилам повторов при генерации массовых PDF.
+- Задокументированы ручки `html-by-excel`, `controllers/manometers/pdf-files` и сценарии сохранения файлов (уникальные имена, выбор директорий, реакция на отсутствие Playwright).
+- Уточнены роли Registry intake (деактивация записей, `ensure_owner`/`ensure_methodology`) и Data steward (bootstrap, CRUD, автоалиасы) агентов.
+- Добавлены Automation & quality инструменты (CLI import, run_quality_checks, импорт методик) и связанные зависимости.
+- Раздел «Типовые сценарии» расширен HTML предпросмотром и деталями обработки ошибок.
