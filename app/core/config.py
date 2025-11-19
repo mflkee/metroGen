@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     EXPORTS_DIR: str = "exports"  # base folder for saved files
     SIGNATURES_DIR: str = "signatures"  # base folder for signature images
     PROTOCOL_BUILD_CONCURRENCY: int = 16  # параллельная сборка контекстов
+    PROTOCOL_RETRY_ATTEMPTS: int = 3  # дополнительные попытки при 429/транспортных ошибках
+    PROTOCOL_RETRY_DELAY: float = 2.0  # базовая задержка между повторными попытками
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

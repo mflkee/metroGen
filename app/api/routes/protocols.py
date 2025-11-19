@@ -41,6 +41,14 @@ from app.utils.paths import get_named_exports_dir, get_output_dir, sanitize_file
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
 
+_RETRYABLE_CONTEXT_ERROR_MARKERS: tuple[str, ...] = (
+    "retryable status",
+    "transport error",
+    "timeout",
+)
+_CONTEXT_RETRY_ATTEMPTS = max(0, int(settings.PROTOCOL_RETRY_ATTEMPTS))
+_CONTEXT_RETRY_DELAY_SECONDS = max(0.0, float(settings.PROTOCOL_RETRY_DELAY))
+
 
 def _make_worker_session_factory(
     session: AsyncSession,
@@ -359,6 +367,45 @@ async def _build_contexts_concurrently(
     return await asyncio.gather(*(run(row) for row in rows))
 
 
+def _is_retryable_context_error(error: str | None) -> bool:
+    if not error:
+        return False
+    lowered = error.lower()
+    return any(marker in lowered for marker in _RETRYABLE_CONTEXT_ERROR_MARKERS)
+
+
+async def _retry_context_rows(
+    rows: Sequence[dict[str, Any]],
+    items: list[ProtocolContextItem],
+    worker: Callable[[dict[str, Any]], Awaitable[ProtocolContextItem]],
+    *,
+    label: str,
+    attempts: int = _CONTEXT_RETRY_ATTEMPTS,
+    delay: float = _CONTEXT_RETRY_DELAY_SECONDS,
+) -> list[ProtocolContextItem]:
+    if attempts <= 0:
+        return items
+
+    attempt = 0
+    while attempt < attempts:
+        retry_indexes = [
+            idx for idx, item in enumerate(items) if _is_retryable_context_error(item.error)
+        ]
+        if not retry_indexes:
+            break
+        attempt += 1
+        delay_current = delay * attempt
+        logger.warning(
+            f"{label}: retrying {len(retry_indexes)} rows due to retryable errors "
+            f"(attempt {attempt}/{attempts}, per-row delay {delay_current:.1f}s)"
+        )
+        for idx in retry_indexes:
+            if delay_current > 0:
+                await asyncio.sleep(delay_current)
+            items[idx] = await worker(rows[idx])
+    return items
+
+
 async def _build_context_from_db(
     row: Mapping[str, Any],
     *,
@@ -629,59 +676,133 @@ async def contexts_by_excel(
     return ProtocolContextListOut(items=items)
 
 
+_INSTRUMENT_META = {
+    "manometers": {"source_sheet": "manometers", "strict_certificate_match": True},
+    "controllers": {"source_sheet": "controllers", "strict_certificate_match": False},
+}
+
+
+def _detect_instrument_kind(row: Mapping[str, Any]) -> str:
+    type_keys = (
+        "Тип СИ",
+        "Наименование СИ",
+        "Тип",
+        "Обозначение СИ",
+    )
+    text_parts: list[str] = []
+    for key in type_keys:
+        value = row.get(key)
+        if not value:
+            continue
+        value_text = str(value).strip()
+        if value_text:
+            text_parts.append(value_text)
+    combined = " ".join(text_parts).upper()
+    if "43790-12" in combined or "КОНТРОЛЛЕР" in combined or "СГМ" in combined:
+        return "controllers"
+    return "manometers"
+
+
 @router.post("/html-by-excel", response_class=HTMLResponse)
 async def html_by_excel(
-    file: UploadFile = File(...),
+    instrument_file: UploadFile = File(..., alias="file"),
+    db_file: UploadFile | None = File(default=None),
+    row: int = 1,
+    instrument_kind: str | None = None,
     client: httpx.AsyncClient = Depends(get_http_client),
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Возвращает HTML-протокол по первой строке Excel.
+    """Возвращает HTML по тем же данным, что используются в PDF ручках."""
 
-    Принимает тот же формат Excel, что и /context-by-excel.
-    """
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="empty file")
+    instrument_data = await instrument_file.read()
+    db_data = await db_file.read() if db_file is not None else None
 
-    rows = read_rows_as_dicts(data)
+    if not instrument_data:
+        raise HTTPException(status_code=400, detail="empty instrument file")
+    if db_file is not None and not db_data:
+        raise HTTPException(status_code=400, detail="empty db file")
+
+    rows = read_rows_as_dicts(instrument_data)
     if not rows:
-        raise HTTPException(status_code=400, detail="no rows")
+        raise HTTPException(status_code=400, detail="no rows in instrument file")
 
-    row_data = dict(rows[0])
-    cert = extract_certificate_number(row_data)
-    if not cert:
-        raise HTTPException(status_code=400, detail="certificate number is empty")
+    row_index = max(1, row)
+    if row_index > len(rows):
+        raise HTTPException(status_code=400, detail="row index is out of range")
 
-    vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
-    if not vri_id:
-        raise HTTPException(status_code=404, detail="not found")
+    target_row = dict(rows[row_index - 1])
 
-    details = await fetch_vri_details(client, vri_id, sem=sem)
-    if not details:
-        raise HTTPException(status_code=404, detail="not found")
+    kind_param = (instrument_kind or "").strip().lower()
+    if kind_param and kind_param not in _INSTRUMENT_META:
+        raise HTTPException(status_code=400, detail="unknown instrument kind")
+    resolved_kind = kind_param or _detect_instrument_kind(target_row)
+    meta = _INSTRUMENT_META.get(resolved_kind, _INSTRUMENT_META["manometers"])
 
-    et_certs = await find_etalon_certificates(client, details, sem=sem)
-    if et_certs:
-        row_data["_resolved_etalon_certs"] = et_certs
-        row_data["_resolved_etalon_cert"] = et_certs[0]
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
 
-    ctx = await build_protocol_context(row_data, details, client, session=session)
+        logger.info(
+            f"html_by_excel: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'} (kind={resolved_kind})"
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet=meta["source_sheet"],
+        )
+        logger.info(
+            "html_by_excel: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
+        )
 
-    # Номер протокола: ИНИ/ДДММГГГГ/N (для одиночного запроса N=1)
-    proto_num = make_protocol_number(
-        ctx.get("verifier_name"),
-        ctx.get("verification_date"),
-        1,
+    registry_repo = RegistryRepository(session)
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row_data, SERIAL_SOURCE_KEYS)) for row_data in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
+
+    session_factory = _make_worker_session_factory(session)
+    normalized_serial = normalize_serial(_extract_first_value(target_row, SERIAL_SOURCE_KEYS))
+    db_entries = db_index.get(normalized_serial or "")
+
+    context_item = await _build_context_from_db(
+        target_row,
+        db_entries=db_entries,
+        client=client,
+        sem=sem,
+        session_factory=session_factory,
+        strict_certificate_match=bool(meta["strict_certificate_match"]),
     )
-    ctx["protocol_number"] = proto_num
+    if context_item.error or not context_item.context:
+        raise HTTPException(
+            status_code=502,
+            detail=context_item.error or "failed to build context",
+        )
 
-    # Рендерим HTML
+    ctx = dict(context_item.context)
+    if not ctx.get("protocol_number"):
+        ctx["protocol_number"] = make_protocol_number(
+            ctx.get("verifier_name"),
+            ctx.get("verification_date"),
+            row_index,
+        )
+
     html = render_protocol_html(ctx)
-
-    # Сохраняем файл в output/<filename>.html
     out_dir = get_output_dir()
-    base_name = suggest_filename(ctx) or suggest_filename(row_data) or "protocol"
+    base_name = suggest_filename(ctx) or suggest_filename(target_row) or "protocol"
     if not base_name.lower().endswith(".html"):
         base_name = f"{base_name}.html"
     out_path = _unique_output_path(out_dir, base_name)
@@ -975,6 +1096,12 @@ async def manometers_pdf_files(
         process_row,
         label="manometers_pdf_files",
     )
+    items = await _retry_context_rows(
+        rows,
+        items,
+        process_row,
+        label="manometers_pdf_files",
+    )
     build_elapsed = time.perf_counter() - build_started
     total_items = len(items)
     success_contexts = sum(1 for item in items if not item.error)
@@ -1082,3 +1209,104 @@ async def manometers_pdf_files(
     )
 
     return {"files": saved, "count": len(saved), "errors": errors}
+
+
+@router.post("/manometers/html-preview", response_class=HTMLResponse)
+async def manometers_html_preview(
+    manometers_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
+    row: int = 1,
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+    session: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Рендерит HTML по данным manometers_file/db_file для выбранной строки."""
+
+    manometers_data = await manometers_file.read()
+    db_data = await db_file.read() if db_file is not None else None
+
+    if not manometers_data:
+        raise HTTPException(status_code=400, detail="empty manometers file")
+    if db_file is not None and not db_data:
+        raise HTTPException(status_code=400, detail="empty db file")
+
+    rows = read_rows_as_dicts(manometers_data)
+    if not rows:
+        raise HTTPException(status_code=400, detail="no rows in manometers file")
+
+    row_index = max(1, row)
+    if row_index > len(rows):
+        raise HTTPException(status_code=400, detail="row index is out of range")
+    target_row = dict(rows[row_index - 1])
+
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
+
+        logger.info(
+            f"manometers_html_preview: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="manometers",
+        )
+        logger.info(
+            "manometers_html_preview: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
+        )
+
+    registry_repo = RegistryRepository(session)
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row_data, SERIAL_SOURCE_KEYS)) for row_data in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
+
+    session_factory = _make_worker_session_factory(session)
+    normalized_serial = normalize_serial(_extract_first_value(target_row, SERIAL_SOURCE_KEYS))
+    db_entries = db_index.get(normalized_serial or "")
+
+    context_item = await _build_context_from_db(
+        target_row,
+        db_entries=db_entries,
+        client=client,
+        sem=sem,
+        session_factory=session_factory,
+        strict_certificate_match=True,
+    )
+    if context_item.error or not context_item.context:
+        raise HTTPException(
+            status_code=502,
+            detail=context_item.error or "failed to build context",
+        )
+
+    ctx = dict(context_item.context)
+    if not ctx.get("protocol_number"):
+        ctx["protocol_number"] = make_protocol_number(
+            ctx.get("verifier_name"),
+            ctx.get("verification_date"),
+            row_index,
+        )
+
+    html = render_protocol_html(ctx)
+
+    out_dir = get_output_dir()
+    base_name = suggest_filename(ctx) or suggest_filename(target_row) or "protocol-preview"
+    if not base_name.lower().endswith(".html"):
+        base_name = f"{base_name}.html"
+    out_path = _unique_output_path(out_dir, base_name)
+    out_path.write_text(html, encoding="utf-8")
+
+    return HTMLResponse(content=html, media_type="text/html")
