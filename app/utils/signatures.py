@@ -13,25 +13,32 @@ from app.utils.paths import get_project_root
 
 _SIGN_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
-# Базовая геометрия и небольшая вариация, чтобы подпись всегда помещалась внутри строки.
-_TOP_BASE = 16.0
-_TOP_JITTER = 2.0  # ±px
+# Вертикальная точка опоры относительно нижней границы слота.
+_BOTTOM_BASE = 6.5
+_BOTTOM_JITTER = 8.5  # px ≈ диапазон -2..15
 
-_LEFT_BASE = 52.0
-_LEFT_JITTER = 12.0
+# Горизонтальная позиция задаётся в пикселях от левого края слота.
+_LEFT_BASE = 210.0
+_LEFT_JITTER = 110.0  # px ≈ диапазон 100..320
 
-_HEIGHT_BASE = 44.0
-_HEIGHT_JITTER = 8.0
+# Диапазон высоты подписи (px).
+_HEIGHT_BASE = 33.0
+_HEIGHT_JITTER = 3.0
 
+# Поворот/масштаб/наклон подписи.
 _ROTATION_BASE = 0.0
-_ROTATION_JITTER = 2.5
+_ROTATION_JITTER = 3.0
+_SCALE_X_BASE = 0.75
+_SCALE_X_JITTER = 0.05  # 0.7..0.8
+_SCALE_Y_BASE = 1.25
+_SCALE_Y_JITTER = 0.25  # 1.0..1.5
+_SKEW_BASE = 0.0
+_SKEW_JITTER = 10.0
 
 _HEIGHT_SCALE_OVERRIDES: dict[tuple[str, ...], float] = {
-    ("большаков",): 0.65,
+    ("большаков",): 0.75,
 }
-_TOP_OFFSET_OVERRIDES: dict[tuple[str, ...], float] = {
-    ("большаков",): 4.0,
-}
+_VERTICAL_OFFSET_OVERRIDES: dict[tuple[str, ...], float] = {}
 
 
 @dataclass(frozen=True)
@@ -133,8 +140,8 @@ def _height_scale_for(name: str, entry: _SignatureEntry) -> float:
     return max(0.3, float(matched))
 
 
-def _top_offset_for(name: str, entry: _SignatureEntry) -> float:
-    matched = _match_override(_TOP_OFFSET_OVERRIDES, name, entry)
+def _vertical_offset_for(name: str, entry: _SignatureEntry) -> float:
+    matched = _match_override(_VERTICAL_OFFSET_OVERRIDES, name, entry)
     if matched is None:
         return 0.0
     return float(matched)
@@ -182,19 +189,35 @@ def get_signature_render(verifier_name: str | None) -> SignatureRender | None:
     entry = _RNG.choice(candidates)
     src = _data_uri_for(str(entry.path))
 
-    top = _with_jitter(_TOP_BASE, _TOP_JITTER) + _top_offset_for(verifier_name, entry)
-    left = _with_jitter(_LEFT_BASE, _LEFT_JITTER)
+    bottom = _with_jitter(_BOTTOM_BASE, _BOTTOM_JITTER) + _vertical_offset_for(
+        verifier_name, entry
+    )
+    left_px = _with_jitter(_LEFT_BASE, _LEFT_JITTER)
     scale = _height_scale_for(verifier_name, entry)
     raw_height = _with_jitter(_HEIGHT_BASE, _HEIGHT_JITTER)
     height = max(10.0, raw_height * scale)
     rotation = _with_jitter(_ROTATION_BASE, _ROTATION_JITTER)
 
+    scale_x = max(0.7, _with_jitter(_SCALE_X_BASE, _SCALE_X_JITTER))
+    scale_y = max(0.8, _with_jitter(_SCALE_Y_BASE, _SCALE_Y_JITTER))
+    skew = _with_jitter(_SKEW_BASE, _SKEW_JITTER)
+
+    transform_value = " ".join(
+        [
+            "translate(-50%, 0)",
+            f"rotate({rotation:.1f}deg)",
+            f"scaleX({scale_x:.2f})",
+            f"scaleY({scale_y:.2f})",
+            f"skewX({skew:.1f}deg)",
+        ]
+    )
+
     style = (
         "display: block; "
-        f"top: {top:.1f}px; "
-        f"left: {left:.1f}px; "
+        f"bottom: {bottom:.1f}px; "
+        f"left: {left_px:.1f}px; "
         f"height: {height:.1f}px; "
-        f"transform: rotate({rotation:.1f}deg);"
+        f"transform: {transform_value};"
     )
 
     return SignatureRender(src=src, style=style)

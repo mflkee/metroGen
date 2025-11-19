@@ -20,17 +20,16 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://metrologenerator:metrologenerator@db:5432/metrologenerator
       ARSHIN_TIMEOUT: "32"
-      ARSHIN_CONCURRENCY: "48"
-      PROTOCOL_BUILD_CONCURRENCY: "48"
+      ARSHIN_CONCURRENCY: "2"
+      PROTOCOL_BUILD_CONCURRENCY: "2"
+      UVICORN_RELOAD: "1"
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
-      - ./exports:/app/exports
-      - ./output:/app/output
-      - ./data:/app/data
+      - .:/app
 
 volumes:
   pgdata:

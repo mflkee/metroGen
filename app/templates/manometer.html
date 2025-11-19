@@ -248,11 +248,8 @@
     <div class="split-15">
       <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
       <div class="sign-wrapper">
-        <div
-          class="line"
-          style="display: flex; justify-content: space-around; margin-top: 60px"
-        >
-          <div>
+        <div class="sign-line">
+          <div class="line sign-slot">
             <img
               alt="ПОДПИСЬ"
               id="sign"
@@ -260,14 +257,13 @@
               style="position: absolute; width: auto; {{ sign_style or 'display: none;' }}"
             />
           </div>
-          <p class="v-bottom" id="setValue_worker">{{ verifier_name }}</p>
+          <div class="line sign-name">
+            <p class="v-bottom" id="setValue_worker">{{ verifier_name }}</p>
+          </div>
         </div>
-        <div
-          class="undertext"
-          style="display: flex; justify-content: space-around"
-        >
-          <p>(подпись)</p>
-          <p>(фамилия, инициалы)</p>
+        <div class="sign-undertext">
+          <p class="sign-label">(подпись)</p>
+          <p class="sign-label">(фамилия, инициалы)</p>
         </div>
       </div>
     </div>
@@ -447,6 +443,31 @@
     }
     .sign-wrapper {
       position: relative;
+      margin-top: 0.5rem;
+    }
+    .sign-line,
+    .sign-undertext {
+      display: flex;
+      justify-content: space-between;
+      gap: 1.2rem;
+    }
+    .sign-slot,
+    .sign-name {
+      width: 46%;
+      position: relative;
+    }
+    .sign-slot {
+      min-height: 70px;
+    }
+    .sign-name {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      min-height: 70px;
+    }
+    .sign-undertext .sign-label {
+      width: 46%;
+      text-align: center;
     }
     #sign {
       position: absolute;
