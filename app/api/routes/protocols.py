@@ -1167,11 +1167,13 @@ async def manometers_pdf_files(
             )
             continue
 
-        folder_label = _exports_folder_label(
-            ctx,
-            default_equipment="Манометры",
-            forced_month=forced_month,
-            use_default_only=True,
+        folder_label = (
+            sanitize_filename(manometers_file.filename or "") or _exports_folder_label(
+                ctx,
+                default_equipment="Манометры",
+                forced_month=forced_month,
+                use_default_only=True,
+            )
         )
         if exports_dir is None or folder_label != exports_label:
             exports_dir = get_named_exports_dir(folder_label)

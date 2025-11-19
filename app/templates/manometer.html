@@ -248,22 +248,24 @@
     <div class="split-15">
       <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
       <div class="sign-wrapper">
-        <div class="sign-line">
-          <div class="line sign-slot">
+        <div class="line sign-slot">
+          <div class="sign-column sign-column-left">
             <img
               alt="ПОДПИСЬ"
               id="sign"
               src="{{ sign_src or '' }}"
-              style="position: absolute; width: auto; {{ sign_style or 'display: none;' }}"
+              style="width: auto; {{ sign_style or 'display: none;' }}"
             />
           </div>
-          <div class="line sign-name">
-            <p class="v-bottom" id="setValue_worker">{{ verifier_name }}</p>
+          <div class="sign-column sign-column-right">
+            <p class="sign-name">
+              <span class="v-bottom" id="setValue_worker">{{ verifier_name }}</span>
+            </p>
           </div>
         </div>
         <div class="sign-undertext">
-          <p class="sign-label">(подпись)</p>
-          <p class="sign-label">(фамилия, инициалы)</p>
+          <p class="sign-label sign-label-left">(подпись)</p>
+          <p class="sign-label sign-label-right">(фамилия, инициалы)</p>
         </div>
       </div>
     </div>
@@ -445,33 +447,54 @@
       position: relative;
       margin-top: 0.5rem;
     }
-    .sign-line,
-    .sign-undertext {
-      display: flex;
-      justify-content: space-between;
-      gap: 1.2rem;
-    }
-    .sign-slot,
-    .sign-name {
-      width: 46%;
-      position: relative;
-    }
     .sign-slot {
-      min-height: 70px;
+      position: relative;
+      min-height: 90px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 0.4rem 1rem 0.2rem;
+    }
+    .sign-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.3rem;
+    }
+    .sign-column-left {
+      align-items: flex-start;
+      width: 50%;
+    }
+    .sign-column-right {
+      align-items: center;
+      text-align: center;
+      width: 50%;
     }
     .sign-name {
+      width: 100%;
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      min-height: 70px;
+      padding-bottom: 0.2rem;
+      text-align: center;
     }
-    .sign-undertext .sign-label {
-      width: 46%;
+    .sign-undertext {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 1rem;
+      margin-top: 0.1rem;
+      font-size: 0.5rem;
+    }
+    .sign-label {
+      width: 50%;
       text-align: center;
     }
     #sign {
       position: absolute;
       width: auto;
+      mix-blend-mode: multiply;
+      pointer-events: none;
     }
   </style>
 </html>
