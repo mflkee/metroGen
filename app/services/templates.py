@@ -6,7 +6,7 @@ TEMPLATES: dict[str, dict] = {
         "title": "Манометры / датчики давления — общий",
         "points": 8,
         "allowable_variation_pct": 1.5,
-        "path": "manometer.html",
+        "path": "pressure.html",
         "fields": [
             "device_info",
             "mitypeNumber",

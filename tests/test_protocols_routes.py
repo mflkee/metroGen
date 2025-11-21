@@ -73,6 +73,7 @@ def _make_manometers_db_excel(
     serial: str,
     certificate: str,
     protocol_number: str,
+    verifier: str | None = None,
 ) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -81,11 +82,14 @@ def _make_manometers_db_excel(
     ws["L5"] = "Документ"
     ws["P5"] = "номер_протокола"
     ws["G5"] = "Дата поверки"
+    ws["Q5"] = "Поверитель"
 
     ws["H6"] = serial
     ws["L6"] = certificate
     ws["P6"] = protocol_number
     ws["G6"] = "05.06.2025"
+    if verifier is not None:
+        ws["Q6"] = verifier
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -100,12 +104,14 @@ def _make_manometers_db_excel_multi(rows: list[dict[str, str]]) -> bytes:
     ws["H5"] = "Заводской №/ Буквенно-цифровое обозначение"
     ws["L5"] = "Документ"
     ws["P5"] = "номер_протокола"
+    ws["Q5"] = "Поверитель"
 
     for offset, payload in enumerate(rows, start=6):
         ws[f"G{offset}"] = payload.get("verification_date")
         ws[f"H{offset}"] = payload.get("serial")
         ws[f"L{offset}"] = payload.get("certificate")
         ws[f"P{offset}"] = payload.get("protocol_number")
+        ws[f"Q{offset}"] = payload.get("verifier")
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -252,17 +258,30 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
     serial = "03607"
     protocol_num = "06/001/25"
     vri_id = "1-MANO"
+    run_id = "run-aaa"
+    excel_verifier = "Excel Verifier"
+    db_verifier = "DB Verifier"
 
-    manometers_xlsx = _make_manometers_excel_row(certificate=cert, serial=serial)
+    manometers_xlsx = _make_manometers_excel_row(
+        certificate=cert,
+        serial=serial,
+        verifier=excel_verifier,
+    )
     db_xlsx = _make_manometers_db_excel(
-        serial=serial, certificate=cert, protocol_number=protocol_num
+        serial=serial,
+        certificate=cert,
+        protocol_number=protocol_num,
+        verifier=db_verifier,
     )
 
     async def fake_pdf(html: str) -> bytes | None:
         assert "ПРОТОКОЛ" in html
+        assert db_verifier in html
+        assert excel_verifier not in html
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
 
     def _fake_named_exports_dir(name: str) -> Path:
         path = tmp_path / name
@@ -345,7 +364,7 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-manometer%"
-    assert saved_path.parent == tmp_path / "PDF Манометры 09"
+    assert saved_path.parent == tmp_path / f"Generation pressure 09 - {run_id}"
     assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"
 
 
@@ -572,6 +591,7 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
     serial = "03607"
     protocol_num = "06/001/25"
     vri_id = "1-MANO"
+    run_id = "run-bbb"
 
     manometers_xlsx = _make_manometers_excel_row(certificate=cert, serial=serial)
     db_xlsx = _make_manometers_db_excel(
@@ -582,6 +602,7 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
 
     def _fake_named_exports_dir(name: str) -> Path:
         path = tmp_path / name
@@ -670,7 +691,7 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-manometer%"
-    assert saved_path.parent == tmp_path / "PDF Манометры 06"
+    assert saved_path.parent == tmp_path / f"Generation pressure 06 - {run_id}"
     assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"
 
 
