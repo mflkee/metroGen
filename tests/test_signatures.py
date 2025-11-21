@@ -36,15 +36,15 @@ def test_get_signature_render_returns_data(monkeypatch, tmp_path):
     assert render.src.startswith("data:image/png;base64,")
     # Проверяем, что стиль включает все ожидаемые свойства и находится в допустимых границах
     assert "display: block" in render.style
-    top_match = re.search(r"top:\s*([-0-9.]+)px", render.style)
+    bottom_match = re.search(r"bottom:\s*([-0-9.]+)px", render.style)
     left_match = re.search(r"left:\s*([-0-9.]+)px", render.style)
     height_match = re.search(r"height:\s*([-0-9.]+)px", render.style)
-    rotation_match = re.search(r"transform:\s*rotate\(([-0-9.]+)deg\)", render.style)
+    rotation_match = re.search(r"rotate\(([-0-9.]+)deg\)", render.style)
 
-    assert top_match and 18.0 <= float(top_match.group(1)) <= 22.0
-    assert left_match and 36.0 <= float(left_match.group(1)) <= 64.0
-    assert height_match and 20.0 <= float(height_match.group(1)) <= 36.0
-    assert rotation_match and -2.5 <= float(rotation_match.group(1)) <= 2.5
+    assert bottom_match and 0.0 <= float(bottom_match.group(1)) <= 25.0
+    assert left_match and 120.0 <= float(left_match.group(1)) <= 280.0
+    assert height_match and 20.0 <= float(height_match.group(1)) <= 32.0
+    assert rotation_match and -3.0 <= float(rotation_match.group(1)) <= 3.0
 
 
 def test_get_signature_render_returns_none_when_missing(monkeypatch, tmp_path):

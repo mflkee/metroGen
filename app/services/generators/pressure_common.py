@@ -144,10 +144,12 @@ class PressureCommon(TableGenerator):
         return {
             "rows": rows,
             "unit_label": unit_label,
-            "allowable_error": f"{disp_err:.2f}",
-            "allowable_variation": f"{disp_var:.2f}",
+            "allowable_error": _fmt_tol(disp_err),
+            "allowable_variation": _fmt_tol(disp_var),
         }
 
 
 GENERATOR = PressureCommon()
 TEMPLATE_ID = "pressure_common"
+def _fmt_tol(value: float) -> str:
+    return f"{float(value):.3f}".rstrip("0").rstrip(".")

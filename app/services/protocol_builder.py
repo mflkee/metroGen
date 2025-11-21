@@ -164,6 +164,73 @@ def _first_nonempty(*values: Any) -> str:
     return ""
 
 
+_ALLOWABLE_COLUMNS = ("Другие параметры", "КТ")
+
+
+def _resolve_header_value(row: Mapping[str, Any], header: str) -> Any | None:
+    """Return a cell value using case-insensitive header matching."""
+    direct = row.get(header)
+    if direct not in (None, ""):
+        return direct
+
+    target = header.casefold()
+    for key, value in row.items():
+        if not isinstance(key, str):
+            continue
+        if key.casefold() == target and value not in (None, ""):
+            return value
+    return None
+
+
+def _raw_allowable_value(row: Mapping[str, Any]) -> Any | None:
+    """Return the first non-empty allowable column resolved from an Excel row."""
+    for column in _ALLOWABLE_COLUMNS:
+        value = _resolve_header_value(row, column)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+_ALLOWABLE_VALUE_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+
+
+def _parse_allowable_value(candidate: Any, fallback: float) -> float:
+    """Parse allowable tolerance from a cell or fall back to `fallback`."""
+    if candidate not in (None, ""):
+        if isinstance(candidate, (int, float)):
+            return float(candidate)
+        text = str(candidate).strip()
+        if text:
+            cleaned = text.replace("%", "").replace("‰", "").strip()
+            match = _ALLOWABLE_VALUE_RE.search(cleaned)
+            if match:
+                number = match.group(0).replace(",", ".")
+                try:
+                    return float(number)
+                except Exception:
+                    pass
+            cleaned = cleaned.replace(",", ".")
+            try:
+                return float(cleaned)
+            except Exception:
+                pass
+    return fallback
+
+
+def _format_allowable_str(value: float) -> str:
+    return f"{float(value):.3f}".rstrip("0").rstrip(".")
+
+
+def _display_allowable_value(source: Any, numeric: float) -> str:
+    if source not in (None, ""):
+        text = str(source).strip()
+        if text:
+            cleaned = text.replace("%", "").replace("‰", "").strip()
+            if cleaned:
+                return cleaned
+    return _format_allowable_str(numeric)
+
+
 _DEFAULT_POINT_DESCRIPTIONS = {
     1: "Результат внешнего осмотра",
     2: "Результат опробования",
@@ -303,6 +370,7 @@ async def build_context(
     owner_inn: str | None,
     allowable_error: float,
     allowable_variation: float,
+    allowable_display: str | None = None,
     protocol_number: str | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
@@ -457,6 +525,7 @@ async def build_context(
     )
     device_info_parts = [part for part in (device_type_name, device_modification) if part]
     device_info = ", ".join(device_info_parts)
+    allowable_fmt = allowable_display or _format_allowable_str(allowable_error)
 
     context: dict[str, Any] = {
         "device_info": device_info,
@@ -492,7 +561,7 @@ async def build_context(
         "etalon_rank_code": et_rank_code or None,
         "etalon_rank_title": et_rank_title or None,
         "allowable_error_pct": allowable_error,
-        "allowable_error_fmt": f"{allowable_error:.2f}",
+        "allowable_error_fmt": allowable_fmt,
         "allowable_variation_pct": allowable_variation,
         "verification_date": verification_date,
         "valid_to_date": valid_to_date,
@@ -500,6 +569,7 @@ async def build_context(
         "protocol_number": protocol_number,
         "device_certificate_line": device_cert_line,
     }
+    context["allowable_variation"] = allowable_fmt
 
     # Выбор шаблона и генерация таблицы
     method_code = (excel_row.get("Методика поверки") or vri.get("docTitle") or "").strip()
@@ -574,7 +644,10 @@ async def build_context(
 
     points = int(excel_row.get("_points") or tpl.get("points", 8))
     err_tol = FixedPctTol(float(allowable_error))
-    var_tol = FixedPctTol(float(tpl.get("allowable_variation_pct", allowable_variation)))
+    var_source = allowable_variation
+    if var_source in (None, ""):
+        var_source = tpl.get("allowable_variation_pct", allowable_error)
+    var_tol = FixedPctTol(float(var_source))
 
     gen = get_by_template(template_id)
     if gen and range_min is not None and range_max is not None:
@@ -701,12 +774,14 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             methodology_points = default_points.copy()
             methodology_point_items = [dict(item) for item in default_point_items]
 
-        try:
-            allowable = float(
-                str(excel_row.get("Другие параметры") or allowable_hint or "1.5").replace(",", ".")
-            )
-        except Exception:
-            allowable = float(allowable_hint or 1.5)
+        raw_allowable = _raw_allowable_value(excel_row)
+        candidate = raw_allowable if raw_allowable not in (None, "") else allowable_hint
+        fallback = allowable_hint if allowable_hint not in (None, "") else 1.5
+        allowable = _parse_allowable_value(candidate, float(fallback))
+        allowable_display = _display_allowable_value(
+            raw_allowable if raw_allowable not in (None, "") else candidate,
+            allowable,
+        )
 
         return await build_context(
             excel_row=excel_row,
@@ -717,6 +792,7 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             owner_inn=owner_inn or "",
             allowable_error=allowable,
             allowable_variation=allowable,
+            allowable_display=allowable_display,
             protocol_number=None,
             http_client=http_client,
         )

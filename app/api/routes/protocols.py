@@ -539,6 +539,83 @@ async def _build_context_from_db(
         )
 
 
+async def _build_context_from_excel_row(
+    row: Mapping[str, Any],
+    *,
+    client: httpx.AsyncClient,
+    sem: asyncio.Semaphore,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> ProtocolContextItem:
+    row_data = dict(row)
+    cert = extract_certificate_number(row_data)
+    filename = suggest_filename(row_data)
+
+    if not cert:
+        return ProtocolContextItem(
+            certificate="",
+            vri_id="",
+            filename=filename,
+            context={},
+            raw_details={},
+            error="certificate number is empty",
+        )
+
+    try:
+        vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
+        if not vri_id:
+            return ProtocolContextItem(
+                certificate=cert,
+                vri_id="",
+                filename=filename,
+                context={},
+                raw_details={},
+                error="not found",
+            )
+
+        details = await fetch_vri_details(client, vri_id, sem=sem)
+        if not details:
+            return ProtocolContextItem(
+                certificate=cert,
+                vri_id="",
+                filename=filename,
+                context={},
+                raw_details={},
+                error="not found",
+            )
+
+        et_certs = await find_etalon_certificates(client, details, sem=sem)
+        if et_certs:
+            row_data["_resolved_etalon_certs"] = et_certs
+            row_data["_resolved_etalon_cert"] = et_certs[0]
+
+        async with session_factory() as worker_session:
+            ctx = await build_protocol_context(
+                row_data,
+                details,
+                client,
+                session=worker_session,
+            )
+
+        fname = suggest_filename(ctx) or filename
+        return ProtocolContextItem(
+            certificate=cert,
+            vri_id=vri_id,
+            filename=fname,
+            context=ctx,
+            raw_details=details,
+            error=None,
+        )
+    except Exception as exc:
+        return ProtocolContextItem(
+            certificate=cert,
+            vri_id="",
+            filename=filename,
+            context={},
+            raw_details={},
+            error=str(exc),
+        )
+
+
 def _unique_output_path(directory: Path, base_name: str) -> Path:
     candidate = directory / base_name
     if not candidate.exists():
@@ -579,78 +656,12 @@ async def contexts_by_excel(
     session_factory = _make_worker_session_factory(session)
 
     async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
-        row_data = dict(row)
-        cert = extract_certificate_number(row_data)
-        filename = suggest_filename(row_data)
-
-        if not cert:
-            return ProtocolContextItem(
-                certificate="",
-                vri_id="",
-                filename=filename,
-                context={},
-                raw_details={},
-                error="certificate number is empty",
-            )
-
-        try:
-            vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
-            if not vri_id:
-                return ProtocolContextItem(
-                    certificate=cert,
-                    vri_id="",
-                    filename=filename,
-                    context={},
-                    raw_details={},
-                    error="not found",
-                )
-
-            details = await fetch_vri_details(client, vri_id, sem=sem)
-            if not details:
-                return ProtocolContextItem(
-                    certificate=cert,
-                    vri_id="",
-                    filename=filename,
-                    context={},
-                    raw_details={},
-                    error="not found",
-                )
-
-            # 4) авто-поиск свидетельств эталонов с учётом семафора
-            et_certs = await find_etalon_certificates(client, details, sem=sem)
-            if et_certs:
-                row_data["_resolved_etalon_certs"] = et_certs
-                row_data["_resolved_etalon_cert"] = et_certs[0]  # билдер подхватит первое
-
-            # 5) собрать контекст
-            async with session_factory() as worker_session:
-                ctx = await build_protocol_context(
-                    row_data,
-                    details,
-                    client,
-                    session=worker_session,
-                )
-
-            # 6) имя файла — по контексту или по исходной строке
-            fname = suggest_filename(ctx) or filename
-
-            return ProtocolContextItem(
-                certificate=cert,
-                vri_id=vri_id,
-                filename=fname,
-                context=ctx,
-                raw_details=details,
-                error=None,
-            )
-        except Exception as e:
-            return ProtocolContextItem(
-                certificate=cert,
-                vri_id="",
-                filename=filename,
-                context={},
-                raw_details={},
-                error=str(e),
-            )
+        return await _build_context_from_excel_row(
+            row,
+            client=client,
+            sem=sem,
+            session_factory=session_factory,
+        )
 
     # Параллельная обработка строк Excel с общим семафором
     items: list[ProtocolContextItem] = await asyncio.gather(*(process_row(r) for r in rows))
@@ -669,8 +680,10 @@ async def contexts_by_excel(
 
     success_count = sum(1 for it in items if not it.error)
     total = len(items)
+    errors_count = total - success_count
     logger.info(
-        f"contexts_by_excel: processed={total} success={success_count} errors={total - success_count}"
+        f"contexts_by_excel: processed={total} success={success_count} "
+        f"errors={errors_count}"
     )
 
     return ProtocolContextListOut(items=items)
@@ -778,14 +791,22 @@ async def html_by_excel(
     normalized_serial = normalize_serial(_extract_first_value(target_row, SERIAL_SOURCE_KEYS))
     db_entries = db_index.get(normalized_serial or "")
 
-    context_item = await _build_context_from_db(
-        target_row,
-        db_entries=db_entries,
-        client=client,
-        sem=sem,
-        session_factory=session_factory,
-        strict_certificate_match=bool(meta["strict_certificate_match"]),
-    )
+    if db_entries:
+        context_item = await _build_context_from_db(
+            target_row,
+            db_entries=db_entries,
+            client=client,
+            sem=sem,
+            session_factory=session_factory,
+            strict_certificate_match=bool(meta["strict_certificate_match"]),
+        )
+    else:
+        context_item = await _build_context_from_excel_row(
+            target_row,
+            client=client,
+            sem=sem,
+            session_factory=session_factory,
+        )
     if context_item.error or not context_item.context:
         raise HTTPException(
             status_code=502,
@@ -911,6 +932,8 @@ async def controllers_pdf_files(
     exports_dir: Path | None = None
     exports_label: str | None = None
     forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
+    if not forced_month:
+        forced_month = _extract_month_from_filename(controllers_file.filename)
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
@@ -1167,13 +1190,11 @@ async def manometers_pdf_files(
             )
             continue
 
-        folder_label = (
-            sanitize_filename(manometers_file.filename or "") or _exports_folder_label(
-                ctx,
-                default_equipment="Манометры",
-                forced_month=forced_month,
-                use_default_only=True,
-            )
+        folder_label = _exports_folder_label(
+            ctx,
+            default_equipment="Манометры",
+            forced_month=forced_month,
+            use_default_only=True,
         )
         if exports_dir is None or folder_label != exports_label:
             exports_dir = get_named_exports_dir(folder_label)
