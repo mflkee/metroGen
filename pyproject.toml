@@ -34,6 +34,20 @@ dev = [
   "aiosqlite",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest",
+  "pytest-asyncio",
+  "respx",
+  "pytest-cov",
+  "ruff",
+  "black",
+  "aiosqlite",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
 [tool.ruff]
 # Общие настройки Ruff (линтер + форматтер)
 target-version = "py313"

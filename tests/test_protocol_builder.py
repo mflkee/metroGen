@@ -16,6 +16,38 @@ def test_owner_name_fallback_uses_alternative_headers():
     assert pb._owner_name_from_row(row) == 'ООО "РИ-ИНВЕСТ"'
 
 
+def test_raw_allowable_value_supports_multiple_headers():
+    from app.services import protocol_builder as pb
+
+    row = {"Другие параметры": "0,8", "КТ": "1,0"}
+    assert pb._raw_allowable_value(row) == "0,8"
+
+    row = {"КТ": "1,2"}
+    assert pb._raw_allowable_value(row) == "1,2"
+
+    row = {"кт": "0,075"}
+    assert pb._raw_allowable_value(row) == "0,075"
+
+    row = {"Другие параметры": "", "КТ": None}
+    assert pb._raw_allowable_value(row) is None
+
+
+def test_parse_allowable_value_handles_percent_and_comma():
+    from app.services import protocol_builder as pb
+
+    assert pb._parse_allowable_value("0,075 %", 1.5) == pytest.approx(0.075)
+    assert pb._parse_allowable_value("1.2%", 1.5) == pytest.approx(1.2)
+    assert pb._parse_allowable_value(None, 1.5) == pytest.approx(1.5)
+
+
+def test_display_allowable_value_prefers_raw_text():
+    from app.services import protocol_builder as pb
+
+    assert pb._display_allowable_value("0,075 %", 0.075) == "0,075"
+    assert pb._display_allowable_value("0.018%", 0.018) == "0.018"
+    assert pb._display_allowable_value(None, 0.05) == "0.05"
+
+
 @pytest.mark.anyio
 async def test_build_context_merges_type_and_modification_in_device_info():
     excel_row = {
@@ -171,6 +203,32 @@ async def test_build_context_parses_signed_ranges():
     assert ctx["unit"] == "mbar"
     assert ctx["range_source"] == "excel"
     assert ctx["table_rows"], "generator should build rows when range parsed"
+
+
+@pytest.mark.anyio
+async def test_build_context_uses_allowable_variation_from_excel():
+    excel_row = {
+        "Обозначение СИ": "13535-93",
+        "Заводской номер": "03607",
+        "Прочие сведения": "(0 ... 21) МПа",
+        "Методика поверки": "МИ 2124-90",
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "13535-93"}},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО НПП",
+        owner_inn="7705550000",
+        allowable_error=0.075,
+        allowable_variation=0.075,
+    )
+
+    assert ctx["allowable_variation"] == ctx["allowable_error_fmt"]
 
 
 @pytest.mark.anyio
