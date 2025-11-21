@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import re
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -100,6 +101,14 @@ SERIAL_SOURCE_KEYS: tuple[str, ...] = (
     "Заводской №/Буквенно-цифровое обозначение",
     "Заводской № / Буквенно-цифровое обозначение",
     "Серийный номер",
+)
+
+VERIFIER_SOURCE_KEYS: tuple[str, ...] = (
+    "Поверитель",
+    "Поверитель СИ",
+    "ФИО поверителя",
+    "verifier",
+    "worker",
 )
 
 
@@ -202,18 +211,42 @@ def _extract_month_from_context(ctx: Mapping[str, Any]) -> str:
     return f"{date.today().month:02d}"
 
 
+def _make_run_id() -> str:
+    """Return a short unique identifier for grouping exported files per request."""
+    return secrets.token_hex(4)
+
+
+def _resolve_run_month(
+    forced_month: str | None, items: Sequence[ProtocolContextItem] | None
+) -> str:
+    if forced_month:
+        return forced_month
+    if items:
+        for item in items:
+            ctx = item.context or {}
+            if ctx:
+                return _extract_month_from_context(ctx)
+    return f"{date.today().month:02d}"
+
+
 def _exports_folder_label(
     ctx: Mapping[str, Any],
     default_equipment: str,
     *,
     forced_month: str | None = None,
     use_default_only: bool = False,
+    prefix: str = "PDF",
+    run_id: str | None = None,
+    label_override: str | None = None,
 ) -> str:
-    equipment = default_equipment if use_default_only else _determine_equipment_label(
-        ctx, default_equipment
+    equipment = label_override or (
+        default_equipment if use_default_only else _determine_equipment_label(ctx, default_equipment)
     )
     month = forced_month or _extract_month_from_context(ctx)
-    return f"PDF {equipment} {month}".strip()
+    base = f"{prefix} {equipment} {month}".strip()
+    if run_id:
+        base = f"{base} - {run_id}"
+    return base
 
 
 def _context_pdf_filename(ctx: Mapping[str, Any]) -> str:
@@ -447,6 +480,10 @@ async def _build_context_from_db(
         )
 
     db_row = dict(selected_entry.get("payload") or {})
+
+    verifier_from_db = _extract_first_value(db_row, VERIFIER_SOURCE_KEYS)
+    if verifier_from_db:
+        row_data["Поверитель"] = verifier_from_db
 
     cert = str(db_row.get("Документ") or "").strip()
     if not cert:
@@ -929,18 +966,28 @@ async def controllers_pdf_files(
         f"({build_elapsed:.2f}s)"
     )
 
-    exports_dir: Path | None = None
-    exports_label: str | None = None
     forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
     if not forced_month:
         forced_month = _extract_month_from_filename(controllers_file.filename)
+    run_id = _make_run_id()
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
 
+    run_month = _resolve_run_month(forced_month, items)
+    folder_label = _exports_folder_label(
+        {},
+        default_equipment="Контроллеры",
+        forced_month=run_month,
+        use_default_only=True,
+        prefix="Generation",
+        run_id=run_id,
+    )
+    exports_dir = get_named_exports_dir(folder_label)
+
     logger.info(
         "controllers_pdf_files: starting export for "
-        f"{total_items} devices (forced_month={forced_month or 'auto'})"
+        f"{total_items} devices (run_id={run_id} folder='{exports_dir.name}' month={run_month})"
     )
 
     for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
@@ -986,16 +1033,6 @@ async def controllers_pdf_files(
                 }
             )
             continue
-
-        folder_label = _exports_folder_label(
-            ctx,
-            default_equipment="Контроллеры",
-            forced_month=forced_month,
-            use_default_only=True,
-        )
-        if exports_dir is None or folder_label != exports_label:
-            exports_dir = get_named_exports_dir(folder_label)
-            exports_label = folder_label
 
         base_name = _context_pdf_filename(ctx)
         path = _unique_output_path(exports_dir, base_name)
@@ -1134,16 +1171,27 @@ async def manometers_pdf_files(
         f"({build_elapsed:.2f}s)"
     )
 
-    exports_dir: Path | None = None
-    exports_label: str | None = None
     forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
+    run_id = _make_run_id()
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
 
+    run_month = _resolve_run_month(forced_month, items)
+    folder_label = _exports_folder_label(
+        {},
+        default_equipment="pressure",
+        forced_month=run_month,
+        use_default_only=True,
+        prefix="Generation",
+        run_id=run_id,
+        label_override="pressure",
+    )
+    exports_dir = get_named_exports_dir(folder_label)
+
     logger.info(
         "manometers_pdf_files: starting export for "
-        f"{total_items} devices (forced_month={forced_month or 'auto'})"
+        f"{total_items} devices (run_id={run_id} folder='{exports_dir.name}' month={run_month})"
     )
 
     for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
@@ -1189,16 +1237,6 @@ async def manometers_pdf_files(
                 }
             )
             continue
-
-        folder_label = _exports_folder_label(
-            ctx,
-            default_equipment="Манометры",
-            forced_month=forced_month,
-            use_default_only=True,
-        )
-        if exports_dir is None or folder_label != exports_label:
-            exports_dir = get_named_exports_dir(folder_label)
-            exports_label = folder_label
 
         base_name = _context_pdf_filename(ctx)
         path = _unique_output_path(exports_dir, base_name)

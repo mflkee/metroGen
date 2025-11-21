@@ -21,7 +21,7 @@ FastAPI‑сервис для автоматизации подготовки п
 | --- | --- |
 | `app/api/routes/` | FastAPI‑ручки (`protocols`, `arshin`, `registry`, `methodologies`, `owners`). |
 | `app/services/` | Основная бизнес‑логика: генераторы таблиц, билдер протоколов, Playwright PDF, Arshin client. |
-| `app/templates/` | HTML/Jinja2 формы протоколов (`manometer.html`, `controller_43790_12.html`). |
+| `app/templates/` | HTML/Jinja2 формы протоколов (`pressure.html`, `controller_43790_12.html`). |
 | `app/core/` | Настройки (`config.py`) и логирование. |
 | `app/db/` | Модели SQLAlchemy, репозитории и сиды. |
 | `data/` | Примеры Excel/вспомогательные данные (`data/input/*`, `data/signatures`). |

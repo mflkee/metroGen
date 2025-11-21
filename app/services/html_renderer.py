@@ -66,8 +66,8 @@ def _template_name_from_context(ctx: dict[str, Any]) -> str:
     if tpl_id == "controller_43790_12":
         return "controller_43790_12.html"
     if tpl_id == "pressure_common":
-        return "manometer.html"
-    return "manometer.html"
+        return "pressure.html"
+    return "pressure.html"
 
 
 def render_protocol_html(context: dict[str, Any]) -> str:
