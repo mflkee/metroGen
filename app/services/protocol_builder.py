@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 from collections.abc import Mapping
 from datetime import date, datetime
@@ -95,6 +96,13 @@ _HEADER_VARIANTS: tuple[dict[str, Any], ...] = (
     },
 )
 
+_NAME_RNG: random.Random = random.SystemRandom()
+_TRAINEE_ASSIGNMENTS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("чупин",), ("Большаков С.Н.", "Запевахин Т.Е.")),
+    (("тиора",), ("Манджеев А.А.", "Кадыков П.Ю.")),
+)
+_TRAINEE_ORDER_NOTE = '(приказ о стажировке № 03-23-МС "09" января 2023г.)'
+
 
 def _select_header(verification_dt: datetime | None) -> dict[str, str]:
     header = dict(_DEFAULT_HEADER)
@@ -171,6 +179,34 @@ def _parse_date(value: str | None) -> datetime | None:
         return datetime.strptime(_fmt_date_ddmmyyyy(value), "%d.%m.%Y")
     except Exception:
         return None
+
+
+def _normalize_person_tokens(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    lowered = str(value).lower().replace("ё", "е")
+    cleaned = re.sub(r"[^0-9a-zа-я]+", " ", lowered, flags=re.UNICODE)
+    return {token for token in cleaned.split() if token}
+
+
+def _pick_trainee_name(
+    verifier_name: str | None,
+    verification_dt: datetime | None,
+    template_id: str,
+) -> str | None:
+    if template_id != "pressure_common":
+        return None
+    if not verification_dt or verification_dt.year != 2023:
+        return None
+
+    tokens = _normalize_person_tokens(verifier_name)
+    if not tokens:
+        return None
+
+    for key_tokens, candidates in _TRAINEE_ASSIGNMENTS:
+        if set(key_tokens) <= tokens:
+            return _NAME_RNG.choice(candidates)
+    return None
 
 
 def _split_notation(notation: str) -> tuple[str, str]:
@@ -731,6 +767,21 @@ async def build_context(
         )
         if "allowable_note" in gout:
             context["allowable_note"] = gout["allowable_note"]
+
+    trainee_name = _pick_trainee_name(
+        context.get("verifier_name"),
+        verification_dt,
+        template_id,
+    )
+    context["trainee_name"] = trainee_name or ""
+    context["trainee_sign_src"] = None
+    context["trainee_sign_style"] = "display: none;"
+    context["trainee_note"] = _TRAINEE_ORDER_NOTE if trainee_name else ""
+    if trainee_name:
+        trainee_signature = get_signature_render(trainee_name)
+        if trainee_signature:
+            context["trainee_sign_src"] = trainee_signature.src
+            context["trainee_sign_style"] = trainee_signature.style
 
     signature = get_signature_render(context.get("verifier_name"))
     if signature:
