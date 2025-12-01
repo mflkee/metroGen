@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from app.services.protocol_builder import build_context
@@ -351,3 +353,74 @@ async def test_build_context_selects_controller_template():
     assert ctx["template_id"] == "controller_43790_12"
     assert ctx["allowable_note"].startswith("- ± 0,1 %")
     assert ctx["table_rows"], "controller generator should build table rows"
+
+
+@pytest.mark.anyio
+async def test_build_context_adds_trainee_signature_for_2023(monkeypatch):
+    from app.services import protocol_builder as pb
+
+    dummy_signature = type("Sig", (), {"src": "sig-data", "style": "sig-style"})()
+    monkeypatch.setattr(pb, "_NAME_RNG", random.Random(0))
+    monkeypatch.setattr(pb, "get_signature_render", lambda name: dummy_signature)
+
+    excel_row = {
+        "Обозначение СИ": "13535-93",
+        "Заводской номер": "03607",
+        "Методика поверки": "МИ 2124-90",
+        "Дата поверки": "15.06.2023",
+        "Поверитель": "Чупин А.А.",
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "13535-93"}},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО НПП",
+        owner_inn="7705550000",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    assert ctx["trainee_name"] in {"Большаков С.Н.", "Запевахин Т.Е."}
+    assert ctx["trainee_note"].startswith("(приказ о стажировке № 03-23-МС")
+    assert ctx["trainee_sign_src"] == dummy_signature.src
+    assert ctx["trainee_sign_style"] == dummy_signature.style
+
+
+@pytest.mark.anyio
+async def test_build_context_omits_trainee_for_other_years(monkeypatch):
+    from app.services import protocol_builder as pb
+
+    dummy_signature = type("Sig", (), {"src": "sig-data", "style": "sig-style"})()
+    monkeypatch.setattr(pb, "_NAME_RNG", random.Random(0))
+    monkeypatch.setattr(pb, "get_signature_render", lambda name: dummy_signature)
+
+    excel_row = {
+        "Обозначение СИ": "13535-93",
+        "Заводской номер": "03607",
+        "Методика поверки": "МИ 2124-90",
+        "Дата поверки": "15.06.2024",
+        "Поверитель": "Чупин А.А.",
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "13535-93"}},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО НПП",
+        owner_inn="7705550000",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    assert ctx["trainee_name"] == ""
+    assert ctx["trainee_note"] == ""
+    assert ctx["trainee_sign_style"] == "display: none;"

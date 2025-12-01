@@ -90,6 +90,10 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("etalon_entries", [])
     ctx.setdefault("etalon_lines", [])
     ctx.setdefault("etalon_certificates", [])
+    ctx.setdefault("trainee_name", "")
+    ctx.setdefault("trainee_sign_src", "")
+    ctx.setdefault("trainee_sign_style", "display: none;")
+    ctx.setdefault("trainee_note", "")
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")

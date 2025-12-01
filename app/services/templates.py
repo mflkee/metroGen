@@ -26,6 +26,10 @@ TEMPLATES: dict[str, dict] = {
             "allowable_variation",
             "verification_date",
             "verifier_name",
+            "trainee_name",
+            "trainee_note",
+            "trainee_sign_src",
+            "trainee_sign_style",
         ],
     },
     "controller_43790_12": {

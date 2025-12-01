@@ -238,6 +238,35 @@
         <p class="undertext">Указывается дата поверки в формате ДД.ММ.ГГГГ.</p>
       </div>
     </div>
+    {% if trainee_name %}
+    <div class="split-15">
+      <p class="h-left v-bottom" style="padding-bottom: 15px">Измерения произвел стажер:</p>
+      <div class="sign-wrapper">
+        <div class="line sign-slot">
+          <div class="sign-column sign-column-left">
+            <img
+              alt="ПОДПИСЬ СТАЖЕРА"
+              id="trainee_sign"
+              src="{{ trainee_sign_src or '' }}"
+              style="width: auto; {{ trainee_sign_style or 'display: none;' }}"
+            />
+          </div>
+          <div class="sign-column sign-column-right">
+            <p class="sign-name">
+              <span class="v-bottom">{{ trainee_name }}</span>
+            </p>
+          </div>
+        </div>
+        <div class="sign-undertext">
+          <p class="sign-label sign-label-left">(подпись)</p>
+          <p class="sign-label sign-label-right">(фамилия, инициалы)</p>
+        </div>
+        {% if trainee_note %}
+        <p class="sign-note">{{ trainee_note }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
     <div class="split-15">
       <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
       <div class="sign-wrapper">
@@ -483,7 +512,14 @@
       width: 50%;
       text-align: center;
     }
-    #sign {
+    .sign-note {
+      margin-top: 0.1rem;
+      text-align: center;
+      font-size: 0.55rem;
+      line-height: 1.2;
+    }
+    #sign,
+    #trainee_sign {
       position: absolute;
       width: auto;
       mix-blend-mode: multiply;
