@@ -17,6 +17,12 @@ from app.main import app as fastapi_app  # noqa: E402
 from app.utils.excel import CERTIFICATE_HEADER_KEYS  # noqa: E402
 
 
+@pytest.fixture
+def anyio_backend():
+    """Force anyio to use asyncio backend to avoid pulling trio."""
+    return "asyncio"
+
+
 @pytest.fixture(scope="session")
 def app() -> FastAPI:
     return fastapi_app

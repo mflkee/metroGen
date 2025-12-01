@@ -68,6 +68,52 @@ def _parse_range_and_unit(
     return _parse_range_text(additional_info)
 
 
+_DEFAULT_HEADER = {
+    "company_name": (
+        'Общество с ограниченной ответственностью "Многоцелевая Компания. Автоматизация. '
+        'Исследования. Разработки"'
+    ),
+    "address": (
+        "Ханты-Мансийский автономный округ - Югра, г.о. Нижневартовск, г Нижневартовск, "
+        "ул Индустриальная, зд. 32, стр. 1, кабинет 14"
+    ),
+    "accreditation": (
+        "Уникальный номер записи об аккредитации в реестре аккредитованных лиц №RA.RU.314356"
+    ),
+}
+
+_HEADER_VARIANTS: tuple[dict[str, Any], ...] = (
+    {
+        "start": date(2023, 1, 1),
+        "end": date(2023, 12, 31),
+        "values": {
+            "address": (
+                "Ханты-Мансийский автономный округ - Югра, г.о. Нижневартовск, г "
+                "Нижневартовск, ул. Индустриальная, дом 14, строение 11"
+            )
+        },
+    },
+)
+
+
+def _select_header(verification_dt: datetime | None) -> dict[str, str]:
+    header = dict(_DEFAULT_HEADER)
+    if not verification_dt:
+        return header
+
+    dt = verification_dt.date()
+    for variant in _HEADER_VARIANTS:
+        start: date | None = variant.get("start")
+        end: date | None = variant.get("end")
+        if start and dt < start:
+            continue
+        if end and dt > end:
+            continue
+        header.update(variant.get("values") or {})
+        break
+    return header
+
+
 def _fmt_date_ddmmyyyy(s: object) -> str:
     """Возвращает дату в формате ДД.ММ.ГГГГ.
 
@@ -197,7 +243,7 @@ _ALLOWABLE_VALUE_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
 def _parse_allowable_value(candidate: Any, fallback: float) -> float:
     """Parse allowable tolerance from a cell or fall back to `fallback`."""
     if candidate not in (None, ""):
-        if isinstance(candidate, (int, float)):
+        if isinstance(candidate, int | float):
             return float(candidate)
         text = str(candidate).strip()
         if text:
@@ -432,6 +478,7 @@ async def build_context(
     valid_date_arshin = vri.get("validDate")
     verification_date = _fmt_date_ddmmyyyy(excel_row.get("Дата поверки") or vrf_date or "")
     valid_to_date = _fmt_date_ddmmyyyy(excel_row.get("Действительно до") or valid_date_arshin or "")
+    verification_dt = _parse_date(verification_date)
 
     # Диапазон/единица
     range_min = range_max = None
@@ -571,6 +618,12 @@ async def build_context(
     }
     context["allowable_variation"] = allowable_fmt
 
+    header_info = _select_header(verification_dt)
+    context["header"] = header_info
+    context["header_name"] = header_info.get("company_name")
+    context["header_address"] = header_info.get("address")
+    context["header_accreditation"] = header_info.get("accreditation")
+
     # Выбор шаблона и генерация таблицы
     method_code = (excel_row.get("Методика поверки") or vri.get("docTitle") or "").strip()
     mitype_number = context["mitypeNumber"]
@@ -631,7 +684,7 @@ async def build_context(
         elif method_full and not method_full.startswith('"'):
             context["methodology_full"] = f'"{method_full}"'
 
-    ver_dt = _parse_date(context.get("verification_date"))
+    ver_dt = verification_dt
     val_dt = _parse_date(context.get("valid_to_date"))
     mpi_years: int | None = None
     if ver_dt and val_dt and val_dt >= ver_dt:

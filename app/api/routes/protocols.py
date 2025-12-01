@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 import re
+import secrets
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime
@@ -240,7 +240,9 @@ def _exports_folder_label(
     label_override: str | None = None,
 ) -> str:
     equipment = label_override or (
-        default_equipment if use_default_only else _determine_equipment_label(ctx, default_equipment)
+        default_equipment
+        if use_default_only
+        else _determine_equipment_label(ctx, default_equipment)
     )
     month = forced_month or _extract_month_from_context(ctx)
     base = f"{prefix} {equipment} {month}".strip()
@@ -719,8 +721,7 @@ async def contexts_by_excel(
     total = len(items)
     errors_count = total - success_count
     logger.info(
-        f"contexts_by_excel: processed={total} success={success_count} "
-        f"errors={errors_count}"
+        f"contexts_by_excel: processed={total} success={success_count} errors={errors_count}"
     )
 
     return ProtocolContextListOut(items=items)
@@ -926,8 +927,7 @@ async def controllers_pdf_files(
     registry_repo = RegistryRepository(session)
 
     lookup_serials = {
-        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS))
-        for row in rows
+        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS)) for row in rows
     }
     registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
     db_index = _entries_to_index(registry_entries)
@@ -1038,9 +1038,7 @@ async def controllers_pdf_files(
         path = _unique_output_path(exports_dir, base_name)
         path.write_bytes(pdf_bytes)
         saved.append(str(path))
-        logger.info(
-            f"controllers_pdf_files: saved serial={serial or '-'} path={path}"
-        )
+        logger.info(f"controllers_pdf_files: saved serial={serial or '-'} path={path}")
 
     if not saved and pdf_unavailable:
         raise HTTPException(
@@ -1049,9 +1047,7 @@ async def controllers_pdf_files(
 
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:
-        logger.warning(
-            f"controllers_pdf_files: failed serials={', '.join(failed_serials)}"
-        )
+        logger.warning(f"controllers_pdf_files: failed serials={', '.join(failed_serials)}")
 
     logger.info(
         "controllers_pdf_files summary: "
@@ -1125,8 +1121,7 @@ async def manometers_pdf_files(
     registry_repo = RegistryRepository(session)
 
     lookup_serials = {
-        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS))
-        for row in rows
+        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS)) for row in rows
     }
     registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
     db_index = _entries_to_index(registry_entries)
@@ -1242,9 +1237,7 @@ async def manometers_pdf_files(
         path = _unique_output_path(exports_dir, base_name)
         path.write_bytes(pdf_bytes)
         saved.append(str(path))
-        logger.info(
-            f"manometers_pdf_files: saved serial={serial or '-'} path={path}"
-        )
+        logger.info(f"manometers_pdf_files: saved serial={serial or '-'} path={path}")
 
     if not saved and pdf_unavailable:
         raise HTTPException(
@@ -1253,9 +1246,7 @@ async def manometers_pdf_files(
 
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:
-        logger.warning(
-            f"manometers_pdf_files: failed serials={', '.join(failed_serials)}"
-        )
+        logger.warning(f"manometers_pdf_files: failed serials={', '.join(failed_serials)}")
 
     logger.info(
         "manometers_pdf_files summary: "
