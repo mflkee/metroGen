@@ -155,8 +155,14 @@ def _best_matching_entries(name: str) -> list[_SignatureEntry]:
     if not target_tokens:
         return []
 
+    # Для фамилий с инициалами (например, "Тиора В.А.") в приоритете подписи,
+    # где хотя бы фамилия совпадает. Это убирает случайный выбор по общему "А.А."
+    # между Тиорой и Манджеевым.
+    last_name = target_normalized.split()[0]
+
     exact: list[_SignatureEntry] = []
     partial: list[tuple[int, int, _SignatureEntry]] = []
+    scored: list[tuple[int, int, int, _SignatureEntry]] = []
 
     for entry in _signature_entries():
         entry_tokens = set(entry.normalized_tokens)
@@ -166,6 +172,8 @@ def _best_matching_entries(name: str) -> list[_SignatureEntry]:
         common = target_tokens & entry_tokens
         if common:
             partial.append((len(common), len(entry_tokens), entry))
+        last_match = 1 if last_name in entry_tokens else 0
+        scored.append((last_match, len(common), len(entry_tokens), entry))
 
     if exact:
         return exact
@@ -173,7 +181,24 @@ def _best_matching_entries(name: str) -> list[_SignatureEntry]:
     if partial:
         partial.sort(key=lambda item: (-item[0], item[1]))
         best_score = partial[0][0]
-        return [entry for score, _, entry in partial if score == best_score]
+        best_entries = [entry for score, _, entry in partial if score == best_score]
+        # Если среди лучших по общим токенам есть совпадения по фамилии, ограничимся ими.
+        name_matched = [
+            entry for entry in best_entries if last_name and last_name in entry.normalized_tokens
+        ]
+        return name_matched or best_entries
+
+    if scored:
+        scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
+        best = scored[0]
+        best_last, best_common = best[0], best[1]
+        if best_last == 0 and best_common == 0:
+            return []
+        return [
+            entry
+            for last, common, _, entry in scored
+            if last == best_last and common == best_common
+        ]
 
     return []
 

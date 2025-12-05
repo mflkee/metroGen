@@ -18,6 +18,7 @@ def _setup_signature(monkeypatch, tmp_path, filename: str = "Большаков 
     (target_dir / filename).write_bytes(_PIXEL_PNG)
 
     monkeypatch.setattr(settings, "SIGNATURES_DIR", str(target_dir))
+    monkeypatch.setattr(signatures, "_signatures_dirs", lambda: (target_dir,))
     signatures._clear_caches_for_tests()
     return target_dir
 
@@ -51,3 +52,23 @@ def test_get_signature_render_returns_none_when_missing(monkeypatch, tmp_path):
     _setup_signature(monkeypatch, tmp_path, filename="другой.png")
     render = signatures.get_signature_render("Несуществующий Поверитель")
     assert render is None
+
+
+def test_get_signature_render_prefers_last_name_on_partial_match(monkeypatch, tmp_path):
+    target_dir = _setup_signature(monkeypatch, tmp_path, filename="test манджеев а.а..png")
+    # Файл с фамилией поверителя, но без инициалов целиком — пересекается по фамилии.
+    tiora_path = target_dir / "test тиора в.а..png"
+    tiora_path.write_bytes(b"B")  # другое содержимое для уникального data URI
+
+    signatures._clear_caches_for_tests()
+
+    original_rng = signatures._RNG
+    signatures._RNG = random.Random(0)
+    try:
+        render = signatures.get_signature_render("Тиора А.А.")
+    finally:
+        signatures._RNG = original_rng
+
+    expected_src = signatures._data_uri_for(str(tiora_path))
+    assert render is not None
+    assert render.src == expected_src
