@@ -57,3 +57,33 @@ def make_excel():
         return buf.getvalue()
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _clear_global_caches():
+    """Сбрасываем глобальные кеши между тестами, чтобы мокам не мешали сохранённые значения."""
+    try:
+        from app.services.cache import arshin_cache
+        arshin_cache._data.clear()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    try:
+        from app.utils import signatures
+        signatures._clear_caches_for_tests()
+    except Exception:
+        pass
+
+    yield
+
+    try:
+        from app.services.cache import arshin_cache
+        arshin_cache._data.clear()  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    try:
+        from app.utils import signatures
+        signatures._clear_caches_for_tests()
+    except Exception:
+        pass

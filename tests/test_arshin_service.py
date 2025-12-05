@@ -99,3 +99,36 @@ async def test_fetch_vri_retries_on_server_error():
         )
         assert result == VRI_ID
         assert route.call_count == 2
+
+
+@respx.mock
+async def test_fetch_vri_prefers_guessed_year():
+    cert_2023 = "С-ЕЖБ/04-10-2023/289572783"
+    vri_id = "1-289572783"
+
+    # Ответ с year=2023 содержит запись, без year — пусто.
+    respx.get(f"{ARSHIN_BASE}/vri", params={"result_docnum": cert_2023, "year": "2023"}).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "count": 1,
+                    "items": [
+                        {
+                            "vri_id": vri_id,
+                            "result_docnum": cert_2023,
+                            "verification_date": "04.10.2023",
+                            "valid_date": "03.10.2026",
+                        }
+                    ],
+                }
+            },
+        ),
+    )
+    respx.get(f"{ARSHIN_BASE}/vri", params={"result_docnum": cert_2023}).mock(
+        return_value=httpx.Response(200, json={"result": {"count": 0, "items": []}})
+    )
+
+    async with httpx.AsyncClient() as client:
+        result = await fetch_vri_id_by_certificate(client, cert_2023, use_cache=False)
+        assert result == vri_id

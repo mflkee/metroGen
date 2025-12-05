@@ -5,7 +5,7 @@
 ## Ключевые сущности и артефакты
 - **ProtocolContextItem (`app/schemas/protocol.py`)** — единый контракт между сборщиком контекста и слоями экспорта. Содержит исходный сертификат, `vri_id`, подготовленный `context`, сырой ответ Аршина и поле `error`.
 - **Реляционные модели и репозитории (`app/db/models.py`, `app/db/repositories`)** — Owners/Methodologies/VerificationRegistryEntry/Etalon*/Protocol. Репозитории навешивают нормы: нормализация алиасов, idempotent upsert, деактивация устаревших записей.
-- **Аршин-пейлоады (`app/services/arshin_client.py`)** — ответы `fetch_vri_*` и `resolve_etalon_*`, кешируемые в `TTLCache` (`app/services/cache.py`) для снижения нагрузки.
+- **Аршин-пейлоады (`app/services/arshin_client.py`)** — ответы `fetch_vri_*` и `resolve_etalon_*`, кешируемые в `TTLCache` (`app/services/cache.py`) для снижения нагрузки. Для старых свидетельств (`С-*/..-2023/*`) `fetch_vri_id_by_certificate` сначала пробует запрос с годом из номера, затем без года.
 - **Excel-данные (`app/utils/excel.py`)** — чтение строк через `read_rows_as_dicts`/`read_rows_with_required_headers`, извлечение сертификатов (`extract_certificate_number`) и серийных номеров.
 - **Шаблонный слой (`app/services/templates.py`, `app/services/generators/*`, `app/templates/*.html`)** — `resolve_template_id` + `TableGenerator` → сформированная таблица, далее Jinja2/Playwright превращают контекст в HTML/PDF.
 
@@ -73,7 +73,7 @@
   - `setup_logging` заменяет loguru-синк на единый формат.
   - `get_http_client` и `get_semaphore` управляют pooled HTTP клиентами и глобальной конкуренцией.
   - `TTLCache` (15 минут, 4096 записей) используется Аршин-агентом; `normalize_serial`/`sanitize_filename`/`get_named_exports_dir` приводят данные к безопасным ключам/путям.
-  - `get_signature_render` случайно подбирает подписи по имени поверителя, добавляя стили в контекст.
+  - `get_signature_render` подбирает подписи по имени поверителя (приоритет по фамилии/инициалам), добавляя стили в контекст.
 
 ## Типовые сценарии взаимодействия
 1. **Excel → контекст (`/api/v1/protocols/context-by-excel`)**: FastAPI читает Excel, Arshin-agent ищет `vri_id` + детали, Protocol assembly строит `ProtocolContextItem`, ошибки остаются в `error`. Успешные строки дополняются `protocol_number`, шаблонные поля готовят Rendering-слой.
@@ -87,3 +87,5 @@
 - Уточнены роли Registry intake (деактивация записей, `ensure_owner`/`ensure_methodology`) и Data steward (bootstrap, CRUD, автоалиасы) агентов.
 - Добавлены Automation & quality инструменты (CLI import, run_quality_checks, импорт методик) и связанные зависимости.
 - Раздел «Типовые сценарии» расширен HTML предпросмотром и деталями обработки ошибок.
+- Аршин-агент теперь использует год из номера свидетельства перед запросом без года, чтобы находить архивные (2023) поверки.
+- Маппер подписей учитывает фамилию при выборе файлов, чтобы стажёры и поверители получали корректные подписи из `data/signatures`.

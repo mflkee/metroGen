@@ -162,31 +162,54 @@ async def fetch_vri_id_by_certificate(
     Тесты мокают GET {ARSHIN_BASE}/vri (без учёта query),
     поэтому здесь не критично, какие параметры мы реально передадим.
     """
-    params = {"result_docnum": cert}
+    # Для архивных поверок (например, 2023 г.) Arshin иногда требует явный год в query,
+    # иначе возвращает пустой список. Собираем возможные варианты параметров:
+    #   1) явный year из аргумента,
+    #   2) год, угаданный из номера свидетельства,
+    #   3) запрос без year (исторически работал для свежих записей).
+    param_candidates: list[dict[str, str]] = []
+    seen: set[tuple[tuple[str, str], ...]] = set()
+
+    def _push(params: dict[str, str]) -> None:
+        key = tuple(sorted(params.items()))
+        if key not in seen:
+            seen.add(key)
+            param_candidates.append(params)
+
+    base_params = {"result_docnum": cert}
     if year:
-        params["year"] = str(year)
+        _push({**base_params, "year": str(year)})
+    else:
+        guessed = guess_year_from_cert(cert)
+        if guessed:
+            _push({**base_params, "year": str(guessed)})
+    _push(base_params)
 
-    cache_key = ("vri", tuple(sorted(params.items())))
-    if use_cache:
-        cached = arshin_cache.get(cache_key)
-        if cached is not None:
-            return cached
+    for params in param_candidates:
+        cache_key = ("vri", tuple(sorted(params.items())))
+        if use_cache:
+            cached = arshin_cache.get(cache_key)
+            if cached is not None:
+                return cached
 
-    data = await _request_json(
-        client,
-        f"{ARSHIN_BASE}/vri",
-        params=params,
-        sem=sem,
-        description="vri lookup",
-    )
-    items = _safe_get(data, ["result", "items"], default=[])
-    if not items:
-        return None
-    first = items[0] or {}
-    vri_id = first.get("vri_id")
-    if vri_id and use_cache:
-        arshin_cache.set(cache_key, vri_id)
-    return vri_id
+        data = await _request_json(
+            client,
+            f"{ARSHIN_BASE}/vri",
+            params=params,
+            sem=sem,
+            description="vri lookup",
+        )
+        items = _safe_get(data, ["result", "items"], default=[])
+        if not items:
+            continue
+        first = items[0] or {}
+        vri_id = first.get("vri_id")
+        if vri_id and use_cache:
+            arshin_cache.set(cache_key, vri_id)
+        if vri_id:
+            return vri_id
+
+    return None
 
 
 async def fetch_vri_details(
