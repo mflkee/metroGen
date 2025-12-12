@@ -51,6 +51,39 @@ def test_display_allowable_value_prefers_raw_text():
 
 
 @pytest.mark.anyio
+async def test_build_context_rtd_template_extra_fields():
+    excel_row = {
+        "Обозначение СИ": "71040-18",
+        "Заводской номер": "11856/19/1/06",
+        "Методика поверки": "ГОСТ 8.461-2009",
+        "Прочие сведения": "(-196…600) °С",
+    }
+    details = {
+        "miInfo": {
+            "singleMI": {
+                "mitypeTitle": "Термопреобразователи сопротивления",
+                "mitypeNumber": "71040-18",
+            }
+        },
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО НПП",
+        owner_inn="7705550000",
+        allowable_error=0.05,
+        allowable_variation=0.05,
+    )
+
+    assert ctx["template_id"] == "rtd_platinum"
+    assert ctx.get("r0_deviation_pct") is not None
+    assert ctx.get("w100_value") is not None
+
+
+@pytest.mark.anyio
 async def test_build_context_merges_type_and_modification_in_device_info():
     excel_row = {
         "Обозначение СИ": "13535-93",

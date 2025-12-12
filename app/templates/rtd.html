@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RTD протокол</title>
+  </head>
+  <body>
+    <p class="text-center">
+      {{ header_name or 'Общество с ограниченной ответственностью "Многоцелевая Компания. Автоматизация. Исследования. Разработки"' }}
+    </p>
+    <p class="text-center" id="setValue_address">
+      {{ header_address or "Ханты-Мансийский автономный округ - Югра, г.о. Нижневартовск, г Нижневартовск, ул Индустриальная, зд. 32, стр. 1, кабинет 14" }}
+    </p>
+    <p class="text-center">
+      {{ header_accreditation or "Уникальный номер записи об аккредитации в реестре аккредитованных лиц №RA.RU.314356" }}
+    </p>
+    <p class="vh-center bold spread-header">
+      ПРОТОКОЛ ПОВЕРКИ №
+      <span id="setValue_protocolNumber">{{ protocol_number }}</span>
+    </p>
+    <div class="spread-bottom">
+      <p class="line text-center" id="manual_deviceInfo">
+        {{ device_info }}
+      </p>
+      <p class="undertext">
+        наименование, тип (согласно Гос. реестра СИ РФ), если в состав средства измерений входят
+        несколько автономных блоков, то привести их перечень
+      </p>
+    </div>
+    <div class="spread-bottom">
+      <div class="line">
+        <p class="vh-center" id="setValue_deviceTypeNumber">{{ mitypeNumber }}</p>
+      </div>
+      <p class="undertext">номер по Государственному реестру СИ РФ</p>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Заводской номер:</p>
+      </div>
+      <div>
+        <div class="line">
+          <p class="vh-center" id="setValue_deviceSerial">{{ manufactureNum }}</p>
+        </div>
+        <p class="undertext">заводской номер (все цифры и буквы заводского номера)</p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Год выпуска:</p>
+      </div>
+      <div class="line">
+        <p class="vh-center" id="setValue_manufactureYear">{{ manufactureYear }}</p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Принадлежащее:</p>
+      </div>
+      <div>
+        <div class="line">
+          <p class="h-center" style="gap: 10px">
+            <span>
+              <span id="setValue_owner">{{ owner_name }}</span>
+              <span>, ИНН</span>
+            </span>
+            <span id="setValue_ownerINN">{{ owner_inn }}</span>
+          </p>
+        </div>
+        <p class="undertext">
+          наименование юридического/ фамилия имя и отчество физического лица-владельца средства
+          измерений, ИНН/КПП
+        </p>
+      </div>
+    </div>
+    <div class="split-27 spread-bottom">
+      <p>Документ на методику поверки:</p>
+      <div>
+        <p class="line" id="manual_verificationMethodMain">
+          {{ methodology_full }}
+        </p>
+        <p class="undertext">наименование и номер документа</p>
+      </div>
+    </div>
+    {% set etalons = etalon_entries %}
+    {% set first_etalon = etalons[0] if etalons else None %}
+    <div class="split-17 spread-bottom">
+      <p>Средства поверки:</p>
+      <div>
+        {% if first_etalon %}
+        <p class="line" id="manual_etalonsMain">{{ first_etalon.line_top }}</p>
+        {% else %}
+        <p class="line" id="manual_etalonsMain">{{ etalon_line_top }}</p>
+        {% endif %}
+        <p class="undertext">
+          Указываются эталоны единиц величин, обеспечивающие передачу размера единицы величины в
+          соответствии с поверочной схемой
+        </p>
+      </div>
+    </div>
+    <div class="spread-bottom">
+      {% if first_etalon %}
+      <p class="line" id="manual_etalonsAdditional">{{ first_etalon.line_bottom }}</p>
+      {% else %}
+      <p class="line" id="manual_etalonsAdditional">{{ etalon_line_bottom }}</p>
+      {% endif %}
+      <p class="undertext spread-bottom">
+        номер (все цифры и буквы регистрационного номера)
+      </p>
+      {% if first_etalon and first_etalon.certificate_line %}
+      <p class="line" id="manual_etalonsCertificate">{{ first_etalon.certificate_line }}</p>
+      {% elif etalon_certificate_line %}
+      <p class="line" id="manual_etalonsCertificate">{{ etalon_certificate_line }}</p>
+      {% endif %}
+      {% if etalons and etalons|length > 1 %}
+      <div class="etalon-extra">
+        {% for entry in etalons[1:] %}
+        <p class="line">{{ entry.line_top }}</p>
+        {% if entry.line_bottom %}
+        <p class="line">{{ entry.line_bottom }}</p>
+        {% endif %}
+        {% if entry.certificate_line %}
+        <p class="line">{{ entry.certificate_line }}</p>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="spread-bottom" style="margin-top: 0.2rem">
+      <p>Технические характеристики:</p>
+    </div>
+    <div class="split-35 spread-bottom">
+      <div>
+        <p>Верхний предел измерения, Tmax (°С)</p>
+        <p>Предел допускаемого значения основной погрешности</p>
+        <p>Установленный диапазон измерений:</p>
+        <p style="padding-left: 8px">входной измеряемой величины (°С)</p>
+      </div>
+      <div>
+        <p class="line h-center">{{ measurement_range.max or range_max }}</p>
+        <p class="line h-center">
+          {{ allowable_error_fmt }}
+          {% if measurement_unit or unit %}{{ measurement_unit or unit }}{% endif %}
+        </p>
+        <p class="line h-center tech-range-value">
+          {% if measurement_range.min is not none and measurement_range.max is not none %}
+            {{ measurement_range.min }}…{{ measurement_range.max }}
+          {% else %}
+            {{ range_source }}
+          {% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <p>Условия поверки:</p>
+      <div>
+        <p class="line" style="display: flex; gap: 15px">
+          <span>температура окружающего воздуха</span>
+          <span
+            ><span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span
+            >°С</span
+          >
+          <span>относительная влажность</span>
+          <span id="setValue_humidity" data-format="0%">{{ humidity_plain }}</span>
+        </p>
+        <p class="undertext">
+          Указываются влияющие факторы, нормированные в НД на методику поверки, с указанием
+          конкретных показателей (значений)
+        </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div></div>
+      <div class="line">
+        <p style="display: flex; gap: 15px">
+          <span>атмосферное давление</span>
+          <span id="setValue_pressure">{{ pressure }}</span>
+        </p>
+      </div>
+    </div>
+    <div class="spread-bottom" id="manual_checkups">
+      <p class="bold text-center" style="margin-bottom: 0.2rem">Проведение поверки</p>
+      {% if methodology_point_items %}
+        {% for item in methodology_point_items %}
+          {% set description = item.description or '' %}
+          {% if item.point_type == 'bool' %}
+            <p class="manual_checkup">
+              {{ loop.index }}. {{ description or 'Результат проверки' }}:
+              <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+              п. <span class="manual_checkupValue">{{ item.code }}</span> методики поверки
+            </p>
+          {% else %}
+            <p class="manual_checkup">
+              {{ loop.index }}. {{ description or 'Проверка' }} в соответствии с п.
+              <span class="manual_checkupValue">{{ item.code }}</span>
+              методики поверки
+            </p>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="manual_checkup">
+          1. Результат внешнего осмотра:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
+        </p>
+        <p class="manual_checkup">
+          2. Результат опробования:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p2 }}</span> методики поверки
+        </p>
+        <p class="manual_checkup">
+          3. Определение основной погрешности в соответствии с п.
+          <span class="manual_checkupValue">{{ methodology_points.p3 }}</span>
+          методики поверки
+        </p>
+      {% endif %}
+    </div>
+    <table class="spread-bottom-large" id="valuesTable">
+      <thead>
+        <tr class="header-row">
+          <th>№ измерения</th>
+          <th>Заданная температура</th>
+          <th>Расчётный сигнал преобразователя</th>
+          <th>Измеренная температура</th>
+          <th>Выходной сигнал преобразователя</th>
+          <th>Погрешность преобразователя</th>
+          <th>Допустимая погрешность</th>
+        </tr>
+        <tr class="units-row">
+          <th></th>
+          <th>°С</th>
+          <th>Ом</th>
+          <th>°С</th>
+          <th>Ом</th>
+          <th>Ом</th>
+          <th>Ом</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set groups = point_groups or [] %}
+        {% if groups %}
+          {% for group in groups %}
+            {% set span = group.measurements|length %}
+            {% for meas in group.measurements %}
+              {% if loop.first %}
+              <tr>
+                <td>{{ meas.idx }}</td>
+                <td rowspan="{{ span }}">{{ group.set_temp }}</td>
+                <td rowspan="{{ span }}">{{ group.calc_signal }}</td>
+                <td>{{ meas.measured_temp }}</td>
+                <td>{{ meas.measured_signal }}</td>
+                <td>{{ meas.error }}</td>
+                <td rowspan="{{ span }}">{{ group.allowable }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td>{{ meas.idx }}</td>
+                <td>{{ meas.measured_temp }}</td>
+                <td>{{ meas.measured_signal }}</td>
+                <td>{{ meas.error }}</td>
+              </tr>
+              {% endif %}
+            {% endfor %}
+            {% if group.average %}
+            <tr class="avg-row">
+              <td>ср. знач.</td>
+              <td></td>
+              <td></td>
+              <td>{{ group.average.measured_temp }}</td>
+              <td>{{ group.average.measured_signal }}</td>
+              <td>{{ group.average.error }}</td>
+              <td></td>
+            </tr>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          {% for row in table_rows %}
+          <tr>
+            <td>{{ row.idx }}</td>
+            <td>{{ row.set_temp }}</td>
+            <td>{{ row.calc_signal }}</td>
+            <td>{{ row.measured_temp }}</td>
+            <td>{{ row.measured_signal }}</td>
+            <td>{{ row.error }}</td>
+            <td>{{ row.allowable }}</td>
+          </tr>
+          {% endfor %}
+        {% endif %}
+        {% if r0_deviation_pct is defined and r0_deviation_pct %}
+        <tr class="summary-row">
+          <td colspan="3">Полученное отклонение R0, %</td>
+          <td>{{ r0_deviation_pct }}</td>
+          <td colspan="2">Допустимое отклонение R0, %</td>
+          <td>{{ r0_allowable_pct }}</td>
+        </tr>
+        {% endif %}
+        {% if w100_value is defined and w100_value %}
+        <tr class="summary-row">
+          <td colspan="3">Полученное отклонение W100</td>
+          <td>{{ w100_value }}</td>
+          <td colspan="2">Допустимое отклонение W100</td>
+          <td>{{ w100_allowable }}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+    <p class="spread-bottom-large">
+      Заключение: на основании результатов поверки, СИ признано
+      <span class="line">пригодным</span>/<span>непригодным</span>
+      к применению
+    </p>
+    <div class="split-15">
+      <p>Дата поверки:</p>
+      <div>
+        <p class="line h-center" id="setValue_verificationDate">{{ verification_date }}</p>
+        <p class="undertext">Указывается дата поверки в формате ДД.ММ.ГГГГ.</p>
+      </div>
+    </div>
+    {% if trainee_name %}
+    <div class="split-15">
+      <p class="h-left v-bottom" style="padding-bottom: 15px">Измерения произвел стажер:</p>
+      <div class="sign-wrapper">
+        <div class="line sign-slot">
+          <div class="sign-column sign-column-left">
+            <img
+              alt="ПОДПИСЬ СТАЖЕРА"
+              id="trainee_sign"
+              src="{{ trainee_sign_src or '' }}"
+              style="width: auto; {{ trainee_sign_style or 'display: none;' }}"
+            />
+          </div>
+          <div class="sign-column sign-column-right">
+            <p class="sign-name">
+              <span class="v-bottom">{{ trainee_name }}</span>
+            </p>
+          </div>
+        </div>
+        <div class="sign-undertext">
+          <p class="sign-label sign-label-left">(подпись)</p>
+          <p class="sign-label sign-label-right">(фамилия, инициалы)</p>
+        </div>
+        {% if trainee_note %}
+        <p class="sign-note">{{ trainee_note }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="split-15">
+      <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
+      <div class="sign-wrapper">
+        <div class="line sign-slot">
+          <div class="sign-column sign-column-left">
+            <img
+              alt="ПОДПИСЬ"
+              id="sign"
+              src="{{ sign_src or '' }}"
+              style="width: auto; {{ sign_style or 'display: none;' }}"
+            />
+          </div>
+          <div class="sign-column sign-column-right">
+            <p class="sign-name">
+              <span class="v-bottom" id="setValue_worker">{{ verifier_name }}</span>
+            </p>
+          </div>
+        </div>
+        <div class="sign-undertext">
+          <p class="sign-label sign-label-left">(подпись)</p>
+          <p class="sign-label sign-label-right">(фамилия, инициалы)</p>
+        </div>
+      </div>
+    </div>
+  </body>
+  <style>
+    @page {
+      size: A4 portrait;
+    }
+    body {
+      padding: 1rem 1.5rem;
+    }
+    p {
+      padding: 0;
+      margin: 0;
+      font-family: "Times New Roman";
+      font-size: 12px;
+    }
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+      margin: 0 auto;
+      font-size: 12px;
+    }
+    #valuesTable,
+    #valuesTable th,
+    #valuesTable td {
+      border: 0.5pt solid #555;
+    }
+    #valuesTable th,
+    #valuesTable td {
+      text-align: center;
+    }
+    #valuesTable .units-row th,
+    #valuesTable .header-row th {
+      border-width: 0.5pt;
+      padding: 4px;
+    }
+    #valuesTable .avg-row td {
+      font-style: italic;
+    }
+    #valuesTable .summary-row td {
+      font-weight: bold;
+    }
+    .spread-header {
+      margin-top: 1.4rem;
+      margin-bottom: 1.4rem;
+      text-align: center;
+    }
+    .spread-bottom {
+      margin-bottom: 0.2rem;
+    }
+    .spread-bottom-large {
+      margin-bottom: 0.7rem;
+    }
+    .split-15 {
+      display: flex;
+    }
+    .split-15 > *:first-child {
+      flex: 0 0 15%;
+    }
+    .split-15 > *:last-child {
+      flex: 0 0 85%;
+    }
+    .split-17 {
+      display: flex;
+    }
+    .split-17 > *:first-child {
+      flex: 0 0 17%;
+    }
+    .split-17 > *:last-child {
+      flex: 0 0 83%;
+    }
+    .split-20 {
+      display: flex;
+    }
+    .split-20 > *:first-child {
+      flex: 0 0 20%;
+    }
+    .split-20 > *:last-child {
+      flex: 0 0 80%;
+    }
+    .split-25 {
+      display: flex;
+    }
+    .split-25 > *:first-child {
+      flex: 0 0 25%;
+    }
+    .split-25 > *:last-child {
+      flex: 0 0 75%;
+    }
+    .split-27 {
+      display: flex;
+    }
+    .split-27 > *:first-child {
+      flex: 0 0 27%;
+    }
+    .split-27 > *:last-child {
+      flex: 0 0 73%;
+    }
+    .split-30 {
+      display: flex;
+    }
+    .split-30 > *:first-child {
+      flex: 0 0 30%;
+    }
+    .split-30 > *:last-child {
+      flex: 0 0 70%;
+    }
+    .etalon-extra {
+      margin-top: 0.2rem;
+    }
+    .etalon-extra p {
+      margin-top: 0.1rem;
+    }
+    .tech-range-value {
+      margin-top: 0.5rem;
+    }
+    .split-35 {
+      display: flex;
+    }
+    .split-35 > *:first-child {
+      flex: 0 0 35%;
+    }
+    .split-35 > *:last-child {
+      flex: 0 0 65%;
+    }
+    .split-50 {
+      display: flex;
+      justify-content: space-between;
+    }
+    .split-50 > * {
+      flex: 1;
+    }
+    .split-60 {
+      display: flex;
+    }
+    .split-60 > *:first-child {
+      flex: 0 0 60%;
+    }
+    .split-60 > *:last-child {
+      flex: 0 0 40%;
+    }
+    .v-center {
+      display: flex;
+      align-items: center;
+    }
+    .v-bottom {
+      display: flex;
+      align-items: flex-end;
+    }
+    .h-center {
+      display: flex;
+      justify-content: center;
+    }
+    .h-bottom {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .vh-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .undertext {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      font-size: 0.5rem;
+    }
+    .manual_checkup {
+      margin-bottom: 0.1rem;
+    }
+    .text-stretch {
+      text-align: justify;
+    }
+    .text-center {
+      text-align: center;
+    }
+    .bold {
+      font-weight: bold;
+    }
+    .line {
+      border-bottom: 1px solid black;
+    }
+    .sign-wrapper {
+      position: relative;
+      margin-top: 0.5rem;
+    }
+    .sign-slot {
+      position: relative;
+      min-height: 90px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      padding: 0.4rem 1rem 0.2rem;
+    }
+    .sign-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.3rem;
+    }
+    .sign-column-left {
+      align-items: flex-start;
+      width: 50%;
+    }
+    .sign-column-right {
+      align-items: center;
+      text-align: center;
+      width: 50%;
+    }
+    .sign-name {
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 0.2rem;
+      text-align: center;
+    }
+    .sign-undertext {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 1rem;
+      margin-top: 0.1rem;
+      font-size: 0.5rem;
+    }
+    .sign-label {
+      width: 50%;
+      text-align: center;
+    }
+    .sign-note {
+      margin-top: 0.1rem;
+      text-align: center;
+      font-size: 0.55rem;
+      line-height: 1.2;
+    }
+    #sign,
+    #trainee_sign {
+      position: absolute;
+      width: auto;
+      mix-blend-mode: multiply;
+      pointer-events: none;
+    }
+  </style>
+</html>

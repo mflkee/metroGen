@@ -67,6 +67,8 @@ def _template_name_from_context(ctx: dict[str, Any]) -> str:
         return "controller_43790_12.html"
     if tpl_id == "pressure_common":
         return "pressure.html"
+    if tpl_id == "rtd_platinum":
+        return "rtd.html"
     return "pressure.html"
 
 
@@ -87,6 +89,7 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("humidity_plain", ctx.get("humidity"))
     ctx.setdefault("allowable_note", "")
     ctx.setdefault("table_rows", [])
+    ctx.setdefault("point_groups", [])
     ctx.setdefault("etalon_entries", [])
     ctx.setdefault("etalon_lines", [])
     ctx.setdefault("etalon_certificates", [])
