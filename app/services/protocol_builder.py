@@ -765,8 +765,18 @@ async def build_context(
                 or f"{float(context['allowable_variation_pct']):.2f}",
             }
         )
+        if "point_groups" in gout:
+            context["point_groups"] = gout.get("point_groups") or []
         if "allowable_note" in gout:
             context["allowable_note"] = gout["allowable_note"]
+        for extra_key in (
+            "r0_deviation_pct",
+            "r0_allowable_pct",
+            "w100_value",
+            "w100_allowable",
+        ):
+            if extra_key in gout:
+                context[extra_key] = gout[extra_key]
 
     trainee_name = _pick_trainee_name(
         context.get("verifier_name"),

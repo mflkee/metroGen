@@ -730,6 +730,7 @@ async def contexts_by_excel(
 _INSTRUMENT_META = {
     "manometers": {"source_sheet": "manometers", "strict_certificate_match": True},
     "controllers": {"source_sheet": "controllers", "strict_certificate_match": False},
+    "thermometers": {"source_sheet": "thermometers", "strict_certificate_match": True},
 }
 
 
@@ -749,6 +750,14 @@ def _detect_instrument_kind(row: Mapping[str, Any]) -> str:
         if value_text:
             text_parts.append(value_text)
     combined = " ".join(text_parts).upper()
+    if (
+        "ТЕРМОПРЕОБРАЗ" in combined
+        or "ТЕРМОМЕТР" in combined
+        or "RTD" in combined
+        or "TE" in combined
+        or "71040" in combined
+    ):
+        return "thermometers"
     if "43790-12" in combined or "КОНТРОЛЛЕР" in combined or "СГМ" in combined:
         return "controllers"
     return "manometers"
@@ -1314,6 +1323,306 @@ async def manometers_html_preview(
         )
         logger.info(
             "manometers_html_preview: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
+        )
+
+    registry_repo = RegistryRepository(session)
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row_data, SERIAL_SOURCE_KEYS)) for row_data in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
+
+    session_factory = _make_worker_session_factory(session)
+    normalized_serial = normalize_serial(_extract_first_value(target_row, SERIAL_SOURCE_KEYS))
+    db_entries = db_index.get(normalized_serial or "")
+
+    context_item = await _build_context_from_db(
+        target_row,
+        db_entries=db_entries,
+        client=client,
+        sem=sem,
+        session_factory=session_factory,
+        strict_certificate_match=True,
+    )
+    if context_item.error or not context_item.context:
+        raise HTTPException(
+            status_code=502,
+            detail=context_item.error or "failed to build context",
+        )
+
+    ctx = dict(context_item.context)
+    if not ctx.get("protocol_number"):
+        ctx["protocol_number"] = make_protocol_number(
+            ctx.get("verifier_name"),
+            ctx.get("verification_date"),
+            row_index,
+        )
+
+    html = render_protocol_html(ctx)
+
+    out_dir = get_output_dir()
+    base_name = suggest_filename(ctx) or suggest_filename(target_row) or "protocol-preview"
+    if not base_name.lower().endswith(".html"):
+        base_name = f"{base_name}.html"
+    out_path = _unique_output_path(out_dir, base_name)
+    out_path.write_text(html, encoding="utf-8")
+
+    return HTMLResponse(content=html, media_type="text/html")
+
+
+@router.post("/thermometers/pdf-files")
+async def thermometers_pdf_files(
+    thermometers_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+    session: AsyncSession = Depends(get_db),
+):
+    overall_started = time.perf_counter()
+    thermometers_data = await thermometers_file.read()
+    db_data = await db_file.read() if db_file is not None else None
+
+    if not thermometers_data:
+        raise HTTPException(status_code=400, detail="empty thermometers file")
+    if db_file is not None and not db_data:
+        raise HTTPException(status_code=400, detail="empty db file")
+
+    rows = read_rows_as_dicts(thermometers_data)
+    if not rows:
+        return {"files": [], "count": 0, "errors": []}
+
+    logger.info(
+        f"thermometers_pdf_files: loaded {len(rows)} thermometer rows "
+        f"(db_file={'yes' if db_file else 'no'})"
+    )
+
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
+
+        logger.info(
+            f"thermometers_pdf_files: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="thermometers",
+        )
+        logger.info(
+            "thermometers_pdf_files: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
+        )
+
+    registry_repo = RegistryRepository(session)
+
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS)) for row in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
+    registry_matches = sum(len(v) for v in registry_entries.values())
+    logger.info(
+        "thermometers_pdf_files: registry index ready "
+        f"serials={len(lookup_serials)} entries={registry_matches}"
+    )
+    session_factory = _make_worker_session_factory(session)
+
+    async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
+        serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
+        normalized_serial = normalize_serial(serial)
+        db_entries = db_index.get(normalized_serial or "")
+        return await _build_context_from_db(
+            row,
+            db_entries=db_entries,
+            client=client,
+            sem=sem,
+            session_factory=session_factory,
+            strict_certificate_match=True,
+        )
+
+    build_started = time.perf_counter()
+    items = await _build_contexts_concurrently(
+        rows,
+        process_row,
+        label="thermometers_pdf_files",
+    )
+    items = await _retry_context_rows(
+        rows,
+        items,
+        process_row,
+        label="thermometers_pdf_files",
+    )
+    build_elapsed = time.perf_counter() - build_started
+    total_items = len(items)
+    success_contexts = sum(1 for item in items if not item.error)
+    logger.info(
+        "thermometers_pdf_files: contexts ready "
+        f"success={success_contexts} failed={total_items - success_contexts} "
+        f"({build_elapsed:.2f}s)"
+    )
+
+    forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
+    run_id = _make_run_id()
+    pdf_unavailable = False
+    saved: list[str] = []
+    errors: list[dict[str, object]] = []
+
+    run_month = _resolve_run_month(forced_month, items)
+    folder_label = _exports_folder_label(
+        {},
+        default_equipment="rtd",
+        forced_month=run_month,
+        use_default_only=True,
+        prefix="Generation",
+        run_id=run_id,
+        label_override="rtd",
+    )
+    exports_dir = get_named_exports_dir(folder_label)
+
+    logger.info(
+        "thermometers_pdf_files: starting export for "
+        f"{total_items} devices (run_id={run_id} folder='{exports_dir.name}' month={run_month})"
+    )
+
+    for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
+        ctx = it.context or {}
+        serial = _extract_first_value(src_row, SERIAL_SOURCE_KEYS)
+        logger.info(
+            "thermometers_pdf_files: processing "
+            f"row={idx}/{total_items} serial={serial or '-'} certificate={it.certificate or '-'}"
+        )
+
+        if it.error or not ctx:
+            errors.append(
+                {
+                    "row": idx,
+                    "serial": serial,
+                    "certificate": it.certificate,
+                    "reason": it.error or "empty context",
+                }
+            )
+            logger.warning(
+                "thermometers_pdf_files: skipped "
+                f"serial={serial or '-'} row={idx} reason={it.error or 'empty context'}"
+            )
+            continue
+
+        if not ctx.get("protocol_number"):
+            ctx["protocol_number"] = make_protocol_number(
+                ctx.get("verifier_name"),
+                ctx.get("verification_date"),
+                len(saved) + 1,
+            )
+
+        html = render_protocol_html(ctx)
+        pdf_bytes = await html_to_pdf_bytes(html)
+        if not pdf_bytes:
+            pdf_unavailable = True
+            errors.append(
+                {
+                    "row": idx,
+                    "serial": serial,
+                    "certificate": it.certificate,
+                    "reason": "pdf generation unavailable",
+                }
+            )
+            continue
+
+        base_name = _context_pdf_filename(ctx)
+        path = _unique_output_path(exports_dir, base_name)
+        path.write_bytes(pdf_bytes)
+        saved.append(str(path))
+        logger.info(f"thermometers_pdf_files: saved serial={serial or '-'} path={path}")
+
+    if not saved and pdf_unavailable:
+        raise HTTPException(
+            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
+        )
+
+    failed_serials = [str(item.get("serial") or "-") for item in errors]
+    if failed_serials:
+        logger.warning(f"thermometers_pdf_files: failed serials={', '.join(failed_serials)}")
+
+    logger.info(
+        "thermometers_pdf_files summary: "
+        f"total={total_items} success={len(saved)} failed={len(errors)} "
+        f"pdf_unavailable={pdf_unavailable}"
+    )
+
+    total_elapsed = time.perf_counter() - overall_started
+    logger.info(
+        "thermometers_pdf_files: finished in "
+        f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
+    )
+
+    return {"files": saved, "count": len(saved), "errors": errors}
+
+
+@router.post("/thermometers/html-preview", response_class=HTMLResponse)
+async def thermometers_html_preview(
+    thermometers_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
+    row: int = 1,
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+    session: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Рендерит HTML по данным thermometers_file/db_file для выбранной строки."""
+
+    thermometers_data = await thermometers_file.read()
+    db_data = await db_file.read() if db_file is not None else None
+
+    if not thermometers_data:
+        raise HTTPException(status_code=400, detail="empty thermometers file")
+    if db_file is not None and not db_data:
+        raise HTTPException(status_code=400, detail="empty db file")
+
+    rows = read_rows_as_dicts(thermometers_data)
+    if not rows:
+        raise HTTPException(status_code=400, detail="no rows in thermometers file")
+
+    row_index = max(1, row)
+    if row_index > len(rows):
+        raise HTTPException(status_code=400, detail="row index is out of range")
+    target_row = dict(rows[row_index - 1])
+
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
+
+        logger.info(
+            f"thermometers_html_preview: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="thermometers",
+        )
+        logger.info(
+            "thermometers_html_preview: registry ingest finished "
             f"processed={ingest_result.get('processed', 0)} "
             f"deactivated={ingest_result.get('deactivated', 0)} "
             f"({time.perf_counter() - ingest_started:.2f}s)"
