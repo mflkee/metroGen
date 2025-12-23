@@ -86,6 +86,20 @@ def _extract_header(ws, header_row: int) -> list[str]:
     header: list[str] = []
     for cell in ws[header_row]:
         val = cell.value
+        if val is None and ws.merged_cells.ranges:
+            for merged in ws.merged_cells.ranges:
+                if cell.coordinate in merged:
+                    val = ws.cell(merged.min_row, merged.min_col).value
+                    break
+        if val is None or str(val).strip() == "":
+            for offset in range(1, 3):
+                probe_row = header_row - offset
+                if probe_row < 1:
+                    break
+                probe_val = ws.cell(probe_row, cell.column).value
+                if probe_val is not None and str(probe_val).strip():
+                    val = probe_val
+                    break
         header.append(str(val).strip() if val is not None else "")
     return header
 

@@ -111,6 +111,15 @@ VERIFIER_SOURCE_KEYS: tuple[str, ...] = (
     "worker",
 )
 
+PROTOCOL_SOURCE_KEYS: tuple[str, ...] = (
+    "номер_протокола",
+    "номер протокола",
+    "№ протокола",
+    "№протокола",
+    "№ проток.",
+    "номер прот.",
+)
+
 
 def _extract_month_from_filename(filename: str | None) -> str | None:
     if not filename:
@@ -355,18 +364,49 @@ def _extract_first_value(row: Mapping[str, Any], keys: Iterable[str]) -> str:
     if not isinstance(row, Mapping):
         row = dict(row)
 
-    pairs = [(str(key), row[key]) for key in row.keys() if isinstance(key, str)]
+    def _normalize_key(value: str) -> str:
+        text = str(value).replace("\xa0", " ").replace("_", " ")
+        text = re.sub(r"\s+", " ", text).strip().lower()
+        return text
+
+    normalized: dict[str, Any] = {}
+    for raw_key, value in row.items():
+        if not isinstance(raw_key, str):
+            continue
+        if value is None:
+            continue
+        normalized[_normalize_key(raw_key)] = value
 
     for candidate in keys:
-        norm = candidate.strip().lower()
-        for raw_key, value in pairs:
-            if value is None:
-                continue
-            if raw_key.strip().lower() != norm:
-                continue
-            text = str(value).strip()
-            if text:
-                return text
+        value = normalized.get(_normalize_key(candidate))
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _extract_protocol_number(row: Mapping[str, Any]) -> str:
+    protocol_number = _extract_first_value(row, PROTOCOL_SOURCE_KEYS)
+    if protocol_number:
+        return protocol_number
+
+    if not isinstance(row, Mapping):
+        row = dict(row)
+
+    for raw_key, value in row.items():
+        if not isinstance(raw_key, str):
+            continue
+        if value is None:
+            continue
+        normalized = re.sub(r"\s+", " ", raw_key.replace("\xa0", " ")).strip().lower()
+        if "протокол" not in normalized:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+
     return ""
 
 
@@ -507,7 +547,16 @@ async def _build_context_from_db(
             error="certificate number missing in db",
         )
 
-    protocol_number = str(db_row.get("номер_протокола") or "").strip()
+    protocol_number = _extract_protocol_number(db_row)
+    if not protocol_number:
+        return ProtocolContextItem(
+            certificate=cert,
+            vri_id="",
+            filename=filename,
+            context={},
+            raw_details={},
+            error="protocol number missing in db",
+        )
 
     excel_cert = extract_certificate_number(row_data)
     if (

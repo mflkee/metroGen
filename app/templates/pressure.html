@@ -156,7 +156,7 @@
         <p class="manual_checkup">
           1. Результаты внешнего осмотра:
           <span class="manual_checkup-fail">НЕ соответствует</span>
-          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки{% if methodology_full %} {{ methodology_full }}{% endif %}
         </p>
       {% elif methodology_point_items %}
         {% for item in methodology_point_items %}
