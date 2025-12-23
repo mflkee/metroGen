@@ -138,6 +138,24 @@ def _fmt_date_ddmmyyyy(value: Any) -> str:
     return txt
 
 
+def _parse_date_value(value: Any) -> date | None:
+    if not value:
+        return None
+    if isinstance(value, date):
+        return value if not isinstance(value, datetime) else value.date()
+    txt = str(value).strip()
+    try:
+        return datetime.fromisoformat(txt.replace("Z", "")).date()
+    except Exception:
+        pass
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%d.%m.%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(txt, fmt).date()
+        except Exception:
+            continue
+    return None
+
+
 def _split_first_notation(s: str) -> str:
     """
     'ЭЛМЕТРО-Паскаль-04, Паскаль-04' → 'ЭЛМЕТРО-Паскаль-04'
@@ -339,23 +357,43 @@ async def resolve_etalon_certs_from_details(
     results: list[dict[str, str]] = []
 
     async def _query(params: dict[str, str]) -> dict[str, str] | None:
-        cache_key = ("eta_cert_v2", tuple(sorted((str(k), str(v)) for k, v in params.items())))
+        cache_key = ("eta_cert_v3", tuple(sorted((str(k), str(v)) for k, v in params.items())))
         cached = arshin_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        data = await _request_json(
-            client,
-            f"{ARSHIN_BASE}/vri",
-            params=params,
-            sem=sem,
-            description="etalon certificate lookup",
-        )
-        items = _safe_get(data, ["result", "items"], default=[]) or []
-        if not items:
+        items_all: list[dict[str, Any]] = []
+        start = 0
+        rows = 100
+        max_total = 1000
+
+        while True:
+            page_params = dict(params)
+            page_params.setdefault("rows", rows)
+            page_params["start"] = start
+
+            data = await _request_json(
+                client,
+                f"{ARSHIN_BASE}/vri",
+                params=page_params,
+                sem=sem,
+                description="etalon certificate lookup",
+            )
+            items = _safe_get(data, ["result", "items"], default=[]) or []
+            items_all.extend(items)
+
+            total = _safe_get(data, ["result", "count"], default=len(items_all)) or len(items_all)
+            start += rows
+
+            if start >= total or not items or len(items_all) >= max_total:
+                break
+
+        if not items_all:
             return None
 
-        for it in items:
+        candidates: list[dict[str, Any]] = []
+
+        for it in items_all:
             if not isinstance(it, dict):
                 continue
             cert = it.get("result_docnum")
@@ -370,16 +408,32 @@ async def resolve_etalon_certs_from_details(
             if vrf_date:
                 base_line = f"{base_line} от {vrf_date}г."
             line = f"{base_line}; действительно до {valid_date}г."
-            result = {
-                "docnum": cert,
-                "verification_date": vrf_date,
-                "valid_date": valid_date,
-                "line": line,
-            }
-            arshin_cache.set(cache_key, result)
-            return result
+            valid_dt = _parse_date_value(valid_date_raw)
+            vrf_dt = _parse_date_value(vrf_date_raw)
+            candidates.append(
+                {
+                    "docnum": cert,
+                    "verification_date": vrf_date,
+                    "valid_date": valid_date,
+                    "line": line,
+                    "_valid_dt": valid_dt,
+                    "_vrf_dt": vrf_dt,
+                }
+            )
 
-        return None
+        if not candidates:
+            return None
+
+        def _score(item: dict[str, Any]) -> tuple[date, date]:
+            valid_dt = item.get("_valid_dt") or item.get("_vrf_dt") or date.min
+            vrf_dt = item.get("_vrf_dt") or date.min
+            return valid_dt, vrf_dt
+
+        best = max(candidates, key=_score)
+        best.pop("_valid_dt", None)
+        best.pop("_vrf_dt", None)
+        arshin_cache.set(cache_key, best)
+        return best
 
     seen_queries: set[tuple[tuple[str, str], ...]] = set()
 
@@ -389,6 +443,8 @@ async def resolve_etalon_certs_from_details(
         mi_number = str(entry.get("manufactureNum") or "").strip()
         if not (mit_number and mi_number):
             continue
+
+        entry_candidates: list[dict[str, Any]] = []
 
         base_params: dict[str, str] = {
             "mit_number": mit_number,
@@ -404,23 +460,50 @@ async def resolve_etalon_certs_from_details(
         if notation:
             base_params["mit_notation"] = notation
 
-        manufacture_year = entry.get("manufactureYear")
-        candidate_params: list[dict[str, str]] = []
-        if manufacture_year:
-            candidate_params.append({**base_params, "year": str(manufacture_year)})
-        candidate_params.append(dict(base_params))
+        # Build param variants with different optional filters to avoid missing records
+        optional_fields = [
+            ("mit_title", base_params.get("mit_title")),
+            ("mi_modification", base_params.get("mi_modification")),
+            ("mit_notation", base_params.get("mit_notation")),
+        ]
 
-        # Optionally try guessed year from device certificate if available
+        mandatory_params = {"mit_number": mit_number, "mi_number": mi_number}
+        param_variants: list[dict[str, str]] = []
+
+        # All combinations of optional fields (0..2^n - 1)
+        for mask in range(1 << len(optional_fields)):
+            params = dict(mandatory_params)
+            for idx, (key, value) in enumerate(optional_fields):
+                if not value:
+                    continue
+                if mask & (1 << idx):
+                    params[key] = value
+            param_variants.append(params)
+
+        # Add year variants
+        manufacture_year = entry.get("manufactureYear")
+        year_candidates: list[int | None] = [None]
+        if manufacture_year:
+            year_candidates.append(int(manufacture_year))
         cert_num = _safe_get(details, ["vriInfo", "applicable", "certNum"], "")
         guessed_year = guess_year_from_cert(cert_num)
         if guessed_year and guessed_year != manufacture_year:
-            candidate_params.insert(0, {**base_params, "year": str(guessed_year)})
+            year_candidates.append(guessed_year)
+
+        candidate_params: list[dict[str, str]] = []
+        seen_queries: set[tuple[tuple[str, str], ...]] = set()
+        for base in param_variants:
+            for year in year_candidates:
+                params = dict(base)
+                if year:
+                    params["year"] = str(year)
+                key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
+                if key in seen_queries:
+                    continue
+                seen_queries.add(key)
+                candidate_params.append(params)
 
         for params in candidate_params:
-            key = tuple(sorted((str(k), str(v)) for k, v in params.items()))
-            if key in seen_queries:
-                continue
-            seen_queries.add(key)
             result = await _query(params)
             if result:
                 enriched = dict(result)
@@ -428,8 +511,22 @@ async def resolve_etalon_certs_from_details(
                 enriched.setdefault("manufacture_num", mi_number)
                 enriched.setdefault("mitype_number", mit_number)
                 enriched.setdefault("mitype_title", base_params.get("mit_title", ""))
-                results.append(enriched)
-                break
+                enriched["_valid_dt"] = _parse_date_value(result.get("valid_date"))
+                enriched["_vrf_dt"] = _parse_date_value(result.get("verification_date"))
+                entry_candidates.append(enriched)
+
+        if entry_candidates:
+            entry_candidates.sort(
+                key=lambda item: (
+                    item.get("_valid_dt") or item.get("_vrf_dt") or date.min,
+                    item.get("_vrf_dt") or date.min,
+                ),
+                reverse=True,
+            )
+            best = dict(entry_candidates[0])
+            best.pop("_valid_dt", None)
+            best.pop("_vrf_dt", None)
+            results.append(best)
 
     return results
 

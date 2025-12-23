@@ -7,6 +7,7 @@ from app.services.arshin_client import (
     extract_detail_fields,
     fetch_vri_details,
     fetch_vri_id_by_certificate,
+    resolve_etalon_certs_from_details,
 )
 
 CERT = "С-ВЯ/15-01-2025/402123271"
@@ -132,3 +133,238 @@ async def test_fetch_vri_prefers_guessed_year():
     async with httpx.AsyncClient() as client:
         result = await fetch_vri_id_by_certificate(client, cert_2023, use_cache=False)
         assert result == vri_id
+
+
+@respx.mock
+async def test_resolve_etalon_certs_prefers_latest_valid_date():
+    details = {
+        "means": {
+            "mieta": [
+                {
+                    "mitypeNumber": "65779-16",
+                    "mitypeTitle": "Калибраторы температуры",
+                    "manufactureNum": "120",
+                    "manufactureYear": 2020,
+                }
+            ]
+        }
+    }
+
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120"},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "items": [
+                        {
+                            "result_docnum": "OLD",
+                            "verification_date": "01.01.2020",
+                            "valid_date": "01.01.2021",
+                        },
+                        {
+                            "result_docnum": "NEW",
+                            "verification_date": "01.02.2025",
+                            "valid_date": "01.02.2027",
+                        },
+                    ]
+                }
+            },
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        certs = await resolve_etalon_certs_from_details(client, details, sem=None)
+
+    assert certs
+    assert certs[0]["docnum"] == "NEW"
+    assert certs[0]["valid_date"] == "01.02.2027"
+
+
+@respx.mock
+async def test_resolve_etalon_certs_tries_multiple_year_variants():
+    details = {
+        "vriInfo": {"applicable": {"certNum": "С-ВЯ/15-01-2025/402123271"}},
+        "means": {
+            "mieta": [
+                {
+                    "mitypeNumber": "65779-16",
+                    "mitypeTitle": "Калибраторы температуры",
+                    "manufactureNum": "120",
+                    "manufactureYear": 2020,
+                }
+            ]
+        },
+    }
+
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120"},
+    ).mock(return_value=httpx.Response(200, json={"result": {"items": []}}))
+
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120", "year": "2020"},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "items": [
+                        {
+                            "result_docnum": "OLD",
+                            "verification_date": "01.01.2020",
+                            "valid_date": "01.01.2021",
+                        }
+                    ]
+                }
+            },
+        )
+    )
+
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120", "year": "2025"},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "items": [
+                        {
+                            "result_docnum": "NEW",
+                            "verification_date": "15.01.2025",
+                            "valid_date": "2025-01-15T00:00:00+03:00",
+                        }
+                    ]
+                }
+            },
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        certs = await resolve_etalon_certs_from_details(client, details, sem=None)
+
+    assert certs
+    assert certs[0]["docnum"] == "NEW"
+
+
+@respx.mock
+async def test_resolve_etalon_certs_handles_pagination_and_picks_latest():
+    details = {
+        "means": {
+            "mieta": [
+                {
+                    "mitypeNumber": "65779-16",
+                    "mitypeTitle": "Калибраторы температуры",
+                    "manufactureNum": "120",
+                }
+            ]
+        }
+    }
+
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120", "rows": 100, "start": 0},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "count": 2,
+                    "items": [
+                        {
+                            "result_docnum": "OLD",
+                            "verification_date": "01.01.2020",
+                            "valid_date": "01.01.2021",
+                        }
+                    ],
+                }
+            },
+        )
+    )
+
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120", "rows": 100, "start": 100},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "count": 2,
+                    "items": [
+                        {
+                            "result_docnum": "NEW",
+                            "verification_date": "01.02.2025",
+                            "valid_date": "01.02.2027",
+                        }
+                    ],
+                }
+            },
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        certs = await resolve_etalon_certs_from_details(client, details, sem=None)
+
+    assert certs
+    assert certs[0]["docnum"] == "NEW"
+
+
+@respx.mock
+async def test_resolve_etalon_certs_falls_back_when_optional_filters_too_strict():
+    details = {
+        "means": {
+            "mieta": [
+                {
+                    "mitypeNumber": "65779-16",
+                    "mitypeTitle": "Калибраторы температуры",
+                    "modification": "КТ-5.1",
+                    "manufactureNum": "120",
+                }
+            ]
+        }
+    }
+
+    # Query with modification returns nothing
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={
+            "mit_number": "65779-16",
+            "mi_number": "120",
+            "mi_modification": "КТ-5.1",
+            "rows": 100,
+            "start": 0,
+        },
+    ).mock(return_value=httpx.Response(200, json={"result": {"count": 0, "items": []}}))
+
+    # Query without modification returns the needed record
+    respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-16", "mi_number": "120", "rows": 100, "start": 0},
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "count": 1,
+                    "items": [
+                        {
+                            "result_docnum": "NEW",
+                            "verification_date": "01.02.2025",
+                            "valid_date": "01.02.2027",
+                        }
+                    ],
+                }
+            },
+        )
+    )
+
+    async with httpx.AsyncClient() as client:
+        certs = await resolve_etalon_certs_from_details(client, details, sem=None)
+
+    assert certs
+    assert certs[0]["docnum"] == "NEW"
