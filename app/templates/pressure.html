@@ -152,7 +152,13 @@
       </div>
     </div>
     <div class="spread-bottom" id="manual_checkups">
-      {% if methodology_point_items %}
+      {% if verification_failed %}
+        <p class="manual_checkup">
+          1. Результаты внешнего осмотра:
+          <span class="manual_checkup-fail">НЕ соответствует</span>
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
+        </p>
+      {% elif methodology_point_items %}
         {% for item in methodology_point_items %}
           {% set description = item.description or '' %}
           {% if item.point_type == 'bool' %}
@@ -187,6 +193,7 @@
         </p>
       {% endif %}
     </div>
+    {% if not hide_results_table %}
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
         <tr>
@@ -226,11 +233,20 @@
         {% endfor %}
       </tbody>
     </table>
+    {% endif %}
+    {% if verification_failed %}
+    <p class="spread-bottom-large">
+      Заключение: на основании результатов поверки, СИ
+      <span class="line">{{ conclusion_text or "не годен" }}</span>
+      к применению
+    </p>
+    {% else %}
     <p class="spread-bottom-large">
       Заключение: на основании результатов поверки, СИ признано
       <span class="line">пригодным</span>/<span>непригодным</span>
       к применению
     </p>
+    {% endif %}
     <div class="split-15">
       <p>Дата поверки:</p>
       <div>
@@ -461,6 +477,10 @@
     }
     .bold {
       font-weight: bold;
+    }
+    .manual_checkup-fail {
+      font-weight: bold;
+      text-decoration-line: underline;
     }
     .line {
       border-bottom: 1px solid black;
