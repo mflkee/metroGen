@@ -270,6 +270,15 @@ def _context_pdf_filename(ctx: Mapping[str, Any]) -> str:
     return safe_name
 
 
+def _mark_failed_context(ctx: Mapping[str, Any]) -> dict[str, Any]:
+    payload = dict(ctx)
+    payload["verification_failed"] = True
+    payload["hide_results_table"] = True
+    payload["conclusion_text"] = "не годен"
+    payload["table_rows"] = []
+    return payload
+
+
 def _registry_entry_sort_key(entry: Mapping[str, Any]) -> tuple:
     ver_date = entry.get("verification_date") or date.min
     loaded_at = entry.get("loaded_at") or datetime.min
@@ -1266,6 +1275,208 @@ async def manometers_pdf_files(
     total_elapsed = time.perf_counter() - overall_started
     logger.info(
         "manometers_pdf_files: finished in "
+        f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
+    )
+
+    return {"files": saved, "count": len(saved), "errors": errors}
+
+
+@router.post("/manometers/failed/pdf-files")
+async def manometers_failed_pdf_files(
+    manometers_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+    session: AsyncSession = Depends(get_db),
+):
+    overall_started = time.perf_counter()
+    manometers_data = await manometers_file.read()
+    db_data = await db_file.read() if db_file is not None else None
+
+    if not manometers_data:
+        raise HTTPException(status_code=400, detail="empty manometers file")
+    if db_file is not None and not db_data:
+        raise HTTPException(status_code=400, detail="empty db file")
+
+    rows = read_rows_as_dicts(manometers_data)
+    if not rows:
+        return {"files": [], "count": 0, "errors": []}
+
+    logger.info(
+        f"manometers_failed_pdf_files: loaded {len(rows)} manometer rows "
+        f"(db_file={'yes' if db_file else 'no'})"
+    )
+
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
+
+        logger.info(
+            f"manometers_failed_pdf_files: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="manometers",
+        )
+        logger.info(
+            "manometers_failed_pdf_files: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
+        )
+
+    registry_repo = RegistryRepository(session)
+
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row, SERIAL_SOURCE_KEYS)) for row in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
+    registry_matches = sum(len(v) for v in registry_entries.values())
+    logger.info(
+        "manometers_failed_pdf_files: registry index ready "
+        f"serials={len(lookup_serials)} entries={registry_matches}"
+    )
+    session_factory = _make_worker_session_factory(session)
+
+    async def process_row(row: dict[str, Any]) -> ProtocolContextItem:
+        serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
+        normalized_serial = normalize_serial(serial)
+        db_entries = db_index.get(normalized_serial or "")
+        return await _build_context_from_db(
+            row,
+            db_entries=db_entries,
+            client=client,
+            sem=sem,
+            session_factory=session_factory,
+            strict_certificate_match=True,
+        )
+
+    build_started = time.perf_counter()
+    items = await _build_contexts_concurrently(
+        rows,
+        process_row,
+        label="manometers_failed_pdf_files",
+    )
+    items = await _retry_context_rows(
+        rows,
+        items,
+        process_row,
+        label="manometers_failed_pdf_files",
+    )
+    build_elapsed = time.perf_counter() - build_started
+    total_items = len(items)
+    success_contexts = sum(1 for item in items if not item.error)
+    logger.info(
+        "manometers_failed_pdf_files: contexts ready "
+        f"success={success_contexts} failed={total_items - success_contexts} "
+        f"({build_elapsed:.2f}s)"
+    )
+
+    forced_month = _extract_month_from_filename(db_file.filename) if db_file else None
+    run_id = _make_run_id()
+    pdf_unavailable = False
+    saved: list[str] = []
+    errors: list[dict[str, object]] = []
+
+    run_month = _resolve_run_month(forced_month, items)
+    folder_label = _exports_folder_label(
+        {},
+        default_equipment="pressure failed",
+        forced_month=run_month,
+        use_default_only=True,
+        prefix="Generation",
+        run_id=run_id,
+        label_override="pressure failed",
+    )
+    exports_dir = get_named_exports_dir(folder_label)
+
+    logger.info(
+        "manometers_failed_pdf_files: starting export for "
+        f"{total_items} devices (run_id={run_id} folder='{exports_dir.name}' month={run_month})"
+    )
+
+    for idx, (it, src_row) in enumerate(zip(items, rows), start=1):
+        ctx = it.context or {}
+        serial = _extract_first_value(src_row, SERIAL_SOURCE_KEYS)
+        logger.info(
+            "manometers_failed_pdf_files: processing "
+            f"row={idx}/{total_items} serial={serial or '-'} certificate={it.certificate or '-'}"
+        )
+
+        if it.error or not ctx:
+            errors.append(
+                {
+                    "row": idx,
+                    "serial": serial,
+                    "certificate": it.certificate,
+                    "reason": it.error or "empty context",
+                }
+            )
+            logger.warning(
+                "manometers_failed_pdf_files: skipped "
+                f"serial={serial or '-'} row={idx} reason={it.error or 'empty context'}"
+            )
+            continue
+
+        if not ctx.get("protocol_number"):
+            ctx["protocol_number"] = make_protocol_number(
+                ctx.get("verifier_name"),
+                ctx.get("verification_date"),
+                len(saved) + 1,
+            )
+
+        ctx = _mark_failed_context(ctx)
+        it.context = ctx
+
+        html = render_protocol_html(ctx)
+        pdf_bytes = await html_to_pdf_bytes(html)
+        if not pdf_bytes:
+            pdf_unavailable = True
+            errors.append(
+                {
+                    "row": idx,
+                    "serial": serial,
+                    "certificate": it.certificate,
+                    "reason": "pdf generation unavailable",
+                }
+            )
+            continue
+
+        base_name = _context_pdf_filename(ctx)
+        path = _unique_output_path(exports_dir, base_name)
+        path.write_bytes(pdf_bytes)
+        saved.append(str(path))
+        logger.info(f"manometers_failed_pdf_files: saved serial={serial or '-'} path={path}")
+
+    if not saved and pdf_unavailable:
+        raise HTTPException(
+            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
+        )
+
+    failed_serials = [str(item.get("serial") or "-") for item in errors]
+    if failed_serials:
+        logger.warning(f"manometers_failed_pdf_files: failed serials={', '.join(failed_serials)}")
+
+    logger.info(
+        "manometers_failed_pdf_files summary: "
+        f"total={total_items} success={len(saved)} failed={len(errors)} "
+        f"pdf_unavailable={pdf_unavailable}"
+    )
+
+    total_elapsed = time.perf_counter() - overall_started
+    logger.info(
+        "manometers_failed_pdf_files: finished in "
         f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 

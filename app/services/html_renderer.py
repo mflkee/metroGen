@@ -97,6 +97,9 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("trainee_sign_src", "")
     ctx.setdefault("trainee_sign_style", "display: none;")
     ctx.setdefault("trainee_note", "")
+    ctx.setdefault("verification_failed", False)
+    ctx.setdefault("hide_results_table", bool(ctx.get("verification_failed")))
+    ctx.setdefault("conclusion_text", "")
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")
