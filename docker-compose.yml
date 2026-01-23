@@ -21,6 +21,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://metrologenerator:metrologenerator@db:5432/metrologenerator
       ARSHIN_TIMEOUT: "32"
       ARSHIN_CONCURRENCY: "2"
+      ARSHIN_RETRY_ATTEMPTS: "4"
+      ARSHIN_FAST_FAIL: "0"
       PROTOCOL_BUILD_CONCURRENCY: "2"
       UVICORN_RELOAD: "1"
     depends_on:

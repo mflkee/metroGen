@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     ARSHIN_TIMEOUT: float = 30.0
     ARSHIN_CONCURRENCY: int = 8
     ARSHIN_RETRY_ATTEMPTS: int = 4
+    ARSHIN_FAST_FAIL: bool = False
     ARSHIN_RETRY_BACKOFF_BASE: float = 0.5
     ARSHIN_RETRY_BACKOFF_MAX: float = 5.0
     ARSHIN_RETRY_JITTER: float = 0.3

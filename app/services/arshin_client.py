@@ -22,6 +22,13 @@ ARSHIN_BASE = "https://fgis.gost.ru/fundmetrology/eapi"
 _RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
+def _exc_brief(exc: Exception) -> str:
+    text = str(exc).strip()
+    if not text:
+        return f"{exc.__class__.__name__}"
+    return f"{exc.__class__.__name__}: {text}"
+
+
 async def _request_json(
     client: httpx.AsyncClient,
     url: str,
@@ -30,7 +37,7 @@ async def _request_json(
     sem: asyncio.Semaphore | None = None,
     description: str,
 ) -> dict[str, Any]:
-    attempts = max(settings.ARSHIN_RETRY_ATTEMPTS, 1)
+    attempts = 1 if settings.ARSHIN_FAST_FAIL else max(settings.ARSHIN_RETRY_ATTEMPTS, 1)
     backoff = max(settings.ARSHIN_RETRY_BACKOFF_BASE, 0.1)
     max_backoff = max(settings.ARSHIN_RETRY_BACKOFF_MAX, backoff)
     jitter = max(settings.ARSHIN_RETRY_JITTER, 0.0)
@@ -57,15 +64,16 @@ async def _request_json(
             status = exc.response.status_code if exc.response else None
             if status not in _RETRY_STATUS_CODES or attempt == attempts:
                 logger.error(
-                    "Arshin request failed (%s) on attempt %s/%s: %s",
+                    "Arshin request failed (status={}) on attempt {}/{} for {}: {}",
                     status,
                     attempt,
                     attempts,
                     description,
+                    _exc_brief(exc),
                 )
                 raise
             logger.warning(
-                "Retryable Arshin status %s for %s (attempt %s/%s)",
+                "Retryable Arshin status {} for {} (attempt {}/{})",
                 status,
                 description,
                 attempt,
@@ -74,19 +82,19 @@ async def _request_json(
         except httpx.RequestError as exc:
             if attempt == attempts:
                 logger.error(
-                    "Arshin transport error on attempt %s/%s for %s: %s",
+                    "Arshin transport error on attempt {}/{} for {}: {}",
                     attempt,
                     attempts,
                     description,
-                    exc,
+                    _exc_brief(exc),
                 )
                 raise
             logger.warning(
-                "Retrying Arshin transport error for %s (attempt %s/%s): %s",
+                "Retrying Arshin transport error for {} (attempt {}/{}): {}",
                 description,
                 attempt,
                 attempts,
-                exc,
+                _exc_brief(exc),
             )
 
         delay = min(backoff, max_backoff) + (random.uniform(0, jitter) if jitter else 0.0)
@@ -215,7 +223,7 @@ async def fetch_vri_id_by_certificate(
             f"{ARSHIN_BASE}/vri",
             params=params,
             sem=sem,
-            description="vri lookup",
+            description=f"vri lookup cert={cert}",
         )
         items = _safe_get(data, ["result", "items"], default=[])
         if not items:
@@ -242,7 +250,7 @@ async def fetch_vri_details(
         client,
         f"{ARSHIN_BASE}/vri/{vri_id}",
         sem=sem,
-        description="vri details",
+        description=f"vri details vri_id={vri_id}",
     )
     return data.get("result") or {}
 
@@ -377,7 +385,7 @@ async def resolve_etalon_certs_from_details(
                 f"{ARSHIN_BASE}/vri",
                 params=page_params,
                 sem=sem,
-                description="etalon certificate lookup",
+                description=f"etalon certificate lookup params={params}",
             )
             items = _safe_get(data, ["result", "items"], default=[]) or []
             items_all.extend(items)
