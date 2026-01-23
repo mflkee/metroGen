@@ -19,7 +19,7 @@ async def lifespan(_: FastAPI):
     try:
         await seed_from_config()
     except Exception as exc:  # pragma: no cover - logged for observability
-        logger.exception("Database seeding failed: %s", exc)
+        logger.exception("Database seeding failed: {}", exc)
     yield
 
 

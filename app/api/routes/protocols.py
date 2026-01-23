@@ -120,6 +120,41 @@ PROTOCOL_SOURCE_KEYS: tuple[str, ...] = (
     "номер прот.",
 )
 
+RANGE_TEXT_KEYS: tuple[str, ...] = (
+    "Прочие сведения",
+    "Диапазон",
+    "Диапазон измерений",
+    "Пределы измерений",
+    "Предел измерений",
+)
+
+RANGE_MIN_KEYS: tuple[str, ...] = (
+    "НПИ",
+    "Нижний предел",
+    "Нижний предел измерений",
+    "Мин",
+    "min",
+    "минимум",
+)
+
+RANGE_MAX_KEYS: tuple[str, ...] = (
+    "ВПИ",
+    "Верхний предел",
+    "Верхний предел измерений",
+    "Макс",
+    "max",
+    "максимум",
+)
+
+RANGE_UNIT_KEYS: tuple[str, ...] = (
+    "Ед. изм.",
+    "Ед.изм.",
+    "Ед.изм",
+    "Единица измерения",
+    "units",
+    "unit",
+)
+
 
 def _extract_month_from_filename(filename: str | None) -> str | None:
     if not filename:
@@ -410,6 +445,24 @@ def _extract_protocol_number(row: Mapping[str, Any]) -> str:
     return ""
 
 
+def _merge_range_from_db(row_data: dict[str, Any], db_row: Mapping[str, Any]) -> None:
+    if _extract_first_value(row_data, RANGE_TEXT_KEYS):
+        return
+
+    text_range = _extract_first_value(db_row, RANGE_TEXT_KEYS)
+    if text_range:
+        row_data["Прочие сведения"] = text_range
+        return
+
+    range_min = _extract_first_value(db_row, RANGE_MIN_KEYS)
+    range_max = _extract_first_value(db_row, RANGE_MAX_KEYS)
+    if range_min is None or range_max is None:
+        return
+    range_unit = _extract_first_value(db_row, RANGE_UNIT_KEYS)
+    unit_text = f" {range_unit}" if range_unit not in (None, "") else ""
+    row_data["Прочие сведения"] = f"{range_min} - {range_max}{unit_text}".strip()
+
+
 async def _build_contexts_concurrently(
     rows: Sequence[dict[str, Any]],
     worker: Callable[[dict[str, Any]], Awaitable[ProtocolContextItem]],
@@ -429,7 +482,30 @@ async def _build_contexts_concurrently(
 
     logger.info(f"{label}: starting context build for {total} rows (concurrency={concurrency})")
 
-    async def run(row: dict[str, Any]) -> ProtocolContextItem:
+    def _log_context_error(idx: int, row: Mapping[str, Any], item: ProtocolContextItem) -> None:
+        if not item.error and item.context:
+            return
+        serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
+        cert_hint = extract_certificate_number(row)
+        logger.warning(
+            f"{label}: context error row={idx}/{total} serial={serial or '-'} "
+            f"certificate={item.certificate or cert_hint or '-'} "
+            f"reason={item.error or 'empty context'}"
+        )
+
+    def _log_context_warning(idx: int, row: Mapping[str, Any], item: ProtocolContextItem) -> None:
+        ctx = item.context or {}
+        warning = ctx.get("_table_rows_warning")
+        if not warning:
+            return
+        serial = _extract_first_value(row, SERIAL_SOURCE_KEYS)
+        cert_hint = extract_certificate_number(row)
+        logger.warning(
+            f"{label}: {warning} row={idx}/{total} serial={serial or '-'} "
+            f"certificate={item.certificate or cert_hint or '-'}"
+        )
+
+    async def run(row: dict[str, Any], idx: int) -> ProtocolContextItem:
         nonlocal completed
         async with sem:
             result = await worker(row)
@@ -446,9 +522,11 @@ async def _build_contexts_concurrently(
                 f"{label}: prepared {current}/{total} contexts "
                 f"({time.perf_counter() - started:.2f}s elapsed)"
             )
+        _log_context_error(idx, row, result)
+        _log_context_warning(idx, row, result)
         return result
 
-    return await asyncio.gather(*(run(row) for row in rows))
+    return await asyncio.gather(*(run(row, idx) for idx, row in enumerate(rows, start=1)))
 
 
 def _is_retryable_context_error(error: str | None) -> bool:
@@ -536,6 +614,8 @@ async def _build_context_from_db(
     if verifier_from_db:
         row_data["Поверитель"] = verifier_from_db
 
+    _merge_range_from_db(row_data, db_row)
+
     cert = str(db_row.get("Документ") or "").strip()
     if not cert:
         return ProtocolContextItem(
@@ -573,6 +653,10 @@ async def _build_context_from_db(
             raw_details={},
             error="certificate mismatch between excel and db",
         )
+
+    def _exc_text(exc: Exception) -> str:
+        text = str(exc).strip()
+        return text or exc.__class__.__name__
 
     try:
         vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem, use_cache=False)
@@ -632,7 +716,7 @@ async def _build_context_from_db(
             filename=filename,
             context={},
             raw_details={},
-            error=str(exc),
+            error=_exc_text(exc),
         )
 
 
@@ -656,6 +740,10 @@ async def _build_context_from_excel_row(
             raw_details={},
             error="certificate number is empty",
         )
+
+    def _exc_text(exc: Exception) -> str:
+        text = str(exc).strip()
+        return text or exc.__class__.__name__
 
     try:
         vri_id = await fetch_vri_id_by_certificate(client, cert, sem=sem)
@@ -709,7 +797,7 @@ async def _build_context_from_excel_row(
             filename=filename,
             context={},
             raw_details={},
-            error=str(exc),
+            error=_exc_text(exc),
         )
 
 

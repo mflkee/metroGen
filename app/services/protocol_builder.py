@@ -47,6 +47,8 @@ def _normalized_range_text(value: str) -> str:
     text = value.replace("−", "-").replace("–", "-").replace("—", "-")
     text = text.replace("…", "..")
     text = re.sub(r"\bдо\b", "-", text, flags=re.IGNORECASE)
+    # Strip parentheses around numeric tokens, e.g. "(-10)" -> "-10"
+    text = re.sub(r"\(\s*([+-]?\d+(?:[.,]\d+)?)\s*\)", r"\1", text)
     return text
 
 
@@ -56,7 +58,20 @@ def _parse_range_text(text: str | None) -> tuple[float | None, float | None, str
     normalized = _normalized_range_text(text.strip())
     match = _RANGE_EXPR_RE.search(normalized)
     if not match:
-        return None, None, None
+        cleaned = normalized.replace("(", " ").replace(")", " ")
+        numbers = list(re.finditer(r"[+-]?\d+(?:[.,]\d+)?", cleaned))
+        if len(numbers) < 2:
+            return None, None, None
+        lo_txt = numbers[0].group(0).replace(",", ".")
+        hi_txt = numbers[1].group(0).replace(",", ".")
+        try:
+            lo = float(lo_txt)
+            hi = float(hi_txt)
+        except ValueError:
+            return None, None, None
+        unit_text = cleaned[numbers[1].end() :].strip()
+        unit = _norm_unit(unit_text) if unit_text else None
+        return lo, hi, unit
     lo = float(match.group("lo").replace(",", "."))
     hi = float(match.group("hi").replace(",", "."))
     unit = _norm_unit((match.group("unit") or "").strip())
@@ -67,6 +82,18 @@ def _parse_range_and_unit(
     additional_info: str | None,
 ) -> tuple[float | None, float | None, str | None]:
     return _parse_range_text(additional_info)
+
+
+def _full_scale_value(range_min: float | None, range_max: float | None) -> float | None:
+    if range_min is None or range_max is None:
+        return None
+    if range_max < range_min:
+        range_min, range_max = range_max, range_min
+    if range_max <= 0 and range_min < 0:
+        return abs(range_min)
+    if range_min < 0 < range_max:
+        return max(abs(range_min), abs(range_max))
+    return range_max
 
 
 _DEFAULT_HEADER = {
@@ -535,6 +562,9 @@ async def build_context(
             range_min, range_max, unit = lo, hi, _norm_unit(u)
             range_source = range_source or "arshin"
 
+    if range_min is not None and range_max is not None and range_max < range_min:
+        range_min, range_max = range_max, range_min
+
     # Эталоны: собираем все доступные источники
     raw_entries = [_build_etalon_entry(entry) for entry in _etalon_sources(details)]
     etalon_entries = [
@@ -669,6 +699,19 @@ async def build_context(
     tpl = TEMPLATES.get(template_id, {})
     context["template_id"] = template_id
 
+    fsv_for_gen = _full_scale_value(range_min, range_max)
+    if template_id == "pressure_common":
+        if fsv_for_gen is None:
+            context["_table_rows_warning"] = (
+                f"measurement range not resolved (range_min={range_min}, range_max={range_max}, "
+                f"source={range_source})"
+            )
+        elif fsv_for_gen <= 0:
+            context["_table_rows_warning"] = (
+                f"measurement range invalid (range_min={range_min}, range_max={range_max}, "
+                f"source={range_source})"
+            )
+
     if template_id == "controller_43790_12":
         combined_device = " ".join(x for x in [mitype_title, mitype_type] if x).strip()
         if combined_device:
@@ -740,43 +783,45 @@ async def build_context(
 
     gen = get_by_template(template_id)
     if gen and range_min is not None and range_max is not None:
-        gi = GenInput(
-            range_min=float(range_min or 0.0),
-            range_max=float(range_max or 0.0),
-            unit=str(unit or ""),
-            points=points,
-            allowable_error=err_tol,
-            allowable_variation=var_tol,
-            ctx={
-                "template_id": template_id,
-                "method_code": method_code,
-                "mitype_number": mitype_number,
-                "mitype_title": mitype_title,
-            },
-        )
-        gout = gen.generate(gi)
-        context.update(
-            {
-                "table_rows": gout.get("rows", []),
-                "unit": gout.get("unit_label") or context.get("unit") or "",
-                "allowable_error_fmt": gout.get("allowable_error")
-                or context["allowable_error_fmt"],
-                "allowable_variation": gout.get("allowable_variation")
-                or f"{float(context['allowable_variation_pct']):.2f}",
-            }
-        )
-        if "point_groups" in gout:
-            context["point_groups"] = gout.get("point_groups") or []
-        if "allowable_note" in gout:
-            context["allowable_note"] = gout["allowable_note"]
-        for extra_key in (
-            "r0_deviation_pct",
-            "r0_allowable_pct",
-            "w100_value",
-            "w100_allowable",
-        ):
-            if extra_key in gout:
-                context[extra_key] = gout[extra_key]
+        gen_range_max = fsv_for_gen if fsv_for_gen is not None else range_max
+        if gen_range_max > 0:
+            gi = GenInput(
+                range_min=float(range_min or 0.0),
+                range_max=float(gen_range_max or 0.0),
+                unit=str(unit or ""),
+                points=points,
+                allowable_error=err_tol,
+                allowable_variation=var_tol,
+                ctx={
+                    "template_id": template_id,
+                    "method_code": method_code,
+                    "mitype_number": mitype_number,
+                    "mitype_title": mitype_title,
+                },
+            )
+            gout = gen.generate(gi)
+            context.update(
+                {
+                    "table_rows": gout.get("rows", []),
+                    "unit": gout.get("unit_label") or context.get("unit") or "",
+                    "allowable_error_fmt": gout.get("allowable_error")
+                    or context["allowable_error_fmt"],
+                    "allowable_variation": gout.get("allowable_variation")
+                    or f"{float(context['allowable_variation_pct']):.2f}",
+                }
+            )
+            if "point_groups" in gout:
+                context["point_groups"] = gout.get("point_groups") or []
+            if "allowable_note" in gout:
+                context["allowable_note"] = gout["allowable_note"]
+            for extra_key in (
+                "r0_deviation_pct",
+                "r0_allowable_pct",
+                "w100_value",
+                "w100_allowable",
+            ):
+                if extra_key in gout:
+                    context[extra_key] = gout[extra_key]
 
     trainee_name = _pick_trainee_name(
         context.get("verifier_name"),

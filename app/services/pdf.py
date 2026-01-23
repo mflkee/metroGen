@@ -26,7 +26,7 @@ async def html_to_pdf_bytes(html: str) -> bytes | None:
     try:
         from playwright.async_api import async_playwright
     except Exception as exc:
-        logger.warning("Playwright is unavailable for PDF generation: %s", exc)
+        logger.warning("Playwright is unavailable for PDF generation: {}", exc)
         return None
 
     try:
@@ -47,7 +47,7 @@ async def html_to_pdf_bytes(html: str) -> bytes | None:
                 try:
                     await browser.close()
                 except Exception as close_error:
-                    logger.warning("Failed to close Playwright browser: %s", close_error)
+                    logger.warning("Failed to close Playwright browser: {}", close_error)
     except Exception as exc:
-        logger.error("Playwright PDF rendering failed: %s", exc)
+        logger.error("Playwright PDF rendering failed: {}", exc)
         raise

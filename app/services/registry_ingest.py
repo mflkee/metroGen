@@ -211,7 +211,7 @@ async def ingest_registry_rows(
     deactivated = await registry_repo.deactivate_for_source(source_file)
     if deactivated:
         logger.info(
-            "ingest_registry_rows[%s]: deactivated %d previous rows",
+            "ingest_registry_rows[{}]: deactivated {} previous rows",
             source_file,
             deactivated,
         )
@@ -272,7 +272,7 @@ async def ingest_registry_rows(
 
         if processed and processed % 250 == 0:
             logger.info(
-                "ingest_registry_rows[%s]: processed %d rows",
+                "ingest_registry_rows[{}]: processed {} rows",
                 source_file,
                 processed,
             )
@@ -282,7 +282,7 @@ async def ingest_registry_rows(
 
     elapsed = time.perf_counter() - start_time
     logger.info(
-        "ingest_registry_rows[%s]: finished processed=%d deactivated=%d elapsed=%.2fs",
+        "ingest_registry_rows[{}]: finished processed={} deactivated={} elapsed={:.2f}s",
         source_file,
         processed,
         deactivated,
