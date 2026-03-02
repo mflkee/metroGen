@@ -93,6 +93,8 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("etalon_entries", [])
     ctx.setdefault("etalon_lines", [])
     ctx.setdefault("etalon_certificates", [])
+    ctx.setdefault("auxiliary_instruments", [])
+    ctx.setdefault("auxiliary_instruments_requested", [])
     ctx.setdefault("trainee_name", "")
     ctx.setdefault("trainee_sign_src", "")
     ctx.setdefault("trainee_sign_style", "display: none;")

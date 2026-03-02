@@ -87,8 +87,12 @@
     <div class="split-17 spread-bottom">
       <p>Средства поверки:</p>
       <div>
-        {% if first_etalon %}
-        <p class="line" id="manual_etalonsMain">{{ first_etalon.line_top }}</p>
+        {% if etalons %}
+          {% for entry in etalons %}
+          <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
+            {{ entry.display_line or entry.line_top }}
+          </p>
+          {% endfor %}
         {% else %}
         <p class="line" id="manual_etalonsMain">{{ etalon_line_top }}</p>
         {% endif %}
@@ -97,34 +101,6 @@
           соответствии с поверочной схемой
         </p>
       </div>
-    </div>
-    <div class="spread-bottom">
-      {% if first_etalon %}
-      <p class="line" id="manual_etalonsAdditional">{{ first_etalon.line_bottom }}</p>
-      {% else %}
-      <p class="line" id="manual_etalonsAdditional">{{ etalon_line_bottom }}</p>
-      {% endif %}
-      <p class="undertext spread-bottom">
-        номер (все цифры и буквы регистрационного номера)
-      </p>
-      {% if first_etalon and first_etalon.certificate_line %}
-      <p class="line" id="manual_etalonsCertificate">{{ first_etalon.certificate_line }}</p>
-      {% elif etalon_certificate_line %}
-      <p class="line" id="manual_etalonsCertificate">{{ etalon_certificate_line }}</p>
-      {% endif %}
-      {% if etalons and etalons|length > 1 %}
-      <div class="etalon-extra">
-        {% for entry in etalons[1:] %}
-        <p class="line">{{ entry.line_top }}</p>
-        {% if entry.line_bottom %}
-        <p class="line">{{ entry.line_bottom }}</p>
-        {% endif %}
-        {% if entry.certificate_line %}
-        <p class="line">{{ entry.certificate_line }}</p>
-        {% endif %}
-        {% endfor %}
-      </div>
-      {% endif %}
     </div>
     <div class="spread-bottom" style="margin-top: 0.2rem">
       <p>Технические характеристики:</p>

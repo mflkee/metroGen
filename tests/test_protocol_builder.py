@@ -389,6 +389,59 @@ async def test_build_context_selects_controller_template():
 
 
 @pytest.mark.anyio
+async def test_build_context_includes_auxiliary_instruments_from_resolved_values():
+    excel_row = {
+        "Обозначение СИ": "4041-93",
+        "Заводской номер": "00435",
+        "Модификация": "ДМ2005СгУ3",
+        "Прочие сведения": "(0 - 10) кгс/см²",
+        "Методика поверки": "МИ 2124-90",
+        "СИ, применяемые при поверке (не эталоны)": "71394-18/96320, 44154-16/419433",
+        "_resolved_auxiliary_instruments": [
+            {
+                "title": "Измеритель влажности и температуры",
+                "modification": "ИВТМ-7",
+                "manufacture_num": "96320",
+                "reg_number": "71394-18",
+                "certificate_no": "С-ВСА/02-06-2025/436974158",
+                "verification_date": "2025-06-02",
+                "valid_to": "2026-06-01",
+            },
+            {
+                "title": "Секундомер электронный",
+                "modification": "Интеграл С-01",
+                "manufacture_num": "419433",
+                "reg_number": "44154-16",
+                "certificate_no": "С-ВЯ/19-12-2024/397249365",
+                "verification_date": "2024-12-19",
+                "valid_to": "2025-12-18",
+            },
+        ],
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "4041-93"}},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name='ООО "РИ-ИНВЕСТ"',
+        owner_inn="7705551779",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    assert len(ctx["auxiliary_instruments"]) == 2
+    assert ctx["auxiliary_instruments"][0]["title"] == "Измеритель влажности и температуры"
+    assert ctx["auxiliary_instruments"][1]["manufacture_num"] == "419433"
+    assert ctx["auxiliary_instruments"][0]["verification_date"] == "02.06.2025"
+    assert len(ctx["etalon_entries"]) == 2
+    assert ctx["etalon_entries"][0]["line_top"].startswith("71394-18; Измеритель влажности")
+
+
+@pytest.mark.anyio
 async def test_build_context_adds_trainee_signature_for_2023(monkeypatch):
     from app.services import protocol_builder as pb
 

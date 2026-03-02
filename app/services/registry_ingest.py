@@ -141,7 +141,7 @@ def _ensure_date(value: Any) -> date | None:
         return value.date()
     if isinstance(value, date):
         return value
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return _excel_serial_to_date(value)
     text = _coerce_str(value)
     if not text:

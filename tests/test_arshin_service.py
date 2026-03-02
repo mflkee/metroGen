@@ -199,50 +199,30 @@ async def test_resolve_etalon_certs_tries_multiple_year_variants():
         },
     }
 
-    respx.get(
-        f"{ARSHIN_BASE}/vri",
-        params={"mit_number": "65779-16", "mi_number": "120"},
-    ).mock(return_value=httpx.Response(200, json={"result": {"items": []}}))
-
-    respx.get(
-        f"{ARSHIN_BASE}/vri",
-        params={"mit_number": "65779-16", "mi_number": "120", "year": "2020"},
-    ).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "result": {
-                    "items": [
-                        {
-                            "result_docnum": "OLD",
-                            "verification_date": "01.01.2020",
-                            "valid_date": "01.01.2021",
-                        }
-                    ]
+    def _vri_year_variant_response(request: httpx.Request) -> httpx.Response:
+        year = request.url.params.get("year")
+        if year == "2025":
+            items = [
+                {
+                    "result_docnum": "NEW",
+                    "verification_date": "15.01.2025",
+                    "valid_date": "2025-01-15T00:00:00+03:00",
                 }
-            },
-        )
-    )
-
-    respx.get(
-        f"{ARSHIN_BASE}/vri",
-        params={"mit_number": "65779-16", "mi_number": "120", "year": "2025"},
-    ).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "result": {
-                    "items": [
-                        {
-                            "result_docnum": "NEW",
-                            "verification_date": "15.01.2025",
-                            "valid_date": "2025-01-15T00:00:00+03:00",
-                        }
-                    ]
+            ]
+        elif year == "2020":
+            items = [
+                {
+                    "result_docnum": "OLD",
+                    "verification_date": "01.01.2020",
+                    "valid_date": "01.01.2021",
                 }
-            },
-        )
-    )
+            ]
+        else:
+            items = []
+
+        return httpx.Response(200, json={"result": {"count": len(items), "items": items}})
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(side_effect=_vri_year_variant_response)
 
     async with httpx.AsyncClient() as client:
         certs = await resolve_etalon_certs_from_details(client, details, sem=None)
@@ -265,47 +245,30 @@ async def test_resolve_etalon_certs_handles_pagination_and_picks_latest():
         }
     }
 
-    respx.get(
-        f"{ARSHIN_BASE}/vri",
-        params={"mit_number": "65779-16", "mi_number": "120", "rows": 100, "start": 0},
-    ).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "result": {
-                    "count": 2,
-                    "items": [
-                        {
-                            "result_docnum": "OLD",
-                            "verification_date": "01.01.2020",
-                            "valid_date": "01.01.2021",
-                        }
-                    ],
+    def _vri_paginated_response(request: httpx.Request) -> httpx.Response:
+        start = int(request.url.params.get("start", "0"))
+        if start == 0:
+            items = [
+                {
+                    "result_docnum": "OLD",
+                    "verification_date": "01.01.2020",
+                    "valid_date": "01.01.2021",
                 }
-            },
-        )
-    )
+            ]
+            return httpx.Response(200, json={"result": {"count": 150, "items": items}})
+        if start == 100:
+            items = [
+                {
+                    "result_docnum": "NEW",
+                    "verification_date": "01.02.2025",
+                    "valid_date": "01.02.2027",
+                }
+            ]
+            return httpx.Response(200, json={"result": {"count": 150, "items": items}})
 
-    respx.get(
-        f"{ARSHIN_BASE}/vri",
-        params={"mit_number": "65779-16", "mi_number": "120", "rows": 100, "start": 100},
-    ).mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "result": {
-                    "count": 2,
-                    "items": [
-                        {
-                            "result_docnum": "NEW",
-                            "verification_date": "01.02.2025",
-                            "valid_date": "01.02.2027",
-                        }
-                    ],
-                }
-            },
-        )
-    )
+        return httpx.Response(200, json={"result": {"count": 150, "items": []}})
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(side_effect=_vri_paginated_response)
 
     async with httpx.AsyncClient() as client:
         certs = await resolve_etalon_certs_from_details(client, details, sem=None)

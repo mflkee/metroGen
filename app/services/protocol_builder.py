@@ -10,11 +10,13 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.repositories import AuxiliaryInstrumentRepository
 from app.services.arshin_client import resolve_etalon_certs_from_details
 from app.services.generators.base import FixedPctTol, GenInput
 from app.services.generators.registry import get_by_template
 from app.services.mappings import resolve_methodology, resolve_owner_and_inn
 from app.services.templates import TEMPLATES, resolve_template_id
+from app.utils.normalization import normalize_serial
 from app.utils.paths import sanitize_filename
 from app.utils.signatures import get_signature_render
 
@@ -353,6 +355,12 @@ _OWNER_NAME_KEYS: tuple[str, ...] = (
     "owner_name",
 )
 
+_AUXILIARY_INSTRUMENT_KEYS: tuple[str, ...] = (
+    "СИ, применяемые при поверке (не эталоны)",
+    "СИ, применяемые при поверке(не эталоны)",
+    "СИ применяемые при поверке (не эталоны)",
+)
+
 
 def _fallback_point_description(position: int, idx: int) -> str:
     return _DEFAULT_POINT_DESCRIPTIONS.get(position) or _DEFAULT_POINT_DESCRIPTIONS.get(idx) or ""
@@ -367,6 +375,121 @@ def _owner_name_from_row(row: Mapping[str, Any]) -> str:
         if text:
             return text
     return ""
+
+
+def _extract_auxiliary_pairs(value: Any) -> list[tuple[str, str]]:
+    text = _clean_str(value)
+    if not text:
+        return []
+
+    parts = re.split(r"[,\n;]+", text)
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for raw in parts:
+        chunk = str(raw or "").strip()
+        if not chunk or "/" not in chunk:
+            continue
+        reg_number, serial = chunk.split("/", 1)
+        reg = reg_number.strip()
+        serial_value = serial.strip()
+        if not reg or not serial_value:
+            continue
+        key = (reg, serial_value)
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append(key)
+
+    return pairs
+
+
+def _auxiliary_pairs_from_row(row: Mapping[str, Any]) -> list[tuple[str, str]]:
+    for key in _AUXILIARY_INSTRUMENT_KEYS:
+        value = row.get(key)
+        if value in (None, ""):
+            continue
+        pairs = _extract_auxiliary_pairs(value)
+        if pairs:
+            return pairs
+    return []
+
+
+def _build_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, str]:
+    verification_date = _fmt_date_ddmmyyyy(
+        raw.get("verification_date") or raw.get("verificationDate")
+    )
+    valid_to = _fmt_date_ddmmyyyy(raw.get("valid_to") or raw.get("validTo"))
+
+    return {
+        "title": _clean_str(raw.get("title")),
+        "modification": _clean_str(raw.get("modification")),
+        "manufacture_num": _clean_str(raw.get("manufacture_num") or raw.get("manufactureNum")),
+        "reg_number": _clean_str(raw.get("reg_number") or raw.get("regNumber")),
+        "certificate_no": _clean_str(raw.get("certificate_no") or raw.get("certificateNo")),
+        "verification_date": verification_date,
+        "valid_to": valid_to,
+    }
+
+
+def _as_etalon_like_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, Any]:
+    reg_number = _clean_str(raw.get("reg_number"))
+    title = _clean_str(raw.get("title"))
+    modification = _clean_str(raw.get("modification"))
+    manufacture_num = _clean_str(raw.get("manufacture_num"))
+    certificate_no = _clean_str(raw.get("certificate_no"))
+    verification_date = _fmt_date_ddmmyyyy(raw.get("verification_date"))
+    valid_to = _fmt_date_ddmmyyyy(raw.get("valid_to"))
+
+    line_top = "; ".join(part for part in [reg_number, title] if part)
+    line_bottom = "; ".join(part for part in [modification, manufacture_num] if part)
+    if line_bottom and not line_bottom.endswith(";"):
+        line_bottom = f"{line_bottom};"
+
+    certificate_line: str | None = None
+    if certificate_no:
+        certificate_line = f"свидетельство о поверке № {certificate_no}"
+        if verification_date:
+            certificate_line = f"{certificate_line} от {verification_date}г."
+        if valid_to:
+            certificate_line = f"{certificate_line}; действительно до {valid_to}г."
+        elif not certificate_line.endswith(";"):
+            certificate_line = f"{certificate_line};"
+
+    line_full = "; ".join(part for part in [reg_number, title, modification] if part)
+
+    return {
+        "reg_number": reg_number,
+        "mitype_number": "",
+        "mitype_title": title,
+        "notation_full": modification,
+        "notation_first": modification,
+        "notation_second": "",
+        "modification": modification,
+        "manufacture_num": manufacture_num,
+        "manufacture_year": "",
+        "rank_code": "",
+        "rank_title": "",
+        "schema_title": "",
+        "line_full": line_full,
+        "line_top": line_top,
+        "line_bottom": line_bottom,
+        "certificate_line": certificate_line,
+        "certificate": None,
+        "display_line": None,
+    }
+
+
+def _compose_etalon_display_line(entry: Mapping[str, Any]) -> str:
+    parts = [
+        _clean_str(entry.get("line_top")),
+        _clean_str(entry.get("line_bottom")),
+        _clean_str(entry.get("certificate_line")),
+    ]
+    normalized = [part.strip(" ;") for part in parts if part and part.strip(" ;")]
+    if not normalized:
+        return ""
+    return "; ".join(normalized) + ";"
 
 
 def _etalon_sources(details: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -575,6 +698,17 @@ async def build_context(
             for key in ("reg_number", "mitype_number", "mitype_title", "notation_full")
         )
     ]
+    auxiliary_requested_pairs = _auxiliary_pairs_from_row(excel_row)
+    auxiliary_raw = excel_row.get("_resolved_auxiliary_instruments")
+    auxiliary_entries: list[dict[str, str]] = []
+    if isinstance(auxiliary_raw, list):
+        auxiliary_entries = [
+            _build_auxiliary_entry(item)
+            for item in auxiliary_raw
+            if isinstance(item, Mapping)
+        ]
+    elif isinstance(auxiliary_raw, Mapping):
+        auxiliary_entries = [_build_auxiliary_entry(auxiliary_raw)]
 
     # Свидетельства эталонов: из Excel/кэша или авто-поиск
     resolved_certs = excel_row.get("_resolved_etalon_certs")
@@ -604,6 +738,15 @@ async def build_context(
         if cert_match:
             entry["certificate"] = cert_match
             entry["certificate_line"] = cert_match.get("line")
+
+    # Неэталонные СИ добавляем в конец блока "Средства поверки"
+    if auxiliary_entries:
+        etalon_entries.extend(_as_etalon_like_auxiliary_entry(item) for item in auxiliary_entries)
+
+    for entry in etalon_entries:
+        if not isinstance(entry, dict):
+            continue
+        entry["display_line"] = _compose_etalon_display_line(entry)
 
     primary_entry = etalon_entries[0] if etalon_entries else {}
     etalon_line = primary_entry.get("line_full", "")
@@ -681,6 +824,10 @@ async def build_context(
         "verifier_name": excel_row.get("Поверитель") or "",
         "protocol_number": protocol_number,
         "device_certificate_line": device_cert_line,
+        "auxiliary_instruments": auxiliary_entries,
+        "auxiliary_instruments_requested": [
+            f"{reg}/{serial}" for reg, serial in auxiliary_requested_pairs
+        ],
     }
     context["allowable_variation"] = allowable_fmt
 
@@ -932,6 +1079,43 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             excel_row["_methodology_full"] = method_short
             methodology_points = default_points.copy()
             methodology_point_items = [dict(item) for item in default_point_items]
+
+        if session:
+            requested_aux_pairs = _auxiliary_pairs_from_row(excel_row)
+            if requested_aux_pairs:
+                aux_repo = AuxiliaryInstrumentRepository(session)
+                indexed = await aux_repo.find_by_pairs(requested_aux_pairs)
+                resolved_aux: list[dict[str, Any]] = []
+                for reg_number, serial in requested_aux_pairs:
+                    key = (reg_number, normalize_serial(serial))
+                    match = indexed.get(key)
+                    if match:
+                        resolved_aux.append(
+                            {
+                                "title": match.title,
+                                "modification": match.modification,
+                                "manufacture_num": match.manufacture_num,
+                                "reg_number": match.reg_number,
+                                "certificate_no": match.certificate_no,
+                                "verification_date": match.verification_date,
+                                "valid_to": match.valid_to,
+                            }
+                        )
+                    else:
+                        # Keep unknown auxiliary instruments in protocol output
+                        # so operators still see what was listed in source XLSX.
+                        resolved_aux.append(
+                            {
+                                "title": "",
+                                "modification": "",
+                                "manufacture_num": serial,
+                                "reg_number": reg_number,
+                                "certificate_no": "",
+                                "verification_date": "",
+                                "valid_to": "",
+                            }
+                        )
+                excel_row["_resolved_auxiliary_instruments"] = resolved_aux
 
         raw_allowable = _raw_allowable_value(excel_row)
         candidate = raw_allowable if raw_allowable not in (None, "") else allowable_hint
