@@ -6,6 +6,7 @@ __all__ = ("utils",)
 
 try:  # pragma: no cover - executed only when SQLAlchemy installed
     from .core import (
+        AuxiliaryInstrumentRepository,
         BaseRepository,
         EtalonRepository,
         InstrumentRepository,
@@ -20,6 +21,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 else:  # pragma: no cover - skip when SQLAlchemy missing in tests
     __all__ += (
         "BaseRepository",
+        "AuxiliaryInstrumentRepository",
         "EtalonRepository",
         "InstrumentRepository",
         "MethodologyPointPayload",

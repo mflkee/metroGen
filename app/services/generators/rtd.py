@@ -120,7 +120,9 @@ class RTDGenerator(TableGenerator):
         r0_measured_val = groups[0]["average_raw"]["resistance"] if groups else 0.0
         r100_measured_val = groups[1]["average_raw"]["resistance"] if len(groups) > 1 else 0.0
 
-        r0_deviation_pct = ((r0_measured_val - r0_nominal) / r0_nominal) * 100.0 if r0_nominal else 0.0
+        r0_deviation_pct = (
+            ((r0_measured_val - r0_nominal) / r0_nominal) * 100.0 if r0_nominal else 0.0
+        )
         w100_value = r100_measured_val / r0_measured_val if r0_measured_val else 0.0
 
         return {

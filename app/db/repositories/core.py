@@ -4,7 +4,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -23,6 +23,7 @@ __all__ = (
     "RegistryRepository",
     "InstrumentRepository",
     "EtalonRepository",
+    "AuxiliaryInstrumentRepository",
     "MethodologyPointPayload",
 )
 
@@ -435,3 +436,95 @@ class EtalonRepository(BaseRepository):
                 setattr(certification, key, value)
 
         return certification
+
+
+class AuxiliaryInstrumentRepository(BaseRepository):
+    async def upsert_instrument(
+        self,
+        *,
+        reg_number: str,
+        manufacture_num: str,
+        values: dict[str, Any],
+    ) -> models.AuxiliaryVerificationInstrument:
+        normalized = normalize_serial(manufacture_num)
+        stmt = select(models.AuxiliaryVerificationInstrument).where(
+            models.AuxiliaryVerificationInstrument.reg_number == reg_number,
+            models.AuxiliaryVerificationInstrument.normalized_serial == normalized,
+        )
+        result = await self.session.execute(stmt)
+        instrument = result.scalar_one_or_none()
+
+        if instrument is None:
+            instrument = models.AuxiliaryVerificationInstrument(
+                reg_number=reg_number,
+                normalized_serial=normalized,
+                manufacture_num=manufacture_num,
+                **values,
+            )
+            await self.add(instrument)
+        else:
+            instrument.manufacture_num = manufacture_num
+            for key, value in values.items():
+                setattr(instrument, key, value)
+
+        return instrument
+
+    async def list_all(self) -> list[models.AuxiliaryVerificationInstrument]:
+        stmt = (
+            select(models.AuxiliaryVerificationInstrument)
+            .order_by(
+                models.AuxiliaryVerificationInstrument.reg_number.asc(),
+                models.AuxiliaryVerificationInstrument.normalized_serial.asc(),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def find_by_pairs(
+        self, pairs: Sequence[tuple[str, str]]
+    ) -> dict[tuple[str, str], models.AuxiliaryVerificationInstrument]:
+        normalized_pairs = [
+            (str(reg).strip(), normalize_serial(serial))
+            for reg, serial in pairs
+            if str(reg).strip() and normalize_serial(serial)
+        ]
+        if not normalized_pairs:
+            return {}
+
+        clauses = [
+            and_(
+                models.AuxiliaryVerificationInstrument.reg_number == reg,
+                models.AuxiliaryVerificationInstrument.normalized_serial == serial,
+            )
+            for reg, serial in normalized_pairs
+        ]
+        stmt = select(models.AuxiliaryVerificationInstrument).where(or_(*clauses))
+        result = await self.session.execute(stmt)
+        instruments = list(result.scalars().all())
+        return {
+            (instrument.reg_number, instrument.normalized_serial): instrument
+            for instrument in instruments
+            if instrument.reg_number and instrument.normalized_serial
+        }
+
+    async def prune_to_pairs(self, pairs: Sequence[tuple[str, str]]) -> int:
+        normalized_pairs = [
+            (str(reg).strip(), normalize_serial(serial))
+            for reg, serial in pairs
+            if str(reg).strip() and normalize_serial(serial)
+        ]
+        if not normalized_pairs:
+            stmt = delete(models.AuxiliaryVerificationInstrument)
+            result = await self.session.execute(stmt)
+            return max(int(result.rowcount or 0), 0)
+
+        keep_clauses = [
+            and_(
+                models.AuxiliaryVerificationInstrument.reg_number == reg,
+                models.AuxiliaryVerificationInstrument.normalized_serial == serial,
+            )
+            for reg, serial in normalized_pairs
+        ]
+        stmt = delete(models.AuxiliaryVerificationInstrument).where(not_(or_(*keep_clauses)))
+        result = await self.session.execute(stmt)
+        return max(int(result.rowcount or 0), 0)

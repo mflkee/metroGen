@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.routes.arshin import router as arshin_router
+from app.api.routes.auxiliary_instruments import router as auxiliary_instruments_router
 from app.api.routes.methodologies import router as methodologies_router
 from app.api.routes.owners import router as owners_router
 from app.api.routes.protocols import router as protocols_router
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(methodologies_router)
     app.include_router(owners_router)
     app.include_router(registry_router)
+    app.include_router(auxiliary_instruments_router)
     return app
 
 

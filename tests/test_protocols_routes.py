@@ -36,10 +36,14 @@ def _make_manometers_excel_row(
     *,
     certificate: str,
     serial: str,
+    instrument_type: str = "13535-93",
     verifier: str = "Большаков С.Н.",
     date: str = "15.06.2025",
     pressure: str = "101,5 кПа",
     owner: str = 'ООО "РИ-ИНВЕСТ"',
+    methodology: str = "МИ 2124-90",
+    details: str = "(0 - 4) кгс/см²",
+    non_etalon_refs: str = "",
 ) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -49,16 +53,18 @@ def _make_manometers_excel_row(
     ws["F1"] = "Дата поверки"
     ws["H1"] = "Методика поверки"
     ws["J1"] = "Прочие сведения"
+    ws["I1"] = "СИ, применяемые при поверке (не эталоны)"
     ws["K1"] = "Поверитель"
     ws["M1"] = "Давление"
     ws["P1"] = "Свидетельство о поверке"
 
-    ws["A2"] = "13535-93"
+    ws["A2"] = instrument_type
     ws["B2"] = serial
     ws["E2"] = owner
     ws["F2"] = date
-    ws["H2"] = "МИ 2124-90"
-    ws["J2"] = "(0 - 4) кгс/см²"
+    ws["H2"] = methodology
+    ws["J2"] = details
+    ws["I2"] = non_etalon_refs
     ws["K2"] = verifier
     ws["M2"] = pressure
     ws["P2"] = certificate
@@ -118,10 +124,27 @@ def _make_manometers_db_excel_multi(rows: list[dict[str, str]]) -> bytes:
     return buf.getvalue()
 
 
+def _patch_etalon_certificates(monkeypatch, *, docnum: str = "ET-123") -> None:
+    async def fake_find_certs(client, details, sem=None):
+        return [
+            {
+                "docnum": docnum,
+                "verification_date": "01.01.2025",
+                "valid_date": "31.12.2025",
+                "line": f"свидетельство о поверке № {docnum}; действительно до 31.12.2025г.",
+                "reg_number": "77090.19.1Р.00761951",
+                "manufacture_num": "3127",
+                "mitype_number": "77090-19",
+            }
+        ]
+
+    monkeypatch.setattr("app.api.routes.protocols.find_etalon_certificates", fake_find_certs)
+
+
 @pytest.mark.anyio
 @respx.mock
 @pytest.mark.parametrize("header", CERTIFICATE_HEADER_KEYS)
-async def test_contexts_by_excel_happy_path(async_client, header):
+async def test_contexts_by_excel_happy_path(async_client, header, monkeypatch):
     cert = "С-ВЯ/15-01-2025/402123271"
     vri_id = "1-XYZ"
 
@@ -177,6 +200,7 @@ async def test_contexts_by_excel_happy_path(async_client, header):
             },
         )
     )
+    _patch_etalon_certificates(monkeypatch)
 
     xlsx = _make_protocols_excel_row(cert, header=header)
     files = {
@@ -266,6 +290,7 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
         certificate=cert,
         serial=serial,
         verifier=excel_verifier,
+        non_etalon_refs="71394-18/96320, 44154-16/419433, 77777-77/ABC777",
     )
     db_xlsx = _make_manometers_db_excel(
         serial=serial,
@@ -276,12 +301,16 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
 
     async def fake_pdf(html: str) -> bytes | None:
         assert "ПРОТОКОЛ" in html
-        assert db_verifier in html
-        assert excel_verifier not in html
+        assert "Измеритель влажности и температуры" in html
+        assert "Секундомер электронный" in html
+        assert "77777-77" in html
+        assert "ABC777" in html
+        assert "СИ, применяемые при поверке (не эталоны):" not in html
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
     monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    _patch_etalon_certificates(monkeypatch)
 
     def _fake_named_exports_dir(name: str) -> Path:
         path = tmp_path / name
@@ -352,6 +381,30 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ),
     }
+
+    aux_payloads = [
+        {
+            "title": "Измеритель влажности и температуры",
+            "reg_number": "71394-18",
+            "modification": "ИВТМ-7",
+            "manufacture_num": "96320",
+            "certificate_no": "С-ВСА/02-06-2025/436974158",
+            "verification_date": "02.06.2025",
+            "valid_to": "01.06.2026",
+        },
+        {
+            "title": "Секундомер электронный",
+            "reg_number": "44154-16",
+            "modification": "Интеграл С-01",
+            "manufacture_num": "419433",
+            "certificate_no": "С-ВЯ/19-12-2024/397249365",
+            "verification_date": "19.12.2024",
+            "valid_to": "18.12.2025",
+        },
+    ]
+    for payload in aux_payloads:
+        create_aux = await async_client.post("/api/v1/auxiliary-instruments", json=payload)
+        assert create_aux.status_code == 201
 
     response = await async_client.post("/api/v1/protocols/manometers/pdf-files", files=files)
 
@@ -455,6 +508,7 @@ async def test_manometers_pdf_files_prefers_matching_month(async_client, tmp_pat
         return b"%PDF-month%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+    _patch_etalon_certificates(monkeypatch)
 
     def _fake_named_exports_dir(name: str) -> Path:
         path = tmp_path / name
@@ -603,6 +657,7 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
     monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    _patch_etalon_certificates(monkeypatch)
 
     def _fake_named_exports_dir(name: str) -> Path:
         path = tmp_path / name
@@ -772,3 +827,197 @@ async def test_contexts_by_excel_includes_multiple_etalons(async_client, monkeyp
     assert entries[0]["reg_number"].endswith("000111")
     assert entries[1]["reg_number"].endswith("000222")
     assert entries[1]["certificate_line"].startswith("свидетельство о поверке № ET-002")
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_thermometers_pdf_files_happy_path(async_client, tmp_path, monkeypatch):
+    cert = "С-ЕЖБ/05-10-2025/443771555"
+    serial = "RTD-001"
+    protocol_num = "10/001/25"
+    vri_id = "1-RTD"
+    run_id = "run-rtd"
+
+    thermometers_xlsx = _make_manometers_excel_row(
+        certificate=cert,
+        serial=serial,
+        instrument_type="71040-18",
+        methodology="ГОСТ 8.461-2009",
+        details="(0 - 100) °C",
+        pressure="99,0 кПа",
+    )
+    db_xlsx = _make_manometers_db_excel(
+        serial=serial,
+        certificate=cert,
+        protocol_number=protocol_num,
+        verifier="DB RTD Verifier",
+    )
+
+    async def fake_pdf(html: str) -> bytes | None:
+        return b"%PDF-rtd%"
+
+    monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    _patch_etalon_certificates(monkeypatch, docnum="ET-RTD")
+
+    def _fake_named_exports_dir(name: str) -> Path:
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr("app.api.routes.protocols.get_named_exports_dir", _fake_named_exports_dir)
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        return_value=httpx.Response(200, json={"result": {"items": [{"vri_id": vri_id}]}})
+    )
+    respx.get(f"{ARSHIN_BASE}/vri/{vri_id}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "means": {
+                        "mieta": [
+                            {
+                                "regNumber": "71040.18.1Р.00761951",
+                                "mitypeNumber": "71040-18",
+                                "mitypeTitle": "Термопреобразователи сопротивления",
+                                "notation": "ТСП-100",
+                                "manufactureNum": "3127",
+                                "manufactureYear": 2020,
+                            }
+                        ]
+                    },
+                    "vriInfo": {
+                        "docTitle": "ГОСТ 8.461-2009",
+                        "vrfDate": "15.10.2025",
+                        "validDate": "14.10.2026",
+                        "applicable": {"certNum": cert},
+                    },
+                }
+            },
+        )
+    )
+
+    files = {
+        "thermometers_file": (
+            "thermometers.xlsx",
+            thermometers_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "db_file": (
+            "10 БД.xlsx",
+            db_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    }
+
+    response = await async_client.post("/api/v1/protocols/thermometers/pdf-files", files=files)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["errors"] == []
+    saved_path = Path(body["files"][0])
+    assert saved_path.exists()
+    assert saved_path.read_bytes() == b"%PDF-rtd%"
+    assert saved_path.parent == tmp_path / f"Generation rtd 10 - {run_id}"
+
+
+@pytest.mark.anyio
+@respx.mock
+async def test_manometers_failed_pdf_files_marks_failed_context(
+    async_client, tmp_path, monkeypatch
+):
+    cert = "С-ЕЖБ/05-06-2025/443771099"
+    serial = "03607"
+    protocol_num = "06/001/25"
+    vri_id = "1-MANO-FAILED"
+    run_id = "run-failed"
+    seen_contexts: list[dict[str, object]] = []
+
+    manometers_xlsx = _make_manometers_excel_row(certificate=cert, serial=serial)
+    db_xlsx = _make_manometers_db_excel(
+        serial=serial,
+        certificate=cert,
+        protocol_number=protocol_num,
+    )
+
+    def fake_render(ctx: dict[str, object]) -> str:
+        seen_contexts.append(dict(ctx))
+        return "<html><body>FAILED</body></html>"
+
+    async def fake_pdf(html: str) -> bytes | None:
+        return b"%PDF-failed%"
+
+    monkeypatch.setattr("app.api.routes.protocols.render_protocol_html", fake_render)
+    monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    _patch_etalon_certificates(monkeypatch)
+
+    def _fake_named_exports_dir(name: str) -> Path:
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    monkeypatch.setattr("app.api.routes.protocols.get_named_exports_dir", _fake_named_exports_dir)
+
+    respx.get(f"{ARSHIN_BASE}/vri").mock(
+        return_value=httpx.Response(200, json={"result": {"items": [{"vri_id": vri_id}]}})
+    )
+    respx.get(f"{ARSHIN_BASE}/vri/{vri_id}").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "means": {
+                        "mieta": [
+                            {
+                                "regNumber": "77090.19.1Р.00761951",
+                                "mitypeNumber": "77090-19",
+                                "mitypeTitle": "Преобразователи давления эталонные",
+                                "notation": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+                                "manufactureNum": "3127",
+                                "manufactureYear": 2020,
+                            }
+                        ]
+                    },
+                    "vriInfo": {
+                        "docTitle": "МИ 123-45",
+                        "vrfDate": "15.06.2025",
+                        "validDate": "14.06.2026",
+                        "applicable": {"certNum": cert},
+                    },
+                }
+            },
+        )
+    )
+
+    files = {
+        "manometers_file": (
+            "manometers.xlsx",
+            manometers_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "db_file": (
+            "06 БД.xlsx",
+            db_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    }
+
+    response = await async_client.post("/api/v1/protocols/manometers/failed/pdf-files", files=files)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["count"] == 1
+    assert body["errors"] == []
+    saved_path = Path(body["files"][0])
+    assert saved_path.exists()
+    assert saved_path.read_bytes() == b"%PDF-failed%"
+    assert saved_path.parent == tmp_path / f"Generation pressure failed 06 - {run_id}"
+
+    assert seen_contexts
+    assert seen_contexts[0].get("verification_failed") is True
+    assert seen_contexts[0].get("hide_results_table") is True
+    assert seen_contexts[0].get("conclusion_text") == "не годен"
+    assert seen_contexts[0].get("table_rows") == []

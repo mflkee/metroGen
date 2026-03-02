@@ -33,7 +33,7 @@ def _make_excel_row(
 @pytest.mark.anyio
 @respx.mock
 @pytest.mark.parametrize("header", CERTIFICATE_HEADER_KEYS)
-async def test_html_by_excel_returns_html(async_client, header):
+async def test_html_by_excel_returns_html(async_client, header, monkeypatch):
     cert = "С-ВЯ/15-01-2025/402123271"
     vri_id = "1-XYZ"
 
@@ -88,6 +88,21 @@ async def test_html_by_excel_returns_html(async_client, header):
             },
         )
     )
+
+    async def fake_find_certs(client, details, sem=None):
+        return [
+            {
+                "docnum": "ET-123",
+                "verification_date": "01.01.2025",
+                "valid_date": "31.12.2025",
+                "line": "свидетельство о поверке № ET-123; действительно до 31.12.2025г.",
+                "reg_number": "77090.19.1Р.00761951",
+                "manufacture_num": "3127",
+                "mitype_number": "77090-19",
+            }
+        ]
+
+    monkeypatch.setattr("app.api.routes.protocols.find_etalon_certificates", fake_find_certs)
 
     xlsx = _make_excel_row(cert, header=header)
     files = {

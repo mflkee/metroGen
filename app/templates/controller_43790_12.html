@@ -78,13 +78,9 @@
       <div>
         {% if etalons %}
           {% for entry in etalons %}
-            <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>{{ entry.line_top }}</p>
-            {% if entry.line_bottom %}
-              <p class="line">{{ entry.line_bottom }}</p>
-            {% endif %}
-            {% if entry.certificate_line %}
-              <p class="line">{{ entry.certificate_line }}</p>
-            {% endif %}
+            <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
+              {{ entry.display_line or entry.line_top }}
+            </p>
           {% endfor %}
         {% else %}
           <p class="line" id="manual_etalonsMain">

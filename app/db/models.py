@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -219,6 +220,34 @@ class MeasuringInstrument(Base):
         back_populates="instruments"
     )
     protocols: Mapped[list[Protocol]] = relationship(back_populates="measuring_instrument")
+
+
+class AuxiliaryVerificationInstrument(Base):
+    __tablename__ = "auxiliary_verification_instruments"
+    __table_args__ = (
+        UniqueConstraint("reg_number", "normalized_serial", name="uq_aux_vi_reg_serial"),
+        {"sqlite_autoincrement": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reg_number: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    normalized_serial: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    modification: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    manufacture_num: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    verification_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    valid_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text("now()"),
+        server_onupdate=text("now()"),
+    )
 
 
 class Etalon(Base):
