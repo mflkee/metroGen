@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import math
 from random import uniform
 
 from .base import GenInput, TableGenerator
+
+_VARIATION_SAFETY_FACTOR = 0.95
 
 
 def _fmt_fixed(x: float, digits: int) -> str:
@@ -35,6 +38,26 @@ def _clamp_err(pct: float, limit_pct: float) -> float:
     if abs(p) <= lim:
         return p
     return (lim if p > 0 else -lim) * uniform(0.70, 0.95)
+
+
+def _fmt_floor_nonnegative(x: float, digits: int) -> str:
+    """Format non-negative value without rounding up."""
+    factor = 10**digits
+    value = max(float(x), 0.0)
+    floored = math.floor(value * factor) / factor
+    return f"{floored:.{digits}f}"
+
+
+def _enforce_variation_margin(err_fwd_pct: float, err_rev_pct: float, limit_pct: float) -> float:
+    """Keep reverse error inside allowed variation with a small safety margin."""
+    safe_limit = max(0.0, abs(float(limit_pct)) * _VARIATION_SAFETY_FACTOR)
+    delta = err_rev_pct - err_fwd_pct
+    if abs(delta) <= safe_limit:
+        return err_rev_pct
+    direction = 1.0 if delta >= 0 else -1.0
+    # keep a little random spread while staying under the safe limit
+    adjusted_delta = direction * safe_limit * uniform(0.80, 0.98)
+    return err_fwd_pct + adjusted_delta
 
 
 class PressureCommon(TableGenerator):
@@ -108,12 +131,12 @@ class PressureCommon(TableGenerator):
             ref_rev = ref_fwd
 
             err_limit = gi.allowable_error.value(ref=ref_fwd, fsv=fsv, ctx=gi.ctx)
-            # var_limit = gi.allowable_variation.value(
-            #     ref=ref_fwd, fsv=fsv, ctx=gi.ctx
-            # )  # для будущего
+            var_limit = gi.allowable_variation.value(ref=ref_fwd, fsv=fsv, ctx=gi.ctx)
 
             err_fwd_pct = _clamp_err(uniform(-err_limit * 0.6, err_limit * 0.6), err_limit)
             err_rev_pct = _clamp_err(uniform(-err_limit * 0.6, err_limit * 0.6), err_limit)
+            err_rev_pct = _enforce_variation_margin(err_fwd_pct, err_rev_pct, var_limit)
+            err_rev_pct = _clamp_err(err_rev_pct, err_limit)
 
             # На нулевой точке не допускаем «-0.00»/случайных знаков — считаем ровно 0
             if abs(ref_fwd) < 1e-9:
@@ -124,6 +147,9 @@ class PressureCommon(TableGenerator):
             si_fwd = ref_fwd + (err_fwd_pct / 100.0) * fsv
             si_rev = ref_rev + (err_rev_pct / 100.0) * fsv
             var_pct = abs(si_fwd - si_rev) / fsv * 100.0
+            safe_var_limit = max(0.0, abs(float(var_limit)) * _VARIATION_SAFETY_FACTOR)
+            if var_pct > safe_var_limit:
+                var_pct = safe_var_limit
 
             rows.append(
                 {
@@ -133,7 +159,7 @@ class PressureCommon(TableGenerator):
                     "ref_rev": _round_ref(ref_rev),
                     "err_fwd": _fmt_fixed(err_fwd_pct, 2),
                     "err_rev": _fmt_fixed(err_rev_pct, 2),
-                    "var_pct": _fmt_fixed(var_pct, 2),
+                    "var_pct": _fmt_floor_nonnegative(var_pct, 2),
                 }
             )
 
