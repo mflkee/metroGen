@@ -72,3 +72,27 @@ def test_get_signature_render_prefers_last_name_on_partial_match(monkeypatch, tm
     expected_src = signatures._data_uri_for(str(tiora_path))
     assert render is not None
     assert render.src == expected_src
+
+
+def test_get_signature_render_refreshes_when_files_appear(monkeypatch, tmp_path):
+    target_dir = tmp_path / "signatures"
+    target_dir.mkdir()
+
+    monkeypatch.setattr(settings, "SIGNATURES_DIR", str(target_dir))
+    monkeypatch.setattr(signatures, "_signatures_dirs", lambda: (target_dir,))
+    signatures._clear_caches_for_tests()
+
+    assert signatures.get_signature_render("Большаков С.Н.") is None
+
+    restored = target_dir / "test большаков с.н. 1.png"
+    restored.write_bytes(_PIXEL_PNG)
+
+    original_rng = signatures._RNG
+    signatures._RNG = random.Random(0)
+    try:
+        render = signatures.get_signature_render("Большаков С.Н.")
+    finally:
+        signatures._RNG = original_rng
+
+    assert render is not None
+    assert render.src.startswith("data:image/png;base64,")

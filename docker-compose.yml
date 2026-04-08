@@ -29,7 +29,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "${API_PORT:-18000}:8000"
     volumes:
       - .:/app
 

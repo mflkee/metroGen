@@ -37,22 +37,40 @@ async def seed_auxiliary_instruments(session: AsyncSession) -> int:
     repo = AuxiliaryInstrumentRepository(session)
     items = [
         {
-            "title": "Измеритель влажности и температуры",
+            "title": "Измерители влажности и температуры",
             "reg_number": "71394-18",
-            "modification": "ИВТМ-7",
+            "modification": "ИВТМ-7 М5-Д",
             "manufacture_num": "96320",
             "certificate_no": "С-ВСА/02-06-2025/436974158",
             "verification_date": date(2025, 6, 2),
             "valid_to": date(2026, 6, 1),
         },
         {
+            "title": "Измерители влажности и температуры",
+            "reg_number": "71394-18",
+            "modification": "ИВТМ-7 М5-Д",
+            "manufacture_num": "83243",
+            "certificate_no": "С-ВЯ/22-05-2025/436102986",
+            "verification_date": date(2025, 5, 22),
+            "valid_to": date(2026, 5, 21),
+        },
+        {
             "title": "Секундомер электронный",
-            "reg_number": "44154-16",
+            "reg_number": "44154-20",
             "modification": "Интеграл С-01",
             "manufacture_num": "419433",
-            "certificate_no": "С-ВЯ/19-12-2024/397249365",
-            "verification_date": date(2024, 12, 19),
-            "valid_to": date(2025, 12, 18),
+            "certificate_no": "С-ВЯ/22-01-2026/497053091",
+            "verification_date": date(2026, 1, 22),
+            "valid_to": date(2027, 1, 21),
+        },
+        {
+            "title": "Мультиметры цифровые",
+            "reg_number": "77699-20",
+            "modification": "АКИП-2203/1",
+            "manufacture_num": "21190145",
+            "certificate_no": "С-ВЯ/28-01-2025/405670101",
+            "verification_date": date(2025, 1, 28),
+            "valid_to": date(2026, 1, 27),
         },
     ]
 

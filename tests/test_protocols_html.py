@@ -14,16 +14,22 @@ def _make_excel_row(
     sn: str = "ABC123",
     date: str = "15.01.2025",
     header: str = CERTIFICATE_HEADER_KEYS[-1],
+    details: str = "0…0,6 МПа",
+    accuracy_class: str = "1,5",
 ) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws["A1"] = header
     ws["B1"] = "Заводской номер"
     ws["C1"] = "Дата поверки"
+    ws["D1"] = "Прочие сведения"
+    ws["E1"] = "КТ"
 
     ws["A2"] = certificate
     ws["B2"] = sn
     ws["C2"] = date
+    ws["D2"] = details
+    ws["E2"] = accuracy_class
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -89,7 +95,7 @@ async def test_html_by_excel_returns_html(async_client, header, monkeypatch):
         )
     )
 
-    async def fake_find_certs(client, details, sem=None):
+    async def fake_find_certs(client, details, sem=None, preferred_reg_numbers=None):
         return [
             {
                 "docnum": "ET-123",
@@ -121,3 +127,7 @@ async def test_html_by_excel_returns_html(async_client, header, monkeypatch):
     assert "ABC123" in html  # serial number appears
     assert "МИ 123-45" in html  # methodology
     assert "77090-19" in html  # etalon line
+    assert "Диапазон измерений:" in html
+    assert "0…0,6 МПа" in html
+    assert "Класс точности:" in html
+    assert "1,5" in html

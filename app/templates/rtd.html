@@ -102,6 +102,12 @@
         </p>
       </div>
     </div>
+    <div class="split-20 spread-bottom verification-place-row">
+      <p>Место проведения поверки:</p>
+      <div class="line verification-place-line">
+        <p class="verification-place-value" id="setValue_verificationPlace">ООО "МКАИР"</p>
+      </div>
+    </div>
     <div class="spread-bottom" style="margin-top: 0.2rem">
       <p>Технические характеристики:</p>
     </div>
@@ -527,6 +533,20 @@
     }
     .line {
       border-bottom: 1px solid black;
+    }
+    .verification-place-row {
+      align-items: flex-end;
+    }
+    .verification-place-line {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      min-height: 1.6rem;
+      padding: 0 0.2rem;
+    }
+    .verification-place-value {
+      text-align: center;
+      padding-bottom: 0.1rem;
     }
     .sign-wrapper {
       position: relative;

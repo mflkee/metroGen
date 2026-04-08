@@ -22,6 +22,13 @@ dependencies = [
   "asyncpg",
 ]
 
+[project.scripts]
+metrogen = "app.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 # dev-зависимости как optional extras (стандарт PEP 621)
 [project.optional-dependencies]
 dev = [
@@ -47,6 +54,10 @@ dev = [
 
 [tool.uv]
 default-groups = ["dev"]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [tool.ruff]
 # Общие настройки Ruff (линтер + форматтер)

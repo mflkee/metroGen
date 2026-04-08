@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from app.services.pdf import html_to_pdf_bytes
+from app.services.pdf import html_to_pdf_bytes, pdf_generation_available
 
 
 @pytest.mark.anyio
@@ -90,3 +90,58 @@ async def test_html_to_pdf_bytes_generates_bytes_with_fake_playwright(monkeypatc
     assert dummy_browser.last_page is not None
     assert dummy_browser.last_page.rendered == ("<html><body>ok</body></html>", "load")
     assert dummy_browser.last_page.pdf_kwargs["print_background"] is True
+
+
+@pytest.mark.anyio
+async def test_pdf_generation_available_returns_false_when_executable_missing(monkeypatch):
+    class DummyChromium:
+        executable_path = "/tmp/missing-playwright-browser"
+
+    class DummyPlaywrightContext:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=DummyChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_async_playwright():
+        return DummyPlaywrightContext()
+
+    async_api_module = types.ModuleType("playwright.async_api")
+    async_api_module.async_playwright = fake_async_playwright
+    root_module = types.ModuleType("playwright")
+    root_module.async_api = async_api_module
+
+    monkeypatch.setitem(sys.modules, "playwright", root_module)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", async_api_module)
+
+    assert await pdf_generation_available() is False
+
+
+@pytest.mark.anyio
+async def test_pdf_generation_available_returns_true_when_executable_exists(monkeypatch, tmp_path):
+    executable = tmp_path / "headless_shell"
+    executable.write_text("", encoding="utf-8")
+
+    class DummyChromium:
+        executable_path = str(executable)
+
+    class DummyPlaywrightContext:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=DummyChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_async_playwright():
+        return DummyPlaywrightContext()
+
+    async_api_module = types.ModuleType("playwright.async_api")
+    async_api_module.async_playwright = fake_async_playwright
+    root_module = types.ModuleType("playwright")
+    root_module.async_api = async_api_module
+
+    monkeypatch.setitem(sys.modules, "playwright", root_module)
+    monkeypatch.setitem(sys.modules, "playwright.async_api", async_api_module)
+
+    assert await pdf_generation_available() is True

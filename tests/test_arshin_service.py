@@ -184,6 +184,61 @@ async def test_resolve_etalon_certs_prefers_latest_valid_date():
 
 
 @respx.mock
+async def test_resolve_etalon_certs_prefers_requested_reg_numbers():
+    details = {
+        "means": {
+            "mieta": [
+                {
+                    "regNumber": "77090.19.2Р.01262797",
+                    "mitypeNumber": "77090-19",
+                    "mitypeTitle": "Преобразователи давления эталонные",
+                    "manufactureNum": "4234",
+                },
+                {
+                    "regNumber": "77090.19.2Р.01262798",
+                    "mitypeNumber": "77090-19",
+                    "mitypeTitle": "Преобразователи давления эталонные",
+                    "manufactureNum": "4235",
+                },
+            ]
+        }
+    }
+
+    def _preferred_reg_response(request: httpx.Request) -> httpx.Response:
+        assert request.url.params.get("mi_number") == "4235"
+        return httpx.Response(
+            200,
+            json={
+                "result": {
+                    "count": 1,
+                    "items": [
+                        {
+                            "result_docnum": "CERT-4235",
+                            "verification_date": "06.03.2025",
+                            "valid_date": "05.03.2026",
+                        }
+                    ],
+                }
+            },
+        )
+
+    route = respx.get(f"{ARSHIN_BASE}/vri").mock(side_effect=_preferred_reg_response)
+
+    async with httpx.AsyncClient() as client:
+        certs = await resolve_etalon_certs_from_details(
+            client,
+            details,
+            sem=None,
+            preferred_reg_numbers=["77090.19.2Р.01262798"],
+        )
+
+    assert certs
+    assert certs[0]["reg_number"] == "77090.19.2Р.01262798"
+    assert certs[0]["manufacture_num"] == "4235"
+    assert route.call_count >= 1
+
+
+@respx.mock
 async def test_resolve_etalon_certs_tries_multiple_year_variants():
     details = {
         "vriInfo": {"applicable": {"certNum": "С-ВЯ/15-01-2025/402123271"}},
@@ -331,3 +386,30 @@ async def test_resolve_etalon_certs_falls_back_when_optional_filters_too_strict(
 
     assert certs
     assert certs[0]["docnum"] == "NEW"
+
+
+@respx.mock
+async def test_resolve_etalon_certs_caches_empty_resolution():
+    details = {
+        "means": {
+            "mieta": [
+                {
+                    "mitypeNumber": "65779-17",
+                    "manufactureNum": "999",
+                }
+            ]
+        }
+    }
+
+    route = respx.get(
+        f"{ARSHIN_BASE}/vri",
+        params={"mit_number": "65779-17", "mi_number": "999", "rows": 100, "start": 0},
+    ).mock(return_value=httpx.Response(200, json={"result": {"count": 0, "items": []}}))
+
+    async with httpx.AsyncClient() as client:
+        first = await resolve_etalon_certs_from_details(client, details, sem=None)
+        second = await resolve_etalon_certs_from_details(client, details, sem=None)
+
+    assert first == []
+    assert second == []
+    assert route.call_count == 1

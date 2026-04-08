@@ -10,6 +10,17 @@ from app.services.arshin_client import ARSHIN_BASE
 from app.utils.excel import CERTIFICATE_HEADER_KEYS
 
 
+@pytest.fixture(autouse=True)
+def _pdf_preflight_ok(monkeypatch):
+    async def fake_ensure_pdf_generation_available():
+        return None
+
+    monkeypatch.setattr(
+        "app.api.routes.protocols._ensure_pdf_generation_available",
+        fake_ensure_pdf_generation_available,
+    )
+
+
 def _make_protocols_excel_row(
     certificate: str,
     sn: str = "ABC123",
@@ -125,7 +136,7 @@ def _make_manometers_db_excel_multi(rows: list[dict[str, str]]) -> bytes:
 
 
 def _patch_etalon_certificates(monkeypatch, *, docnum: str = "ET-123") -> None:
-    async def fake_find_certs(client, details, sem=None):
+    async def fake_find_certs(client, details, sem=None, preferred_reg_numbers=None):
         return [
             {
                 "docnum": docnum,
@@ -290,7 +301,7 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
         certificate=cert,
         serial=serial,
         verifier=excel_verifier,
-        non_etalon_refs="71394-18/96320, 44154-16/419433, 77777-77/ABC777",
+        non_etalon_refs="71394-18/96320, 44154-20/419433, 77777-77/ABC777",
     )
     db_xlsx = _make_manometers_db_excel(
         serial=serial,
@@ -301,11 +312,15 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
 
     async def fake_pdf(html: str) -> bytes | None:
         assert "ПРОТОКОЛ" in html
-        assert "Измеритель влажности и температуры" in html
+        assert "Измерители влажности и температуры" in html
         assert "Секундомер электронный" in html
         assert "77777-77" in html
         assert "ABC777" in html
-        assert "СИ, применяемые при поверке (не эталоны):" not in html
+        assert "Не эталоны:" not in html
+        assert "Диапазон измерений:" in html
+        assert "Класс точности:" in html
+        assert "Максимальное полученное значение абсолютной погрешности:" in html
+        assert "Максимальное полученное значение вариации:" in html
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
@@ -382,29 +397,52 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
         ),
     }
 
-    aux_payloads = [
-        {
-            "title": "Измеритель влажности и температуры",
-            "reg_number": "71394-18",
-            "modification": "ИВТМ-7",
-            "manufacture_num": "96320",
-            "certificate_no": "С-ВСА/02-06-2025/436974158",
-            "verification_date": "02.06.2025",
-            "valid_to": "01.06.2026",
-        },
-        {
-            "title": "Секундомер электронный",
-            "reg_number": "44154-16",
-            "modification": "Интеграл С-01",
-            "manufacture_num": "419433",
-            "certificate_no": "С-ВЯ/19-12-2024/397249365",
-            "verification_date": "19.12.2024",
-            "valid_to": "18.12.2025",
-        },
-    ]
-    for payload in aux_payloads:
-        create_aux = await async_client.post("/api/v1/auxiliary-instruments", json=payload)
-        assert create_aux.status_code == 201
+    class _AuxInstrument:
+        def __init__(
+            self,
+            *,
+            title: str,
+            reg_number: str,
+            modification: str,
+            manufacture_num: str,
+            certificate_no: str,
+            verification_date: str,
+            valid_to: str,
+        ) -> None:
+            self.title = title
+            self.reg_number = reg_number
+            self.modification = modification
+            self.manufacture_num = manufacture_num
+            self.certificate_no = certificate_no
+            self.verification_date = verification_date
+            self.valid_to = valid_to
+
+    async def fake_find_by_pairs(self, pairs):
+        return {
+            ("71394-18", "96320"): _AuxInstrument(
+                title="Измерители влажности и температуры",
+                reg_number="71394-18",
+                modification="ИВТМ-7 М5-Д",
+                manufacture_num="96320",
+                certificate_no="С-ВСА/02-06-2025/436974158",
+                verification_date="02.06.2025",
+                valid_to="01.06.2026",
+            ),
+            ("44154-20", "419433"): _AuxInstrument(
+                title="Секундомер электронный",
+                reg_number="44154-20",
+                modification="Интеграл С-01",
+                manufacture_num="419433",
+                certificate_no="С-ВЯ/22-01-2026/497053091",
+                verification_date="22.01.2026",
+                valid_to="21.01.2027",
+            ),
+        }
+
+    monkeypatch.setattr(
+        "app.services.protocol_builder.AuxiliaryInstrumentRepository.find_by_pairs",
+        fake_find_by_pairs,
+    )
 
     response = await async_client.post("/api/v1/protocols/manometers/pdf-files", files=files)
 
@@ -794,7 +832,7 @@ async def test_contexts_by_excel_includes_multiple_etalons(async_client, monkeyp
         )
     )
 
-    async def fake_find_certs(client, details, sem=None):
+    async def fake_find_certs(client, details, sem=None, preferred_reg_numbers=None):
         return [
             {
                 "line": "свидетельство о поверке № ET-001; действительно до 31.12.2025;",

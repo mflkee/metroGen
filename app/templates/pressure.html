@@ -51,6 +51,22 @@
     </div>
     <div class="split-20 spread-bottom">
       <div>
+        <p>Диапазон измерений:</p>
+      </div>
+      <div class="line">
+        <p class="vh-center" id="setValue_measurementRange">{{ measurement_range_text }}</p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
+        <p>Класс точности:</p>
+      </div>
+      <div class="line">
+        <p class="vh-center" id="setValue_accuracyClass">{{ accuracy_class }}</p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom">
+      <div>
         <p>Принадлежащее:</p>
       </div>
       <div>
@@ -78,13 +94,12 @@
         <p class="undertext">наименование и номер документа</p>
       </div>
     </div>
-    {% set etalons = etalon_entries %}
-    {% set first_etalon = etalons[0] if etalons else None %}
+    {% set means_entries = (etalon_entries or []) + (auxiliary_instruments or []) %}
     <div class="split-17 spread-bottom">
       <p>Средства поверки:</p>
       <div>
-        {% if etalons %}
-          {% for entry in etalons %}
+        {% if means_entries %}
+          {% for entry in means_entries %}
           <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
             {{ entry.display_line or entry.line_top }}
           </p>
@@ -96,6 +111,12 @@
           Указываются эталоны единиц величин, обеспечивающие передачу размера
           единицы величины в соответствии с поверочной схемой,
         </p>
+      </div>
+    </div>
+    <div class="split-20 spread-bottom verification-place-row">
+      <p>Место проведения поверки:</p>
+      <div class="line verification-place-line">
+        <p class="verification-place-value" id="setValue_verificationPlace">ООО "МКАИР"</p>
       </div>
     </div>
     <div class="split-20 spread-bottom">
@@ -215,8 +236,23 @@
       к применению
     </p>
     {% else %}
-    <p class="spread-bottom-large">
-      Заключение: на основании результатов поверки, СИ признано
+    <div class="spread-bottom conclusion-block">
+      <p>Заключение:</p>
+      <p class="conclusion-metric">
+        Максимальное полученное значение абсолютной погрешности:
+        <span id="setValue_maxAbsError">
+          {{ max_abs_error_value }}{% if max_abs_error_unit %} {{ max_abs_error_unit }}{% endif %}
+        </span>
+      </p>
+      <p class="conclusion-metric">
+        Максимальное полученное значение вариации:
+        <span id="setValue_maxVariation">
+          {{ max_variation_value }}{% if max_variation_unit %} {{ max_variation_unit }}{% endif %}
+        </span>
+      </p>
+    </div>
+    <p class="spread-bottom conclusion-block">
+      На основании результатов поверки, СИ признано
       <span class="line">пригодным</span>/<span>непригодным</span>
       к применению
     </p>
@@ -459,9 +495,33 @@
     .line {
       border-bottom: 1px solid black;
     }
+    .verification-place-row {
+      align-items: flex-end;
+    }
+    .verification-place-line {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      min-height: 1.6rem;
+      padding: 0 0.2rem;
+    }
+    .verification-place-value {
+      text-align: center;
+      padding-bottom: 0.1rem;
+    }
+    .conclusion-block {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .conclusion-metric {
+      margin-top: 0.1rem;
+      line-height: 1.2;
+    }
     .sign-wrapper {
       position: relative;
       margin-top: 0.5rem;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .sign-slot {
       position: relative;

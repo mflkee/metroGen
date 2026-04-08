@@ -361,6 +361,13 @@ _AUXILIARY_INSTRUMENT_KEYS: tuple[str, ...] = (
     "СИ применяемые при поверке (не эталоны)",
 )
 
+_ETALON_REFERENCE_KEYS: tuple[str, ...] = (
+    "СИ, применяемые в качестве эталона",
+    "Эталоны ГЭТ",
+    "Эталоны не ГЭТ с приказом",
+    "Эталоны не ГЭТ без приказа",
+)
+
 
 def _fallback_point_description(position: int, idx: int) -> str:
     return _DEFAULT_POINT_DESCRIPTIONS.get(position) or _DEFAULT_POINT_DESCRIPTIONS.get(idx) or ""
@@ -415,6 +422,46 @@ def _auxiliary_pairs_from_row(row: Mapping[str, Any]) -> list[tuple[str, str]]:
     return []
 
 
+def _extract_etalon_reg_numbers(value: Any) -> list[str]:
+    text = _clean_str(value)
+    if not text:
+        return []
+
+    parts = re.split(r"[,\n;]+", text)
+    refs: list[str] = []
+    seen: set[str] = set()
+
+    for raw in parts:
+        token = str(raw or "").strip()
+        if not token:
+            continue
+        if "/" in token:
+            token = token.split("/", 1)[0].strip()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        refs.append(token)
+
+    return refs
+
+
+def extract_requested_etalon_reg_numbers(row: Mapping[str, Any]) -> list[str]:
+    refs: list[str] = []
+    seen: set[str] = set()
+
+    for key in _ETALON_REFERENCE_KEYS:
+        value = row.get(key)
+        if value in (None, ""):
+            continue
+        for ref in _extract_etalon_reg_numbers(value):
+            if ref in seen:
+                continue
+            seen.add(ref)
+            refs.append(ref)
+
+    return refs
+
+
 def _build_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, str]:
     verification_date = _fmt_date_ddmmyyyy(
         raw.get("verification_date") or raw.get("verificationDate")
@@ -432,7 +479,7 @@ def _build_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _as_etalon_like_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, Any]:
+def _compose_auxiliary_display_line(raw: Mapping[str, Any]) -> str:
     reg_number = _clean_str(raw.get("reg_number"))
     title = _clean_str(raw.get("title"))
     modification = _clean_str(raw.get("modification"))
@@ -440,11 +487,6 @@ def _as_etalon_like_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, Any]:
     certificate_no = _clean_str(raw.get("certificate_no"))
     verification_date = _fmt_date_ddmmyyyy(raw.get("verification_date"))
     valid_to = _fmt_date_ddmmyyyy(raw.get("valid_to"))
-
-    line_top = "; ".join(part for part in [reg_number, title] if part)
-    line_bottom = "; ".join(part for part in [modification, manufacture_num] if part)
-    if line_bottom and not line_bottom.endswith(";"):
-        line_bottom = f"{line_bottom};"
 
     certificate_line: str | None = None
     if certificate_no:
@@ -456,28 +498,13 @@ def _as_etalon_like_auxiliary_entry(raw: Mapping[str, Any]) -> dict[str, Any]:
         elif not certificate_line.endswith(";"):
             certificate_line = f"{certificate_line};"
 
-    line_full = "; ".join(part for part in [reg_number, title, modification] if part)
-
-    return {
-        "reg_number": reg_number,
-        "mitype_number": "",
-        "mitype_title": title,
-        "notation_full": modification,
-        "notation_first": modification,
-        "notation_second": "",
-        "modification": modification,
-        "manufacture_num": manufacture_num,
-        "manufacture_year": "",
-        "rank_code": "",
-        "rank_title": "",
-        "schema_title": "",
-        "line_full": line_full,
-        "line_top": line_top,
-        "line_bottom": line_bottom,
-        "certificate_line": certificate_line,
-        "certificate": None,
-        "display_line": None,
-    }
+    parts = [part for part in [reg_number, title, modification] if part]
+    if manufacture_num:
+        parts.append(f"№ {manufacture_num}")
+    line = "; ".join(parts)
+    if certificate_line:
+        line = f"{line}; ({certificate_line})" if line else f"({certificate_line})"
+    return line.strip()
 
 
 def _compose_etalon_display_line(entry: Mapping[str, Any]) -> str:
@@ -490,6 +517,57 @@ def _compose_etalon_display_line(entry: Mapping[str, Any]) -> str:
     if not normalized:
         return ""
     return "; ".join(normalized) + ";"
+
+
+def _format_display_number(value: float, digits: int = 3) -> str:
+    rendered = f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
+    return rendered.replace(".", ",")
+
+
+def _format_measurement_range_text(
+    source_text: Any,
+    range_min: float | None,
+    range_max: float | None,
+    unit: str | None,
+) -> str:
+    text = _clean_str(source_text)
+    if text:
+        return text
+    if range_min is None or range_max is None:
+        return ""
+    unit_text = f" {_clean_str(unit)}" if _clean_str(unit) else ""
+    return f"{_format_display_number(range_min)}…{_format_display_number(range_max)}{unit_text}"
+
+
+def _parse_numeric_cell(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    text = str(value).strip().replace(",", ".")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _build_pressure_summary(table_rows: list[dict[str, Any]]) -> tuple[str, str]:
+    max_abs_error = 0.0
+    max_variation = 0.0
+
+    for row in table_rows:
+        for si_key, ref_key in (("si_fwd", "ref_fwd"), ("si_rev", "ref_rev")):
+            si_value = _parse_numeric_cell(row.get(si_key))
+            ref_value = _parse_numeric_cell(row.get(ref_key))
+            if si_value is None or ref_value is None:
+                continue
+            max_abs_error = max(max_abs_error, abs(si_value - ref_value))
+
+        variation_value = _parse_numeric_cell(row.get("var_pct"))
+        if variation_value is not None:
+            max_variation = max(max_variation, variation_value)
+
+    return _format_display_number(max_abs_error), _format_display_number(max_variation, digits=2)
 
 
 def _etalon_sources(details: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -689,7 +767,18 @@ async def build_context(
         range_min, range_max = range_max, range_min
 
     # Эталоны: собираем все доступные источники
-    raw_entries = [_build_etalon_entry(entry) for entry in _etalon_sources(details)]
+    requested_etalon_reg_numbers = extract_requested_etalon_reg_numbers(excel_row)
+    raw_etalon_sources = list(_etalon_sources(details))
+    if requested_etalon_reg_numbers:
+        filtered_sources = [
+            entry
+            for entry in raw_etalon_sources
+            if _clean_str(entry.get("regNumber")) in set(requested_etalon_reg_numbers)
+        ]
+        if filtered_sources:
+            raw_etalon_sources = filtered_sources
+
+    raw_entries = [_build_etalon_entry(entry) for entry in raw_etalon_sources]
     etalon_entries = [
         entry
         for entry in raw_entries
@@ -725,7 +814,11 @@ async def build_context(
 
     if not etalon_certs and http_client:
         try:
-            etalon_certs = await resolve_etalon_certs_from_details(http_client, details)
+            etalon_certs = await resolve_etalon_certs_from_details(
+                http_client,
+                details,
+                preferred_reg_numbers=requested_etalon_reg_numbers or None,
+            )
             excel_row["_resolved_etalon_certs"] = etalon_certs
             if etalon_certs:
                 excel_row["_resolved_etalon_cert"] = etalon_certs[0]
@@ -739,9 +832,10 @@ async def build_context(
             entry["certificate"] = cert_match
             entry["certificate_line"] = cert_match.get("line")
 
-    # Неэталонные СИ добавляем в конец блока "Средства поверки"
-    if auxiliary_entries:
-        etalon_entries.extend(_as_etalon_like_auxiliary_entry(item) for item in auxiliary_entries)
+    for entry in auxiliary_entries:
+        if not isinstance(entry, dict):
+            continue
+        entry["display_line"] = _compose_auxiliary_display_line(entry)
 
     for entry in etalon_entries:
         if not isinstance(entry, dict):
@@ -781,7 +875,16 @@ async def build_context(
     )
     device_info_parts = [part for part in (device_type_name, device_modification) if part]
     device_info = ", ".join(device_info_parts)
-    allowable_fmt = allowable_display or _format_allowable_str(allowable_error)
+    allowable_fmt = allowable_display or _display_allowable_value(
+        _raw_allowable_value(excel_row),
+        allowable_error,
+    )
+    measurement_range_text = _format_measurement_range_text(
+        excel_row.get("Прочие сведения"),
+        range_min,
+        range_max,
+        unit,
+    )
 
     context: dict[str, Any] = {
         "device_info": device_info,
@@ -803,9 +906,11 @@ async def build_context(
         "range_min": range_min,
         "range_max": range_max,
         "unit": unit,
+        "measurement_range_text": measurement_range_text,
         "range_source": range_source,
         "measurement_range": {"min": range_min, "max": range_max},
         "measurement_unit": unit,
+        "accuracy_class": allowable_fmt,
         "etalon_entries": etalon_entries,
         "etalon_certificates": etalon_certs,
         "etalon_lines": [entry["line_full"] for entry in etalon_entries if entry.get("line_full")],
@@ -816,6 +921,7 @@ async def build_context(
         "etalon_certificate_line": et_cert_line,
         "etalon_rank_code": et_rank_code or None,
         "etalon_rank_title": et_rank_title or None,
+        "selected_etalon_reg_numbers": requested_etalon_reg_numbers,
         "allowable_error_pct": allowable_error,
         "allowable_error_fmt": allowable_fmt,
         "allowable_variation_pct": allowable_variation,
@@ -960,7 +1066,7 @@ async def build_context(
             if "point_groups" in gout:
                 context["point_groups"] = gout.get("point_groups") or []
             if "allowable_note" in gout:
-                context["allowable_note"] = gout["allowable_note"]
+                    context["allowable_note"] = gout["allowable_note"]
             for extra_key in (
                 "r0_deviation_pct",
                 "r0_allowable_pct",
@@ -969,6 +1075,15 @@ async def build_context(
             ):
                 if extra_key in gout:
                     context[extra_key] = gout[extra_key]
+
+            if template_id == "pressure_common":
+                max_abs_error_value, max_variation_value = _build_pressure_summary(
+                    context.get("table_rows") or []
+                )
+                context["max_abs_error_value"] = max_abs_error_value
+                context["max_abs_error_unit"] = context.get("unit") or ""
+                context["max_variation_value"] = max_variation_value
+                context["max_variation_unit"] = "%"
 
     trainee_name = _pick_trainee_name(
         context.get("verifier_name"),

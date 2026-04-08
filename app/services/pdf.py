@@ -18,6 +18,29 @@ def render_html(template_name: str, context: dict[str, Any]) -> str:
     return tpl.render(**context)
 
 
+async def pdf_generation_available() -> bool:
+    """Return True when Playwright and the Chromium executable are available."""
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as exc:
+        logger.warning("Playwright is unavailable for PDF generation: {}", exc)
+        return False
+
+    try:
+        async with async_playwright() as p:
+            executable_path = str(getattr(p.chromium, "executable_path", "") or "").strip()
+            if executable_path and Path(executable_path).exists():
+                return True
+            logger.warning(
+                "Playwright Chromium executable is missing for PDF generation: {}",
+                executable_path or "<empty>",
+            )
+            return False
+    except Exception as exc:
+        logger.warning("Playwright is unavailable for PDF generation: {}", exc)
+        return False
+
+
 async def html_to_pdf_bytes(html: str) -> bytes | None:
     """
     Преобразование HTML → PDF через Playwright (Chromium).
