@@ -39,7 +39,11 @@ FastAPI‑сервис для автоматизации подготовки п
 ## Подготовка окружения (локально)
 1. Склонируйте репозиторий и перейдите в каталог проекта.
 2. Скопируйте `app/.env.example` → `.env` в корне. Укажите `DATABASE_URL`, `ARSHIN_TIMEOUT`, `ARSHIN_CONCURRENCY`, `USER_AGENT`. Для локального Postgres:  
-   `DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/metrologenerator`
+   `DATABASE_URL=postgresql+asyncpg://metrologenerator:metrologenerator@127.0.0.1:15432/metrologenerator`
+   Для локального API по умолчанию используются:
+   `API_HOST=127.0.0.1`
+   `API_PORT=18000`
+   `API_RELOAD=false`
 3. Установите зависимости: `uv sync`.
 4. Установите Playwright Chromium: `uv run playwright install --with-deps chromium`.
 5. Примените миграции: `uv run alembic upgrade head`.
@@ -47,8 +51,8 @@ FastAPI‑сервис для автоматизации подготовки п
 
 ## Запуск API (локально)
 ```bash
-uv run uvicorn app.main:app --reload
-# сервис поднимется на http://127.0.0.1:8000
+uv run metrogen
+# сервис поднимется на http://127.0.0.1:18000
 ```
 
 ## Docker / Compose
@@ -56,6 +60,7 @@ uv run uvicorn app.main:app --reload
 docker compose up --build
 ```
 - Контейнер `db` (Postgres 16) проброшен на `localhost:15432` → `5432`.
+- Контейнер `api` публикуется на хост-порт из `.env` через `API_PORT` (по умолчанию `18000`).
 - `docker-entrypoint.sh` внутри `api` применяет миграции и запускает Uvicorn.
 - Во время сборки образа выполняется `uv sync --frozen --no-dev` и `/.venv/bin/python -m playwright install --with-deps chromium`, поэтому PDF работает «из коробки».
 
@@ -123,6 +128,7 @@ curl -X POST \
 ## Troubleshooting
 - **Playwright падает с `Executable doesn't exist`** — запустите `uv run playwright install --with-deps chromium` (локально) или пересоберите контейнер.
 - **Порт 5432 занят** — docker‑compose уже перенесён на `15432`. Если нужно другое значение, измените `docker-compose.yml` и `.env`.
+- **Порт API занят** — измените `API_PORT` в `.env`; локальный запуск `uv run metrogen` и `docker compose up` будут использовать этот порт на хосте.
 - **Аршин отвечает медленно** — увеличьте `ARSHIN_TIMEOUT` и уменьшите `ARSHIN_CONCURRENCY` в `.env`.
 - **Нет доступа к PDF** — убедитесь, что у пользователя есть права на каталог `exports/`; Docker создаёт volume автоматически.
 - **Сборка падает на миграциях** — проверьте `DATABASE_URL` и подключение Postgres; `docker-entrypoint.sh` выполняет `uv run alembic upgrade head`.

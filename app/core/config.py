@@ -3,6 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     APP_NAME: str = "Arshin helper API"
+    API_HOST: str = "127.0.0.1"
+    API_PORT: int = 18000
+    API_RELOAD: bool = False
+    API_LOG_LEVEL: str = "info"
     ARSHIN_TIMEOUT: float = 30.0
     ARSHIN_CONCURRENCY: int = 8
     ARSHIN_RETRY_ATTEMPTS: int = 4

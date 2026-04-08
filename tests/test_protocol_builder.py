@@ -396,11 +396,11 @@ async def test_build_context_includes_auxiliary_instruments_from_resolved_values
         "Модификация": "ДМ2005СгУ3",
         "Прочие сведения": "(0 - 10) кгс/см²",
         "Методика поверки": "МИ 2124-90",
-        "СИ, применяемые при поверке (не эталоны)": "71394-18/96320, 44154-16/419433",
+        "СИ, применяемые при поверке (не эталоны)": "71394-18/96320, 44154-20/419433",
         "_resolved_auxiliary_instruments": [
             {
-                "title": "Измеритель влажности и температуры",
-                "modification": "ИВТМ-7",
+                "title": "Измерители влажности и температуры",
+                "modification": "ИВТМ-7 М5-Д",
                 "manufacture_num": "96320",
                 "reg_number": "71394-18",
                 "certificate_no": "С-ВСА/02-06-2025/436974158",
@@ -411,10 +411,10 @@ async def test_build_context_includes_auxiliary_instruments_from_resolved_values
                 "title": "Секундомер электронный",
                 "modification": "Интеграл С-01",
                 "manufacture_num": "419433",
-                "reg_number": "44154-16",
-                "certificate_no": "С-ВЯ/19-12-2024/397249365",
-                "verification_date": "2024-12-19",
-                "valid_to": "2025-12-18",
+                "reg_number": "44154-20",
+                "certificate_no": "С-ВЯ/22-01-2026/497053091",
+                "verification_date": "2026-01-22",
+                "valid_to": "2027-01-21",
             },
         ],
     }
@@ -434,11 +434,46 @@ async def test_build_context_includes_auxiliary_instruments_from_resolved_values
     )
 
     assert len(ctx["auxiliary_instruments"]) == 2
-    assert ctx["auxiliary_instruments"][0]["title"] == "Измеритель влажности и температуры"
+    assert ctx["auxiliary_instruments"][0]["title"] == "Измерители влажности и температуры"
     assert ctx["auxiliary_instruments"][1]["manufacture_num"] == "419433"
     assert ctx["auxiliary_instruments"][0]["verification_date"] == "02.06.2025"
-    assert len(ctx["etalon_entries"]) == 2
-    assert ctx["etalon_entries"][0]["line_top"].startswith("71394-18; Измеритель влажности")
+    assert ctx["auxiliary_instruments"][0]["display_line"].startswith(
+        "71394-18; Измерители влажности и температуры; ИВТМ-7 М5-Д"
+    )
+    assert ctx["etalon_entries"] == []
+
+
+@pytest.mark.anyio
+async def test_build_context_adds_pressure_range_class_and_summary_fields():
+    excel_row = {
+        "Обозначение СИ": "4041-93",
+        "Заводской номер": "00435",
+        "Модификация": "ДМ2005СгУ3",
+        "Прочие сведения": "0…0,6 МПа",
+        "КТ": "1,5",
+        "Методика поверки": "МИ 2124-90",
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "4041-93"}},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name='ООО "РИ-ИНВЕСТ"',
+        owner_inn="7705551779",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    assert ctx["measurement_range_text"] == "0…0,6 МПа"
+    assert ctx["accuracy_class"] == "1,5"
+    assert ctx["max_abs_error_value"]
+    assert ctx["max_abs_error_unit"] == "МПа"
+    assert ctx["max_variation_value"]
+    assert ctx["max_variation_unit"] == "%"
 
 
 @pytest.mark.anyio

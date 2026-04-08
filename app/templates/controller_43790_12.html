@@ -93,6 +93,12 @@
         </p>
       </div>
     </div>
+    <div class="split-20 spread-bottom verification-place-row">
+      <p>Место проведения поверки:</p>
+      <div class="line verification-place-line">
+        <p class="verification-place-value" id="setValue_verificationPlace">ООО "МКАИР"</p>
+      </div>
+    </div>
     {% set temp_display = temperature_plain or temperature %}
     {% set humidity_display = humidity_plain or humidity %}
     <div class="split-20 spread-bottom">
@@ -315,6 +321,15 @@
       padding: 0 0.2rem;
       text-align: center;
       width: 100%;
+    }
+    .verification-place-row {
+      align-items: flex-end;
+    }
+    .verification-place-line {
+      min-height: 1.8rem;
+    }
+    .verification-place-value {
+      padding-bottom: 0.1rem;
     }
     .manual_checkup {
       margin-bottom: 0.3rem;

@@ -25,9 +25,10 @@ from app.services.arshin_client import (
     find_etalon_certificates,
 )
 from app.services.html_renderer import render_protocol_html
-from app.services.pdf import html_to_pdf_bytes
+from app.services.pdf import html_to_pdf_bytes, pdf_generation_available
 from app.services.protocol_builder import (
     build_protocol_context,
+    extract_requested_etalon_reg_numbers,
     make_protocol_number,
     suggest_filename,
 )
@@ -49,6 +50,13 @@ _RETRYABLE_CONTEXT_ERROR_MARKERS: tuple[str, ...] = (
 )
 _CONTEXT_RETRY_ATTEMPTS = max(0, int(settings.PROTOCOL_RETRY_ATTEMPTS))
 _CONTEXT_RETRY_DELAY_SECONDS = max(0.0, float(settings.PROTOCOL_RETRY_DELAY))
+_PDF_UNAVAILABLE_DETAIL = "PDF generation is unavailable (Playwright browser is not installed)"
+
+
+async def _ensure_pdf_generation_available() -> None:
+    if await pdf_generation_available():
+        return
+    raise HTTPException(status_code=500, detail=_PDF_UNAVAILABLE_DETAIL)
 
 
 def _make_worker_session_factory(
@@ -681,7 +689,13 @@ async def _build_context_from_db(
                 error="not found",
             )
 
-        et_certs = await find_etalon_certificates(client, details, sem=sem)
+        preferred_reg_numbers = extract_requested_etalon_reg_numbers(row_data)
+        et_certs = await find_etalon_certificates(
+            client,
+            details,
+            sem=sem,
+            preferred_reg_numbers=preferred_reg_numbers or None,
+        )
         if et_certs:
             row_data["_resolved_etalon_certs"] = et_certs
             row_data["_resolved_etalon_cert"] = et_certs[0]
@@ -768,7 +782,13 @@ async def _build_context_from_excel_row(
                 error="not found",
             )
 
-        et_certs = await find_etalon_certificates(client, details, sem=sem)
+        preferred_reg_numbers = extract_requested_etalon_reg_numbers(row_data)
+        et_certs = await find_etalon_certificates(
+            client,
+            details,
+            sem=sem,
+            preferred_reg_numbers=preferred_reg_numbers or None,
+        )
         if et_certs:
             row_data["_resolved_etalon_certs"] = et_certs
             row_data["_resolved_etalon_cert"] = et_certs[0]
@@ -1033,6 +1053,7 @@ async def controllers_pdf_files(
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
+    await _ensure_pdf_generation_available()
     overall_started = time.perf_counter()
     controllers_data = await controllers_file.read()
     db_data = await db_file.read() if db_file is not None else None
@@ -1227,6 +1248,7 @@ async def manometers_pdf_files(
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
+    await _ensure_pdf_generation_available()
     overall_started = time.perf_counter()
     manometers_data = await manometers_file.read()
     db_data = await db_file.read() if db_file is not None else None
@@ -1395,9 +1417,7 @@ async def manometers_pdf_files(
         logger.info(f"manometers_pdf_files: saved serial={serial or '-'} path={path}")
 
     if not saved and pdf_unavailable:
-        raise HTTPException(
-            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
-        )
+        raise HTTPException(status_code=500, detail=_PDF_UNAVAILABLE_DETAIL)
 
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:
@@ -1426,6 +1446,7 @@ async def manometers_failed_pdf_files(
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
+    await _ensure_pdf_generation_available()
     overall_started = time.perf_counter()
     manometers_data = await manometers_file.read()
     db_data = await db_file.read() if db_file is not None else None
@@ -1597,9 +1618,7 @@ async def manometers_failed_pdf_files(
         logger.info(f"manometers_failed_pdf_files: saved serial={serial or '-'} path={path}")
 
     if not saved and pdf_unavailable:
-        raise HTTPException(
-            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
-        )
+        raise HTTPException(status_code=500, detail=_PDF_UNAVAILABLE_DETAIL)
 
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:
@@ -1729,6 +1748,7 @@ async def thermometers_pdf_files(
     sem: asyncio.Semaphore = Depends(get_semaphore),
     session: AsyncSession = Depends(get_db),
 ):
+    await _ensure_pdf_generation_available()
     overall_started = time.perf_counter()
     thermometers_data = await thermometers_file.read()
     db_data = await db_file.read() if db_file is not None else None
@@ -1897,9 +1917,7 @@ async def thermometers_pdf_files(
         logger.info(f"thermometers_pdf_files: saved serial={serial or '-'} path={path}")
 
     if not saved and pdf_unavailable:
-        raise HTTPException(
-            status_code=500, detail="PDF generation is unavailable (Playwright not installed)"
-        )
+        raise HTTPException(status_code=500, detail=_PDF_UNAVAILABLE_DETAIL)
 
     failed_serials = [str(item.get("serial") or "-") for item in errors]
     if failed_serials:

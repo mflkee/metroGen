@@ -15,6 +15,7 @@ from app.services.cache import arshin_cache
 
 # Важно: этот BASE дергается в тестах!
 ARSHIN_BASE = "https://fgis.gost.ru/fundmetrology/eapi"
+_EMPTY_CACHE_RESULT = object()
 
 
 # ─────────────────────────── helpers ───────────────────────────
@@ -315,8 +316,14 @@ async def resolve_etalon_cert_from_details(
     client: httpx.AsyncClient,
     details: dict[str, Any],
     sem: asyncio.Semaphore | None = None,
+    preferred_reg_numbers: list[str] | None = None,
 ) -> dict[str, str] | None:
-    certs = await resolve_etalon_certs_from_details(client, details, sem=sem)
+    certs = await resolve_etalon_certs_from_details(
+        client,
+        details,
+        sem=sem,
+        preferred_reg_numbers=preferred_reg_numbers,
+    )
     return certs[0] if certs else None
 
 
@@ -338,6 +345,7 @@ async def resolve_etalon_certs_from_details(
     client: httpx.AsyncClient,
     details: dict[str, Any],
     sem: asyncio.Semaphore | None = None,
+    preferred_reg_numbers: list[str] | None = None,
 ) -> list[dict[str, str]]:
     """
     Автопоиск свидетельств эталонов:
@@ -359,16 +367,50 @@ async def resolve_etalon_certs_from_details(
     либо пустой список, если ничего не найдено.
     """
     candidates = _iter_etalon_sources(details)
+    preferred_set = {
+        str(value).strip() for value in (preferred_reg_numbers or []) if str(value).strip()
+    }
+    if preferred_set:
+        filtered_candidates = [
+            item for item in candidates if str(item.get("regNumber") or "").strip() in preferred_set
+        ]
+        if filtered_candidates:
+            candidates = filtered_candidates
     if not candidates:
         return []
+
+    resolution_cache_key = (
+        "eta_resolution_v1",
+        tuple(
+            (
+                str(item.get("regNumber") or ""),
+                str(item.get("mitypeNumber") or ""),
+                str(item.get("mitypeTitle") or ""),
+                str(item.get("manufactureNum") or ""),
+                str(item.get("manufactureYear") or ""),
+                str(item.get("modification") or ""),
+                str(item.get("notation") or item.get("mitypeType") or ""),
+            )
+            for item in candidates
+        ),
+        str(_safe_get(details, ["vriInfo", "applicable", "certNum"], "") or ""),
+        tuple(sorted(preferred_set)),
+    )
+    cached_resolution = arshin_cache.get(resolution_cache_key)
+    if cached_resolution is _EMPTY_CACHE_RESULT:
+        return []
+    if cached_resolution is not None:
+        return [dict(item) for item in cached_resolution]
 
     results: list[dict[str, str]] = []
 
     async def _query(params: dict[str, str]) -> dict[str, str] | None:
         cache_key = ("eta_cert_v3", tuple(sorted((str(k), str(v)) for k, v in params.items())))
         cached = arshin_cache.get(cache_key)
+        if cached is _EMPTY_CACHE_RESULT:
+            return None
         if cached is not None:
-            return cached
+            return dict(cached)
 
         items_all: list[dict[str, Any]] = []
         start = 0
@@ -397,6 +439,7 @@ async def resolve_etalon_certs_from_details(
                 break
 
         if not items_all:
+            arshin_cache.set(cache_key, _EMPTY_CACHE_RESULT)
             return None
 
         candidates: list[dict[str, Any]] = []
@@ -430,6 +473,7 @@ async def resolve_etalon_certs_from_details(
             )
 
         if not candidates:
+            arshin_cache.set(cache_key, _EMPTY_CACHE_RESULT)
             return None
 
         def _score(item: dict[str, Any]) -> tuple[date, date]:
@@ -441,7 +485,7 @@ async def resolve_etalon_certs_from_details(
         best.pop("_valid_dt", None)
         best.pop("_vrf_dt", None)
         arshin_cache.set(cache_key, best)
-        return best
+        return dict(best)
 
     seen_queries: set[tuple[tuple[str, str], ...]] = set()
 
@@ -536,7 +580,12 @@ async def resolve_etalon_certs_from_details(
             best.pop("_vrf_dt", None)
             results.append(best)
 
-    return results
+    if results:
+        arshin_cache.set(resolution_cache_key, [dict(item) for item in results])
+        return results
+
+    arshin_cache.set(resolution_cache_key, _EMPTY_CACHE_RESULT)
+    return []
 
 
 # Алиас для совместимости со старым импортом в protocols.py
@@ -545,8 +594,14 @@ async def find_etalon_certificate(
     client: httpx.AsyncClient,
     details: dict[str, Any],
     sem: asyncio.Semaphore | None = None,
+    preferred_reg_numbers: list[str] | None = None,
 ) -> dict[str, str] | None:
-    certs = await resolve_etalon_certs_from_details(client, details, sem=sem)
+    certs = await resolve_etalon_certs_from_details(
+        client,
+        details,
+        sem=sem,
+        preferred_reg_numbers=preferred_reg_numbers,
+    )
     return certs[0] if certs else None
 
 
@@ -554,5 +609,11 @@ async def find_etalon_certificates(
     client: httpx.AsyncClient,
     details: dict[str, Any],
     sem: asyncio.Semaphore | None = None,
+    preferred_reg_numbers: list[str] | None = None,
 ) -> list[dict[str, str]]:
-    return await resolve_etalon_certs_from_details(client, details, sem=sem)
+    return await resolve_etalon_certs_from_details(
+        client,
+        details,
+        sem=sem,
+        preferred_reg_numbers=preferred_reg_numbers,
+    )

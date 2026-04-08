@@ -81,10 +81,24 @@ def _iter_signature_files() -> Iterator[Path]:
                 yield path
 
 
-@lru_cache(maxsize=1)
-def _signature_entries() -> tuple[_SignatureEntry, ...]:
+def _signature_files_state() -> tuple[tuple[str, int, int], ...]:
+    state: list[tuple[str, int, int]] = []
+    for path in sorted(_iter_signature_files()):
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        state.append((str(path.resolve()), int(stat.st_mtime_ns), int(stat.st_size)))
+    return tuple(state)
+
+
+@lru_cache(maxsize=8)
+def _signature_entries_cached(
+    state: tuple[tuple[str, int, int], ...],
+) -> tuple[_SignatureEntry, ...]:
     entries: list[_SignatureEntry] = []
-    for path in _iter_signature_files():
+    for path_str, _, _ in state:
+        path = Path(path_str)
         normalized = _normalize(path.stem)
         if not normalized:
             continue
@@ -95,8 +109,12 @@ def _signature_entries() -> tuple[_SignatureEntry, ...]:
     return tuple(entries)
 
 
+def _signature_entries() -> tuple[_SignatureEntry, ...]:
+    return _signature_entries_cached(_signature_files_state())
+
+
 @cache
-def _data_uri_for(path_str: str) -> str:
+def _data_uri_for_cached(path_str: str, stamp: tuple[int, int]) -> str:
     path = Path(path_str)
     data = path.read_bytes()
     encoded = base64.b64encode(data).decode("ascii")
@@ -108,6 +126,12 @@ def _data_uri_for(path_str: str) -> str:
     else:
         mime = "image/png"
     return f"data:{mime};base64,{encoded}"
+
+
+def _data_uri_for(path_str: str) -> str:
+    path = Path(path_str)
+    stat = path.stat()
+    return _data_uri_for_cached(path_str, (int(stat.st_mtime_ns), int(stat.st_size)))
 
 
 _RNG: random.Random = random.SystemRandom()
@@ -249,5 +273,5 @@ def get_signature_render(verifier_name: str | None) -> SignatureRender | None:
 
 
 def _clear_caches_for_tests() -> None:
-    _signature_entries.cache_clear()
-    _data_uri_for.cache_clear()
+    _signature_entries_cached.cache_clear()
+    _data_uri_for_cached.cache_clear()
