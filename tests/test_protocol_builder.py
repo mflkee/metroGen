@@ -50,6 +50,31 @@ def test_display_allowable_value_prefers_raw_text():
     assert pb._display_allowable_value(None, 0.05) == "0.05"
 
 
+def test_build_pressure_summary_uses_higher_precision_for_mpa_summary():
+    from app.services import protocol_builder as pb
+
+    rows = [
+        {
+            "si_fwd": "0.00",
+            "si_rev": "0.00",
+            "ref_fwd": "0.000",
+            "ref_rev": "0.000",
+            "err_fwd": "0.40",
+            "err_rev": "0.35",
+            "var_pct": "0.05",
+        }
+    ]
+
+    max_abs_error, max_variation = pb._build_pressure_summary(
+        rows,
+        full_scale_value=0.6,
+        unit="МПа",
+    )
+
+    assert max_abs_error == "0,002"
+    assert max_variation == "0,05"
+
+
 @pytest.mark.anyio
 async def test_build_context_rtd_template_extra_fields():
     excel_row = {

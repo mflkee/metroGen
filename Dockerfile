@@ -14,10 +14,12 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv sync --frozen --no-dev
-RUN .venv/bin/python -m playwright install --with-deps chromium
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
+
+RUN uv sync --frozen --no-dev
+RUN .venv/bin/python -m playwright install --with-deps chromium
 
 RUN chmod +x docker-entrypoint.sh
 

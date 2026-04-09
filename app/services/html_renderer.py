@@ -56,6 +56,36 @@ def _normalize_temperature_plain(value: Any) -> str:
     return cleaned.replace(".", ",")
 
 
+def _normalize_humidity_plain(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    match = _TEMP_VALUE_RE.search(text)
+    if not match:
+        return text
+    numeric = match.group(0).replace(",", ".")
+    try:
+        number = float(numeric)
+    except ValueError:
+        cleaned = match.group(0)
+    else:
+        # Excel percent-formatted cells usually come through openpyxl as 0.34 for 34%.
+        if "%" not in text and 0 <= number <= 1:
+            number *= 100
+        cleaned = f"{number:.2f}".rstrip("0").rstrip(".")
+    if not cleaned:
+        cleaned = match.group(0)
+    return cleaned.replace(".", ",")
+
+
+def _display_or_fallback(value: Any, fallback: str = "") -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, str) and not value.strip():
+        return fallback
+    return value
+
+
 def _template_name_from_context(ctx: dict[str, Any]) -> str:
     method_code = (ctx.get("methodology_full") or ctx.get("method_code") or "").strip()
     mitype_number = (ctx.get("mitypeNumber") or "").strip()
@@ -118,7 +148,12 @@ def render_protocol_html(context: dict[str, Any]) -> str:
         else:
             ctx["allowable_variation"] = ""
 
-    ctx["temperature_plain"] = _normalize_temperature_plain(ctx.get("temperature_plain"))
+    ctx["temperature_plain"] = _normalize_temperature_plain(
+        _display_or_fallback(ctx.get("temperature_plain"))
+    )
+    ctx["humidity_plain"] = _normalize_humidity_plain(
+        _display_or_fallback(ctx.get("humidity_plain"), fallback="///")
+    )
 
     template = _templates.get_template(name)
     return template.render(ctx)

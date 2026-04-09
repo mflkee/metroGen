@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from enum import Enum as PyEnum
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
@@ -119,7 +119,7 @@ class MethodologyAlias(Base):
     methodology: Mapped[Methodology] = relationship(back_populates="aliases")
 
 
-class MethodologyPointType(str, PyEnum):
+class MethodologyPointType(StrEnum):
     BOOL = "bool"
     CLAUSE = "clause"
     CUSTOM = "custom"
@@ -261,6 +261,91 @@ class Etalon(Base):
 
     protocols: Mapped[list[Protocol]] = relationship(back_populates="etalon")
 
+
+class UserRole(StrEnum):
+    DEVELOPER = "DEVELOPER"
+    ADMINISTRATOR = "ADMINISTRATOR"
+    MKAIR = "MKAIR"
+    CUSTOMER = "CUSTOMER"
+
+
+class UserThemePreference(StrEnum):
+    LIGHT = "light"
+    DARK = "dark"
+    GRAY = "gray"
+    TOKYONIGHT = "tokyonight"
+    CATPPUCCIN = "catppuccin"
+    KANAGAWA = "kanagawa"
+    NORD = "nord"
+    DRACULA = "dracula"
+    GRUVBOX = "gruvbox"
+    MOONFLY = "moonfly"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    patronymic: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        String(32),
+        nullable=False,
+        default=UserRole.CUSTOMER,
+        server_default=text("'CUSTOMER'"),
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    facility: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mention_email_notifications_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    theme_preference: Mapped[UserThemePreference | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+    enabled_theme_options: Mapped[list[str] | None] = mapped_column(JSONBType(), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    )
 
 class Protocol(Base):
     __tablename__ = "protocols"

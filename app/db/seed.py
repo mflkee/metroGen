@@ -5,9 +5,16 @@ from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.repositories import AuxiliaryInstrumentRepository
+from app.core.config import settings
+from app.core.logging import setup_logging
+from app.db.models import User, UserRole
+from app.db.repositories import AuxiliaryInstrumentRepository, UserRepository
 from app.db.session import get_sessionmaker
 from app.services.mappings import _methodology_seed, _org_seed, ensure_methodology, ensure_owner
+from app.utils.password_policy import validate_password_policy
+from app.utils.security import hash_password
+
+logger = setup_logging()
 
 
 async def seed_owners(session: AsyncSession) -> int:
@@ -97,12 +104,52 @@ async def seed_database(session: AsyncSession) -> dict[str, int]:
     owners = await seed_owners(session)
     methodologies = await seed_methodologies(session)
     auxiliary_instruments = await seed_auxiliary_instruments(session)
+    users = await seed_users(session)
     await session.commit()
     return {
         "owners": owners,
         "methodologies": methodologies,
         "auxiliary_instruments": auxiliary_instruments,
+        "users": users,
     }
+
+
+async def seed_users(session: AsyncSession) -> int:
+    repo = UserRepository(session)
+    email = settings.BOOTSTRAP_ADMIN_EMAIL.strip().lower()
+    if not email:
+        return 0
+
+    password = settings.BOOTSTRAP_ADMIN_PASSWORD.strip()
+    validate_password_policy(password)
+
+    user = await repo.get_by_email(email)
+    if user is None:
+        await repo.add(
+            User(
+                first_name=settings.BOOTSTRAP_ADMIN_FIRST_NAME.strip() or "Bootstrap",
+                last_name=settings.BOOTSTRAP_ADMIN_LAST_NAME.strip() or "Administrator",
+                patronymic=settings.BOOTSTRAP_ADMIN_PATRONYMIC.strip() or None,
+                email=email,
+                password_hash=hash_password(password),
+                role=UserRole.ADMINISTRATOR,
+                is_active=True,
+                must_change_password=True,
+            )
+        )
+        logger.warning("Bootstrap administrator %s was created automatically.", email)
+        return 1
+
+    changed = False
+    if user.role not in {UserRole.DEVELOPER, UserRole.ADMINISTRATOR}:
+        user.role = UserRole.ADMINISTRATOR
+        changed = True
+    if not user.is_active:
+        user.is_active = True
+        changed = True
+    if changed:
+        logger.warning("Bootstrap administrator %s was elevated automatically.", email)
+    return 1
 
 
 async def seed_from_config() -> dict[str, int]:

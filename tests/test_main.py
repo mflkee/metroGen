@@ -24,3 +24,13 @@ def test_run_uses_env_backed_server_settings(monkeypatch):
         "reload": False,
         "log_level": "info",
     }
+
+
+def test_create_app_registers_auth_user_and_system_routes():
+    app = main.create_app()
+    paths = {route.path for route in app.routes}
+
+    assert "/api/v1/auth/login" in paths
+    assert "/api/v1/auth/me" in paths
+    assert "/api/v1/users" in paths
+    assert "/api/v1/system/status" in paths

@@ -519,8 +519,14 @@ def _compose_etalon_display_line(entry: Mapping[str, Any]) -> str:
     return "; ".join(normalized) + ";"
 
 
-def _format_display_number(value: float, digits: int = 3) -> str:
-    rendered = f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
+def _format_display_number(
+    value: float,
+    digits: int = 3,
+    trim_trailing_zeros: bool = True,
+) -> str:
+    rendered = f"{float(value):.{digits}f}"
+    if trim_trailing_zeros:
+        rendered = rendered.rstrip("0").rstrip(".")
     return rendered.replace(".", ",")
 
 
@@ -551,23 +557,63 @@ def _parse_numeric_cell(value: Any) -> float | None:
         return None
 
 
-def _build_pressure_summary(table_rows: list[dict[str, Any]]) -> tuple[str, str]:
+def _pressure_abs_error_digits(unit: str | None) -> int:
+    unit_text = _clean_str(unit).lower()
+    if unit_text == "мпа":
+        return 3
+    return 2
+
+
+def _build_pressure_summary(
+    table_rows: list[dict[str, Any]],
+    full_scale_value: float | None = None,
+    unit: str | None = None,
+) -> tuple[str, str]:
     max_abs_error = 0.0
     max_variation = 0.0
+    has_abs_error = False
+    has_variation = False
 
     for row in table_rows:
+        if full_scale_value is not None and full_scale_value > 0:
+            for err_key in ("err_fwd", "err_rev"):
+                err_pct = _parse_numeric_cell(row.get(err_key))
+                if err_pct is None:
+                    continue
+                has_abs_error = True
+                max_abs_error = max(
+                    max_abs_error,
+                    abs(err_pct) / 100.0 * float(full_scale_value),
+                )
+
         for si_key, ref_key in (("si_fwd", "ref_fwd"), ("si_rev", "ref_rev")):
             si_value = _parse_numeric_cell(row.get(si_key))
             ref_value = _parse_numeric_cell(row.get(ref_key))
             if si_value is None or ref_value is None:
                 continue
+            has_abs_error = True
             max_abs_error = max(max_abs_error, abs(si_value - ref_value))
 
         variation_value = _parse_numeric_cell(row.get("var_pct"))
         if variation_value is not None:
+            has_variation = True
             max_variation = max(max_variation, variation_value)
 
-    return _format_display_number(max_abs_error), _format_display_number(max_variation, digits=2)
+    max_abs_error_display = (
+        _format_display_number(
+            max_abs_error,
+            digits=_pressure_abs_error_digits(unit),
+            trim_trailing_zeros=False,
+        )
+        if has_abs_error
+        else ""
+    )
+    max_variation_display = (
+        _format_display_number(max_variation, digits=2, trim_trailing_zeros=False)
+        if has_variation
+        else ""
+    )
+    return max_abs_error_display, max_variation_display
 
 
 def _etalon_sources(details: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -1078,12 +1124,14 @@ async def build_context(
 
             if template_id == "pressure_common":
                 max_abs_error_value, max_variation_value = _build_pressure_summary(
-                    context.get("table_rows") or []
+                    context.get("table_rows") or [],
+                    full_scale_value=gen_range_max,
+                    unit=context.get("unit") or "",
                 )
                 context["max_abs_error_value"] = max_abs_error_value
-                context["max_abs_error_unit"] = context.get("unit") or ""
+                context["max_abs_error_unit"] = (context.get("unit") or "") if max_abs_error_value else ""
                 context["max_variation_value"] = max_variation_value
-                context["max_variation_unit"] = "%"
+                context["max_variation_unit"] = "%" if max_variation_value else ""
 
     trainee_name = _pick_trainee_name(
         context.get("verifier_name"),

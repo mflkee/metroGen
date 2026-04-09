@@ -1,0 +1,23 @@
+{
+  "name": "metro-gen",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "setup:local": "bash ./scripts/local/setup.sh",
+    "start:backend": "bash ./scripts/local/backend.sh",
+    "start:frontend": "bash ./scripts/local/frontend.sh",
+    "dev": "bash ./scripts/local/dev.sh",
+    "dev:backend": "bash ./scripts/local/backend.sh",
+    "test:backend": "env UV_CACHE_DIR=/tmp/uv-cache uv run pytest",
+    "lint:backend": "env UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .",
+    "format:backend": "env UV_CACHE_DIR=/tmp/uv-cache uv run ruff format .",
+    "dev:frontend": "bash ./scripts/local/frontend.sh",
+    "build:frontend": "npm --prefix frontend run build",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:restart": "docker compose restart",
+    "docker:logs": "docker compose logs -f --tail=200",
+    "docker:ps": "docker compose ps"
+  }
+}

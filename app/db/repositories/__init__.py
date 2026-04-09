@@ -14,6 +14,7 @@ try:  # pragma: no cover - executed only when SQLAlchemy installed
         MethodologyRepository,
         OwnerRepository,
         RegistryRepository,
+        UserRepository,
     )
 except ModuleNotFoundError as exc:  # pragma: no cover
     if exc.name != "sqlalchemy":
@@ -28,4 +29,5 @@ else:  # pragma: no cover - skip when SQLAlchemy missing in tests
         "MethodologyRepository",
         "OwnerRepository",
         "RegistryRepository",
+        "UserRepository",
     )
