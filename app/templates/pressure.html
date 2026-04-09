@@ -122,27 +122,19 @@
     <div class="split-20 spread-bottom">
       <p>Условия поверки:</p>
       <div>
-        <p class="line" style="display: flex; gap: 15px">
-          <span>температура окружающего воздуха</span>
-          <span
-            ><span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span
-            >°С</span
-          >
-          <span>относительная влажность</span>
-          <span id="setValue_humidity" data-format="0%">{{ humidity_plain }}</span>
+        <p class="line">
+          температура окружающего воздуха
+          <span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span>°С,
+          относительная влажность
+          <span id="setValue_humidity" data-format="0%">
+            {{ humidity_plain }}{% if humidity_plain and '%' not in humidity_plain and humidity_plain != '///' %}%{% endif %}
+          </span>
         </p>
+        <p class="line">атмосферное давление <span id="setValue_pressure">{{ pressure }}</span></p>
+        <p class="line">Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)</p>
         <p class="undertext">
           Указываются влияющие факторы, нормированные в НД на методику поверки,
           с указанием конкретных показателей (значений)
-        </p>
-      </div>
-    </div>
-    <div class="split-20 spread-bottom">
-      <div></div>
-      <div class="line">
-        <p style="display: flex; gap: 15px">
-          <span>атмосферное давление</span
-          ><span id="setValue_pressure">{{ pressure }}</span>
         </p>
       </div>
     </div>
@@ -238,12 +230,6 @@
     {% else %}
     <div class="spread-bottom conclusion-block">
       <p>Заключение:</p>
-      <p class="conclusion-metric">
-        Максимальное полученное значение абсолютной погрешности:
-        <span id="setValue_maxAbsError">
-          {{ max_abs_error_value }}{% if max_abs_error_unit %} {{ max_abs_error_unit }}{% endif %}
-        </span>
-      </p>
       <p class="conclusion-metric">
         Максимальное полученное значение вариации:
         <span id="setValue_maxVariation">

@@ -1,24 +1,31 @@
+name: metrogen
+
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: metrologenerator
-      POSTGRES_USER: metrologenerator
-      POSTGRES_PASSWORD: metrologenerator
+      POSTGRES_DB: ${POSTGRES_DB:-metrologenerator}
+      POSTGRES_USER: ${POSTGRES_USER:-metrologenerator}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-metrologenerator}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U metrologenerator -d metrologenerator"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-metrologenerator} -d ${POSTGRES_DB:-metrologenerator}"]
       interval: 10s
       timeout: 5s
       retries: 5
     ports:
-      - "15432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
 
   api:
     build: .
+    restart: unless-stopped
+    env_file:
+      - ./.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://metrologenerator:metrologenerator@db:5432/metrologenerator
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-metrologenerator}:${POSTGRES_PASSWORD:-metrologenerator}@db:5432/${POSTGRES_DB:-metrologenerator}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5174}
       ARSHIN_TIMEOUT: "32"
       ARSHIN_CONCURRENCY: "2"
       ARSHIN_RETRY_ATTEMPTS: "4"
@@ -28,10 +35,32 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/docs >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     ports:
-      - "${API_PORT:-18000}:8000"
+      - "${API_PORT:-8001}:8000"
     volumes:
       - .:/app
+      - api_venv:/app/.venv
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+        VITE_API_PROXY_TARGET: http://api:8000
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5174}:80"
 
 volumes:
+  api_venv:
   pgdata:

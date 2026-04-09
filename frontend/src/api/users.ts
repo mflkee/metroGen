@@ -1,0 +1,147 @@
+import { apiRequest } from "@/api/client";
+import { mapUser, type AuthUser, type RawUser, type UserRole } from "@/api/auth";
+
+type RawTemporaryPasswordResponse = {
+  user: RawUser;
+  temporary_password: string;
+};
+
+type RawUserMention = {
+  id: number;
+  display_name: string;
+  email: string;
+  mention_key: string;
+};
+
+export type UserTemporaryPasswordResponse = {
+  user: AuthUser;
+  temporaryPassword: string;
+};
+
+export type UserMention = {
+  id: number;
+  displayName: string;
+  email: string;
+  mentionKey: string;
+};
+
+export type CreateUserPayload = {
+  firstName: string;
+  lastName: string;
+  patronymic?: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+};
+
+export type UpdateUserPayload = {
+  firstName?: string;
+  lastName?: string;
+  patronymic?: string;
+  role?: UserRole;
+  isActive?: boolean;
+};
+
+export async function fetchUsers(token: string): Promise<AuthUser[]> {
+  const response = await apiRequest<RawUser[]>("/users", {
+    method: "GET",
+    token,
+  });
+  return response.map(mapUser);
+}
+
+export async function fetchUserById(token: string, userId: number): Promise<AuthUser> {
+  const response = await apiRequest<RawUser>(`/users/${userId}`, {
+    method: "GET",
+    token,
+  });
+  return mapUser(response);
+}
+
+export async function fetchMentionUsers(token: string): Promise<UserMention[]> {
+  const response = await apiRequest<RawUserMention[]>("/users/mentions", {
+    method: "GET",
+    token,
+  });
+  return response.map((item) => ({
+    id: item.id,
+    displayName: item.display_name,
+    email: item.email,
+    mentionKey: item.mention_key,
+  }));
+}
+
+export async function createUser(
+  token: string,
+  payload: CreateUserPayload,
+): Promise<UserTemporaryPasswordResponse> {
+  const response = await apiRequest<RawTemporaryPasswordResponse>("/users", {
+    method: "POST",
+    token,
+    body: {
+      first_name: payload.firstName,
+      last_name: payload.lastName,
+      patronymic: payload.patronymic,
+      email: payload.email,
+      role: payload.role,
+      is_active: payload.isActive,
+    },
+  });
+  return {
+    user: mapUser(response.user),
+    temporaryPassword: response.temporary_password,
+  };
+}
+
+export async function updateUser(
+  token: string,
+  userId: number,
+  payload: UpdateUserPayload,
+): Promise<AuthUser> {
+  const response = await apiRequest<RawUser>(`/users/${userId}`, {
+    method: "PATCH",
+    token,
+    body: {
+      first_name: payload.firstName,
+      last_name: payload.lastName,
+      patronymic: payload.patronymic,
+      role: payload.role,
+      is_active: payload.isActive,
+    },
+  });
+  return mapUser(response);
+}
+
+export async function updateUserRole(
+  token: string,
+  userId: number,
+  role: UserRole,
+): Promise<AuthUser> {
+  const response = await apiRequest<RawUser>(`/users/${userId}/role`, {
+    method: "PATCH",
+    token,
+    body: { role },
+  });
+  return mapUser(response);
+}
+
+export async function resetUserPassword(
+  token: string,
+  userId: number,
+): Promise<UserTemporaryPasswordResponse> {
+  const response = await apiRequest<RawTemporaryPasswordResponse>(`/users/${userId}/reset-password`, {
+    method: "POST",
+    token,
+  });
+  return {
+    user: mapUser(response.user),
+    temporaryPassword: response.temporary_password,
+  };
+}
+
+export async function deleteUser(token: string, userId: number): Promise<void> {
+  await apiRequest(`/users/${userId}`, {
+    method: "DELETE",
+    token,
+  });
+}

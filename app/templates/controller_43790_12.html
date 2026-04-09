@@ -104,29 +104,20 @@
     <div class="split-20 spread-bottom">
       <p>Условия поверки:</p>
       <div>
-        <p class="line" style="display: flex; gap: 15px">
-          <span>температура окружающего воздуха</span>
-          <span>
-            <span id="setValue_temperature" data-format="N1">{{ temp_display }}</span>
-            {% if temp_display and '°' not in temp_display %}°С{% endif %}
-          </span>
-          <span>относительная влажность</span>
+        <p class="line">
+          температура окружающего воздуха
+          <span id="setValue_temperature" data-format="N1">{{ temp_display }}</span>
+          {% if temp_display and '°' not in temp_display %}°С{% endif %},
+          относительная влажность
           <span id="setValue_humidity" data-format="0%">
-            {{ humidity_display }}{% if humidity_display and '%' not in humidity_display %}%{% endif %}
+            {{ humidity_display }}{% if humidity_display and '%' not in humidity_display and humidity_display != '///' %}%{% endif %}
           </span>
         </p>
+        <p class="line">атмосферное давление <span id="setValue_pressure">{{ pressure }}</span></p>
+        <p class="line">Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)</p>
         <p class="undertext">
           Указываются влияющие факторы, нормированные в НД на методику поверки,
           с указанием конкретных показателей (значений)
-        </p>
-      </div>
-    </div>
-    <div class="split-20 spread-bottom">
-      <div></div>
-      <div class="line">
-        <p style="display: flex; gap: 15px">
-          <span>атмосферное давление</span
-          ><span id="setValue_pressure">{{ pressure }}</span>
         </p>
       </div>
     </div>

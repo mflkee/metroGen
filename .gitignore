@@ -3,3 +3,5 @@ AGENTS.md
 pgdata
 output
 exports
+frontend/node_modules
+frontend/dist

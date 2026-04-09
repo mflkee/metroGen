@@ -1,11 +1,18 @@
 #!/bin/sh
 set -e
 
-if [ -n "$DATABASE_URL" ]; then
-  uv run alembic upgrade head
+PYTHON_BIN="/app/.venv/bin/python"
+
+if [ ! -x "$PYTHON_BIN" ]; then
+  echo "Virtual environment is missing at /app/.venv. Rebuild the api image." >&2
+  exit 1
 fi
 
-UVICORN_CMD="uv run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+if [ -n "$DATABASE_URL" ]; then
+  "$PYTHON_BIN" -m alembic upgrade head
+fi
+
+UVICORN_CMD="$PYTHON_BIN -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 if [ "${UVICORN_RELOAD}" = "1" ] || [ "${UVICORN_RELOAD}" = "true" ]; then
   UVICORN_CMD="$UVICORN_CMD --reload"
 fi

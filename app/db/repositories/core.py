@@ -24,6 +24,7 @@ __all__ = (
     "InstrumentRepository",
     "EtalonRepository",
     "AuxiliaryInstrumentRepository",
+    "UserRepository",
     "MethodologyPointPayload",
 )
 
@@ -39,6 +40,11 @@ class BaseRepository:
         if flush:
             await self.session.flush()
         return instance
+
+    async def delete(self, instance: models.Base, *, flush: bool = True) -> None:
+        await self.session.delete(instance)
+        if flush:
+            await self.session.flush()
 
 
 class OwnerRepository(BaseRepository):
@@ -342,6 +348,42 @@ class RegistryRepository(BaseRepository):
             if entry.normalized_serial:
                 mapping.setdefault(entry.normalized_serial, []).append(entry)
         return mapping
+
+
+class UserRepository(BaseRepository):
+    async def get_by_id(self, user_id: int) -> models.User | None:
+        stmt = select(models.User).where(models.User.id == user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_id_for_update(self, user_id: int) -> models.User | None:
+        stmt = select(models.User).where(models.User.id == user_id).with_for_update()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_email(self, email: str) -> models.User | None:
+        stmt = select(models.User).where(models.User.email == email)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_email_for_update(self, email: str) -> models.User | None:
+        stmt = select(models.User).where(models.User.email == email).with_for_update()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_all(self) -> list[models.User]:
+        stmt = select(models.User).order_by(models.User.last_name, models.User.first_name)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_active(self) -> list[models.User]:
+        stmt = (
+            select(models.User)
+            .where(models.User.is_active.is_(True))
+            .order_by(models.User.last_name, models.User.first_name)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
 class InstrumentRepository(BaseRepository):
     async def find_by_serial(self, normalized_serial: str) -> list[models.MeasuringInstrument]:

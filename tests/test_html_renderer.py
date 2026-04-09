@@ -15,6 +15,9 @@ async def test_pressure_html_renders_range_class_auxiliary_and_summary():
         "Прочие сведения": "0…0,6 МПа",
         "КТ": "1,5",
         "Методика поверки": "МИ 2124-90",
+        "Температура": "21,5",
+        "Влажность": "60",
+        "Давление": "102,3 кПа",
         "_resolved_auxiliary_instruments": [
             {
                 "title": "Измерители влажности и температуры",
@@ -68,7 +71,50 @@ async def test_pressure_html_renders_range_class_auxiliary_and_summary():
     assert "71394-18; Измерители влажности и температуры; ИВТМ-7 М5-Д" in html
     assert 'Место проведения поверки:' in html
     assert 'ООО "МКАИР"' in html
-    assert "Максимальное полученное значение абсолютной погрешности:" in html
+    assert "Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)" in html
+    assert ">60%<" in html or "> 60%<" in html
     assert "Максимальное полученное значение вариации:" in html
-    assert f'{ctx["max_abs_error_value"]} {ctx["max_abs_error_unit"]}' in html
     assert f'{ctx["max_variation_value"]} {ctx["max_variation_unit"]}' in html
+    assert "Максимальное полученное значение абсолютной погрешности:" not in html
+    assert "°С," in html
+    assert '<p class="line">атмосферное давление ' in html
+
+    temp_idx = html.index("температура окружающего воздуха")
+    humidity_idx = html.index("относительная влажность")
+    pressure_idx = html.index("атмосферное давление")
+    vibration_idx = html.index("Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)")
+    undertext_idx = html.index(
+        "Указываются влияющие факторы, нормированные в НД на методику поверки,"
+    )
+    assert temp_idx < humidity_idx < pressure_idx < vibration_idx < undertext_idx
+
+
+@pytest.mark.anyio
+async def test_pressure_html_normalizes_fractional_humidity_to_percent():
+    excel_row = {
+        "Обозначение СИ": "4041-93",
+        "Заводской номер": "00435",
+        "Модификация": "ДМ2005СгУ3",
+        "Прочие сведения": "0…0,6 МПа",
+        "КТ": "1,5",
+        "Методика поверки": "МИ 2124-90",
+        "Влажность": 0.34,
+    }
+    details = {
+        "miInfo": {"singleMI": {"mitypeTitle": "Манометры", "mitypeNumber": "4041-93"}},
+        "vriInfo": {},
+    }
+
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name='ООО "РИ-ИНВЕСТ"',
+        owner_inn="7705551779",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    html = render_protocol_html(ctx)
+
+    assert ">34%<" in html or "> 34%<" in html
