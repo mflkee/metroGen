@@ -25,6 +25,20 @@ type RawSystemStatus = {
   active_users_count: number;
   export_folders_count: number;
   generated_files_count: number;
+  database: {
+    backend: string;
+    database: string | null;
+    host: string | null;
+    owners_count: number;
+    methodologies_count: number;
+    registry_entries_count: number;
+    active_registry_entries_count: number;
+    auxiliary_instruments_count: number;
+    etalon_devices_count: number;
+    etalon_certifications_count: number;
+    measuring_instruments_count: number;
+    protocols_count: number;
+  };
   recent_exports: RawExportFolder[];
 };
 
@@ -53,6 +67,20 @@ export type SystemStatus = {
   activeUsersCount: number;
   exportFoldersCount: number;
   generatedFilesCount: number;
+  database: {
+    backend: string;
+    database: string | null;
+    host: string | null;
+    ownersCount: number;
+    methodologiesCount: number;
+    registryEntriesCount: number;
+    activeRegistryEntriesCount: number;
+    auxiliaryInstrumentsCount: number;
+    etalonDevicesCount: number;
+    etalonCertificationsCount: number;
+    measuringInstrumentsCount: number;
+    protocolsCount: number;
+  };
   recentExports: ExportFolder[];
 };
 
@@ -72,6 +100,20 @@ export async function fetchSystemStatus(token: string): Promise<SystemStatus> {
     activeUsersCount: response.active_users_count,
     exportFoldersCount: response.export_folders_count,
     generatedFilesCount: response.generated_files_count,
+    database: {
+      backend: response.database.backend,
+      database: response.database.database,
+      host: response.database.host,
+      ownersCount: response.database.owners_count,
+      methodologiesCount: response.database.methodologies_count,
+      registryEntriesCount: response.database.registry_entries_count,
+      activeRegistryEntriesCount: response.database.active_registry_entries_count,
+      auxiliaryInstrumentsCount: response.database.auxiliary_instruments_count,
+      etalonDevicesCount: response.database.etalon_devices_count,
+      etalonCertificationsCount: response.database.etalon_certifications_count,
+      measuringInstrumentsCount: response.database.measuring_instruments_count,
+      protocolsCount: response.database.protocols_count,
+    },
     recentExports: response.recent_exports.map((folder) => ({
       name: folder.name,
       path: folder.path,
@@ -88,4 +130,8 @@ export async function fetchSystemStatus(token: string): Promise<SystemStatus> {
 
 export async function fetchExportFile(token: string, path: string): Promise<Blob> {
   return fetchBinary(`/system/export-file?path=${encodeURIComponent(path)}`, token);
+}
+
+export async function fetchExportFolderArchive(token: string, path: string): Promise<Blob> {
+  return fetchBinary(`/system/export-folder-archive?path=${encodeURIComponent(path)}`, token);
 }

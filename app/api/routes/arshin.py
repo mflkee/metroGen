@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.deps import get_http_client, get_semaphore
 from app.services.arshin_client import (
+    ARSHIN_BASE,
     compose_etalon_line_from_details,
     extract_detail_fields,
     fetch_vri_details,
@@ -19,6 +20,27 @@ from app.services.arshin_client import (
 from app.utils.excel import extract_certificates_from_excel
 
 router = APIRouter(prefix="/api/v1/resolve", tags=["arshin"])
+
+
+@router.get("/status")
+async def get_arshin_status(
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+) -> dict[str, str | bool | None]:
+    try:
+        async with sem:
+            response = await client.get(
+                f"{ARSHIN_BASE}/vri",
+                params={"page": 1, "size": 1},
+                timeout=min(client.timeout.connect or 5.0, 5.0),
+            )
+    except httpx.RequestError as exc:
+        return {"available": False, "message": str(exc) or "Transport error"}
+
+    if response.status_code >= 500:
+        return {"available": False, "message": f"HTTP {response.status_code}"}
+
+    return {"available": True, "message": None}
 
 
 @router.get("/vri-id")

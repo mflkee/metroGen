@@ -1,12 +1,15 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import { useQuery } from "@tanstack/react-query";
+
+import { fetchArshinStatus } from "@/api/arshin";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { useAuthStore } from "@/store/auth";
 
 const routeLabels: Array<{ match: RegExp; label: string }> = [
   { match: /^\/dashboard$/, label: "Главная" },
   { match: /^\/generation$/, label: "Генерация" },
-  { match: /^\/arshin$/, label: "Аршин" },
   { match: /^\/settings$/, label: "Настройки" },
   { match: /^\/profile$/, label: "Профиль" },
   { match: /^\/help$/, label: "Документация" },
@@ -22,9 +25,58 @@ type TopbarProps = {
 
 export function Topbar({ mobileNavigationOpen, onToggleMobileNavigation }: TopbarProps) {
   const location = useLocation();
+  const token = useAuthStore((state) => state.token);
   const mustChangePassword = useAuthStore((state) => state.user?.mustChangePassword);
   const currentSection =
     routeLabels.find((item) => item.match.test(location.pathname))?.label ?? "Рабочая область";
+  const [isArshinProbeSlow, setIsArshinProbeSlow] = useState(false);
+  const arshinStatusQuery = useQuery({
+    queryKey: ["arshin-status"],
+    queryFn: () => fetchArshinStatus(token ?? ""),
+    enabled: Boolean(token),
+    staleTime: 4_000,
+    refetchInterval: 5_000,
+  });
+
+  useEffect(() => {
+    if (arshinStatusQuery.fetchStatus !== "fetching") {
+      setIsArshinProbeSlow(false);
+      return undefined;
+    }
+
+    setIsArshinProbeSlow(false);
+    const timeoutId = window.setTimeout(() => {
+      setIsArshinProbeSlow(true);
+    }, 2_000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [arshinStatusQuery.fetchStatus]);
+
+  const arshinStatusIndicator = isArshinProbeSlow
+    ? {
+        title: "Аршин не отвечает",
+        dotClassName: "bg-[var(--danger)]",
+        toneClassName: "text-[var(--danger)]",
+      }
+    : arshinStatusQuery.isLoading
+      ? {
+          title: "Проверяем Аршин",
+          dotClassName: "bg-steel/45",
+          toneClassName: "text-steel",
+        }
+      : arshinStatusQuery.isError || arshinStatusQuery.data?.available === false
+        ? {
+            title: "Аршин недоступен",
+            dotClassName: "bg-[var(--danger)]",
+            toneClassName: "text-[var(--danger)]",
+          }
+        : {
+            title: "Аршин доступен",
+            dotClassName: "bg-[var(--success)]",
+            toneClassName: "text-[var(--success)]",
+          };
 
   return (
     <header className="shell-topbar z-20 border-b border-line px-3 py-2 backdrop-blur sm:px-4 sm:py-2.5 lg:sticky lg:top-0 lg:px-8 lg:py-3">
@@ -53,6 +105,20 @@ export function Topbar({ mobileNavigationOpen, onToggleMobileNavigation }: Topba
           <Link className="shrink-0 text-sm font-semibold text-ink sm:text-base" to="/dashboard">
             metroGen
           </Link>
+          <div
+            aria-label={arshinStatusIndicator.title}
+            className={[
+              "hidden shrink-0 items-center gap-2 text-xs font-medium sm:inline-flex",
+              arshinStatusIndicator.toneClassName,
+            ].join(" ")}
+            title={arshinStatusIndicator.title}
+          >
+            <span
+              aria-hidden="true"
+              className={["h-2.5 w-2.5 rounded-full", arshinStatusIndicator.dotClassName].join(" ")}
+            />
+            <span className="whitespace-nowrap">Аршин</span>
+          </div>
         </div>
         <div className="justify-self-end">
           <AccountMenu />

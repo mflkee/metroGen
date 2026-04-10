@@ -329,6 +329,17 @@ textarea.form-input {
   border-color: var(--accent);
 }
 
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .btn-primary,
 .btn-secondary,
 .btn-accent,
@@ -452,6 +463,18 @@ textarea.form-input {
 
 .shell-status-banner {
   background: color-mix(in srgb, var(--accent-soft) 68%, var(--panel-bg));
+}
+
+.monitor-status-badge--online {
+  border: 1px solid color-mix(in srgb, var(--success) 34%, var(--border-color));
+  background: color-mix(in srgb, var(--success) 16%, var(--tone-child-bg));
+  color: var(--success);
+}
+
+.monitor-status-badge--offline {
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--tone-child-bg) 92%, transparent);
+  color: var(--text-muted);
 }
 
 .mobile-nav-toggle,

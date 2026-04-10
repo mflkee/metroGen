@@ -10,22 +10,26 @@ export type NavigationItem = {
 
 const baseNavigationItems: NavigationItem[] = [
   { icon: "home", label: "Главная", description: "Статус, экспорты и запуск сценариев", to: "/dashboard" },
-  { icon: "verification", label: "Генерация", description: "PDF, HTML-превью и режимы протоколов", to: "/generation" },
-  { icon: "arshin", label: "Аршин", description: "Диагностика сертификатов и vri_id", to: "/arshin" },
+  {
+    icon: "verification",
+    label: "Генерация",
+    description: "PDF, БД, готовые run-пакеты и превью",
+    to: "/generation",
+  },
   { icon: "settings", label: "Настройки", description: "Темы, SMTP и параметры интерфейса", to: "/settings" },
 ];
 
 const developerNavigationItem: NavigationItem = {
   icon: "monitor",
   label: "Мониторинг",
-  description: "Состояние приложения и окружения",
+  description: "Состояние сервиса, БД и активность пользователей",
   to: "/developer",
 };
 
 const adminUsersNavigationItem: NavigationItem = {
   icon: "users",
   label: "Пользователи",
-  description: "Роли, доступы и временные пароли",
+  description: "Роли, временные пароли и быстрые действия",
   to: "/admin/users",
 };
 

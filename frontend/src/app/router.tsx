@@ -8,9 +8,6 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 const AdminUsersPage = lazy(() =>
   import("@/pages/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })),
 );
-const ArshinPage = lazy(() =>
-  import("@/pages/ArshinPage").then((module) => ({ default: module.ArshinPage })),
-);
 const DashboardPage = lazy(() =>
   import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })),
 );
@@ -63,7 +60,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "/dashboard", element: <DashboardPage /> },
           { path: "/generation", element: <GenerationPage /> },
-          { path: "/arshin", element: <ArshinPage /> },
+          { path: "/arshin", element: <Navigate to="/generation" replace /> },
           { path: "/settings", element: <SettingsPage /> },
           { path: "/profile", element: <ProfilePage /> },
           { path: "/help", element: <HelpPage /> },

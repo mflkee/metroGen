@@ -1,61 +1,355 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+
 import { useQuery } from "@tanstack/react-query";
 
+import type { AuthUser, UserRole } from "@/api/auth";
 import { fetchSystemStatus } from "@/api/system";
+import { fetchUsers } from "@/api/users";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { roleLabels } from "@/lib/roles";
+import { matchesUserSearch, userSearchPlaceholder } from "@/lib/userSearch";
 import { useAuthStore } from "@/store/auth";
+
+const ONLINE_WINDOW_MINUTES = 10;
+const RECENT_LOGIN_DAYS = 7;
+
+type SummaryCard = {
+  label: string;
+  value: string;
+  hint: string;
+};
 
 export function DeveloperDashboardPage() {
   const token = useAuthStore((state) => state.token);
-  const statusQuery = useQuery({
-    queryKey: ["system-status", "developer"],
-    queryFn: () => fetchSystemStatus(token ?? ""),
+  const [usersSearchQuery, setUsersSearchQuery] = useState("");
+
+  const usersQuery = useQuery({
+    queryKey: ["developer-dashboard", "users"],
+    queryFn: () => fetchUsers(token ?? ""),
     enabled: Boolean(token),
+    refetchInterval: 60_000,
   });
 
-  const status = statusQuery.data;
+  const statusQuery = useQuery({
+    queryKey: ["developer-dashboard", "status"],
+    queryFn: () => fetchSystemStatus(token ?? ""),
+    enabled: Boolean(token),
+    refetchInterval: 60_000,
+  });
+
+  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
+  const summaryCards = useMemo(() => buildSummaryCards(users, statusQuery.data?.database.activeRegistryEntriesCount), [users, statusQuery.data?.database.activeRegistryEntriesCount]);
+  const onlineUsers = useMemo(() => users.filter((user) => isOnline(user.lastSeenAt)), [users]);
+  const roleDistribution = useMemo(() => buildRoleDistribution(users), [users]);
+  const usersByLastLogin = useMemo(
+    () => [...users].sort((left, right) => compareDates(right.lastLoginAt, left.lastLoginAt)),
+    [users],
+  );
+  const visibleUsersByLastLogin = useMemo(
+    () => usersByLastLogin.filter((user) => matchesUserSearch(user, usersSearchQuery)),
+    [usersByLastLogin, usersSearchQuery],
+  );
 
   return (
-    <section>
+    <section className="space-y-6">
       <PageHeader
         title="Мониторинг"
-        description="Упрощенный техэкран metroGen: состояние PDF-рендера, SMTP, каталогов и активности пользователей."
+        description="Служебная панель metroGen: онлайн-активность, роли, состояние генератора и наполнение БД в одном месте."
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article className="metric-card">
-          <div className="metric-card__label">Активные пользователи</div>
-          <div className="metric-card__value">{status?.activeUsersCount ?? "..."}</div>
-        </article>
-        <article className="metric-card">
-          <div className="metric-card__label">Всего пользователей</div>
-          <div className="metric-card__value">{status?.usersCount ?? "..."}</div>
-        </article>
-        <article className="metric-card">
-          <div className="metric-card__label">Экспортные папки</div>
-          <div className="metric-card__value">{status?.exportFoldersCount ?? "..."}</div>
-        </article>
-        <article className="metric-card">
-          <div className="metric-card__label">Файлы в истории</div>
-          <div className="metric-card__value">{status?.generatedFilesCount ?? "..."}</div>
-        </article>
-      </div>
 
-      <div className="section-card mt-6">
-        <h3 className="text-lg font-semibold text-ink">Окружение</h3>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-line p-4">
-            <div className="text-xs uppercase tracking-[0.16em] text-steel">App</div>
-            <div className="mt-1 text-ink">{status?.appName ?? "..."}</div>
-            <div className="mt-3 text-xs uppercase tracking-[0.16em] text-steel">Env</div>
-            <div className="mt-1 text-ink">{status?.appEnv ?? "..."}</div>
+      {usersQuery.isLoading || statusQuery.isLoading ? (
+        <p className="text-sm text-steel">Собираем служебную статистику...</p>
+      ) : null}
+      {usersQuery.error ? (
+        <p className="text-sm text-[#b04c43]">
+          {usersQuery.error instanceof Error
+            ? usersQuery.error.message
+            : "Не удалось загрузить статистику пользователей."}
+        </p>
+      ) : null}
+      {statusQuery.error ? (
+        <p className="text-sm text-[#b04c43]">
+          {statusQuery.error instanceof Error
+            ? statusQuery.error.message
+            : "Не удалось загрузить системную сводку."}
+        </p>
+      ) : null}
+
+      {!usersQuery.isLoading && !usersQuery.error ? (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {summaryCards.map((item) => (
+              <article key={item.label} className="tone-parent rounded-3xl border border-line px-5 py-4 shadow-panel">
+                <p className="text-sm font-medium text-steel">{item.label}</p>
+                <p className="mt-3 text-3xl font-semibold text-ink">{item.value}</p>
+                <p className="mt-2 text-xs text-steel">{item.hint}</p>
+              </article>
+            ))}
           </div>
-          <div className="rounded-2xl border border-line p-4">
-            <div className="text-xs uppercase tracking-[0.16em] text-steel">Exports Dir</div>
-            <div className="mt-1 break-all text-ink">{status?.exportsDir ?? "..."}</div>
-            <div className="mt-3 text-xs uppercase tracking-[0.16em] text-steel">Signatures Dir</div>
-            <div className="mt-1 break-all text-ink">{status?.signaturesDir ?? "..."}</div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <section className="tone-parent rounded-3xl border border-line p-5 shadow-panel">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-ink">Кто сейчас онлайн</h2>
+                  <p className="mt-1 text-sm text-steel">
+                    Пользователь считается онлайн, если был активен в системе за последние {ONLINE_WINDOW_MINUTES} минут.
+                  </p>
+                </div>
+                <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold text-ink">
+                  {onlineUsers.length} в сети
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {onlineUsers.length ? (
+                  onlineUsers.map((user) => (
+                    <article key={user.id} className="tone-child rounded-2xl border border-line px-4 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-ink">{user.fullName || user.email}</p>
+                          <p className="text-sm text-steel">{user.email}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="monitor-status-badge monitor-status-badge--online rounded-full px-3 py-1 text-xs font-semibold">
+                            Онлайн
+                          </span>
+                          <span className="rounded-full border border-line px-3 py-1 text-xs text-steel">
+                            {roleLabels[user.role]}
+                          </span>
+                          <Link className="btn-secondary btn-sm" to={`/admin/users/${user.id}`}>
+                            Открыть
+                          </Link>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-sm text-steel md:grid-cols-2">
+                        <p>Последняя активность: <span className="font-medium text-ink">{formatDateTime(user.lastSeenAt)}</span></p>
+                        <p>Последний вход: <span className="font-medium text-ink">{formatDateTime(user.lastLoginAt)}</span></p>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-steel">
+                    Сейчас никто не отмечен как онлайн.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="tone-parent rounded-3xl border border-line p-5 shadow-panel">
+              <h2 className="text-lg font-semibold text-ink">Сервис и данные</h2>
+              <div className="mt-4 space-y-3">
+                <div className="rounded-2xl border border-line px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-steel">PDF-движок</span>
+                    <span
+                      className={[
+                        "status-chip",
+                        statusQuery.data?.pdfGenerationAvailable ? "status-chip--ok" : "status-chip--warn",
+                      ].join(" ")}
+                    >
+                      {statusQuery.data?.pdfGenerationAvailable ? "Доступен" : "Требует setup"}
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-line px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-steel">SMTP</span>
+                    <span
+                      className={[
+                        "status-chip",
+                        statusQuery.data?.smtpConfigured ? "status-chip--ok" : "status-chip--warn",
+                      ].join(" ")}
+                    >
+                      {statusQuery.data?.smtpConfigured ? "Настроен" : "Не задан"}
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-line px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-steel">Exports</span>
+                    <span className="text-ink">{statusQuery.data?.exportFoldersCount ?? "..."} папок</span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-line px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-steel">Активный реестр</span>
+                    <span className="text-ink">{statusQuery.data?.database.activeRegistryEntriesCount ?? "..."} строк</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <h3 className="text-base font-semibold text-ink">Роли и покрытие доступа</h3>
+                <div className="mt-3 space-y-3">
+                  {roleDistribution.map((entry) => (
+                    <div key={entry.label} className="space-y-2">
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-ink">{entry.label}</span>
+                        <span className="text-steel">{entry.value}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-black/5">
+                        <div className="h-2 rounded-full bg-[var(--accent)]" style={{ width: `${entry.percentage}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
           </div>
-        </div>
-      </div>
+
+          <section className="tone-parent overflow-hidden rounded-3xl border border-line shadow-panel">
+            <div className="border-b border-line px-5 py-4">
+              <h2 className="text-lg font-semibold text-ink">Пользователи и входы</h2>
+              <p className="mt-1 text-sm text-steel">
+                Таблица показывает, кто давно не заходил, кто еще не входил и кто активен прямо сейчас.
+              </p>
+              <label className="mt-4 block text-sm text-steel">
+                Поиск по пользователям
+                <input
+                  className="form-input mt-2"
+                  type="text"
+                  placeholder={userSearchPlaceholder}
+                  value={usersSearchQuery}
+                  onChange={(event) => setUsersSearchQuery(event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-black/5 text-xs uppercase tracking-[0.12em] text-steel">
+                  <tr>
+                    <th className="px-5 py-3">Пользователь</th>
+                    <th className="px-5 py-3">Роль</th>
+                    <th className="px-5 py-3">Статус</th>
+                    <th className="px-5 py-3">Последний вход</th>
+                    <th className="px-5 py-3">Последняя активность</th>
+                    <th className="px-5 py-3">Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUsersByLastLogin.length ? (
+                    visibleUsersByLastLogin.map((user) => (
+                      <tr key={user.id} className="border-t border-line align-top text-ink">
+                        <td className="px-5 py-4">
+                          <div>
+                            <p className="font-semibold">{user.fullName || user.email}</p>
+                            <p className="text-steel">{user.email}</p>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">{roleLabels[user.role]}</td>
+                        <td className="px-5 py-4">
+                          <span
+                            className={[
+                              "monitor-status-badge rounded-full px-3 py-1 text-xs font-semibold",
+                              isOnline(user.lastSeenAt)
+                                ? "monitor-status-badge--online"
+                                : "monitor-status-badge--offline",
+                            ].join(" ")}
+                          >
+                            {isOnline(user.lastSeenAt) ? "Онлайн" : user.isActive ? "Оффлайн" : "Отключен"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">{formatDateTime(user.lastLoginAt)}</td>
+                        <td className="px-5 py-4">{formatDateTime(user.lastSeenAt)}</td>
+                        <td className="px-5 py-4">
+                          <Link className="btn-secondary btn-sm" to={`/admin/users/${user.id}`}>
+                            Открыть
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr className="border-t border-line">
+                      <td className="px-5 py-6 text-sm text-steel" colSpan={6}>
+                        По этому запросу пользователи не найдены.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : null}
     </section>
   );
+}
+
+function buildSummaryCards(users: AuthUser[], activeRegistryEntriesCount?: number): SummaryCard[] {
+  const total = users.length;
+  const active = users.filter((user) => user.isActive).length;
+  const online = users.filter((user) => isOnline(user.lastSeenAt)).length;
+  const neverLoggedIn = users.filter((user) => !user.lastLoginAt).length;
+  const recentLogins = users.filter((user) => isWithinDays(user.lastLoginAt, RECENT_LOGIN_DAYS)).length;
+
+  return [
+    { label: "Всего пользователей", value: String(total), hint: "Все учетные записи в системе." },
+    { label: "Активные", value: String(active), hint: "Учетные записи, которым разрешен вход." },
+    { label: "Онлайн сейчас", value: String(online), hint: `Активность за последние ${ONLINE_WINDOW_MINUTES} минут.` },
+    { label: "Ни разу не входили", value: String(neverLoggedIn), hint: "Полезно для контроля новых учетных записей." },
+    {
+      label: "Активный реестр",
+      value: String(activeRegistryEntriesCount ?? 0),
+      hint: "Сколько строк БД прямо сейчас доступны генератору.",
+    },
+    { label: "Заходили за 7 дней", value: String(recentLogins), hint: "Показывает живую вовлеченность команды." },
+  ];
+}
+
+function buildRoleDistribution(users: AuthUser[]) {
+  const total = users.length || 1;
+  const roles: UserRole[] = ["DEVELOPER", "ADMINISTRATOR", "MKAIR", "CUSTOMER"];
+  return roles.map((role) => {
+    const value = users.filter((user) => user.role === role).length;
+    return {
+      label: roleLabels[role],
+      value,
+      percentage: Math.round((value / total) * 100),
+    };
+  });
+}
+
+function isWithinDays(value: string | null, days: number) {
+  if (!value) {
+    return false;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+  return Date.now() - parsed <= days * 24 * 60 * 60 * 1000;
+}
+
+function isOnline(lastSeenAt: string | null) {
+  if (!lastSeenAt) {
+    return false;
+  }
+  const parsed = Date.parse(lastSeenAt);
+  if (Number.isNaN(parsed)) {
+    return false;
+  }
+  return Date.now() - parsed <= ONLINE_WINDOW_MINUTES * 60 * 1000;
+}
+
+function compareDates(left: string | null, right: string | null) {
+  const leftValue = left ? Date.parse(left) : 0;
+  const rightValue = right ? Date.parse(right) : 0;
+  return leftValue - rightValue;
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Еще не было";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }

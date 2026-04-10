@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { fetchExportFile, fetchSystemStatus } from "@/api/system";
+import { fetchExportFile, fetchExportFolderArchive, fetchSystemStatus } from "@/api/system";
 import { useAuthStore } from "@/store/auth";
 
 export function DashboardPage() {
@@ -28,6 +28,26 @@ export function DashboardPage() {
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
       setDownloadError(error instanceof Error ? error.message : "Не удалось открыть файл.");
+    }
+  }
+
+  async function downloadExportFolder(path: string, folderName: string) {
+    if (!token) {
+      return;
+    }
+    setDownloadError(null);
+    try {
+      const blob = await fetchExportFolderArchive(token, path);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${folderName}.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : "Не удалось скачать архив.");
     }
   }
 
@@ -55,10 +75,8 @@ export function DashboardPage() {
           <div className="metric-card__value">{status?.usersCount ?? "..."}</div>
         </article>
         <article className="metric-card">
-          <div className="metric-card__label">PDF-движок</div>
-          <div className="metric-card__value">
-            {status ? (status.pdfGenerationAvailable ? "Готов" : "Нет") : "..."}
-          </div>
+          <div className="metric-card__label">Активный реестр</div>
+          <div className="metric-card__value">{status?.database.activeRegistryEntriesCount ?? "..."}</div>
         </article>
       </div>
 
@@ -92,6 +110,9 @@ export function DashboardPage() {
                         {folder.filesCount} файлов · {formatDateTime(folder.modifiedAt)}
                       </p>
                     </div>
+                    <button className="btn-primary btn-sm" type="button" onClick={() => void downloadExportFolder(folder.path, folder.name)}>
+                      Скачать ZIP
+                    </button>
                   </div>
                   <div className="mt-4 space-y-2">
                     {folder.files.map((file) => (
@@ -139,11 +160,27 @@ export function DashboardPage() {
               <div className="mt-1 break-all text-ink">{status?.exportsDir ?? "..."}</div>
             </div>
             <div>
+              <div className="text-xs uppercase tracking-[0.16em]">Database</div>
+              <div className="mt-1 text-ink">
+                {status?.database.backend ?? "..."}
+                {status?.database.database ? ` · ${status.database.database}` : ""}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.16em]">Owners / Methodologies</div>
+              <div className="mt-1 text-ink">
+                {status ? `${status.database.ownersCount} / ${status.database.methodologiesCount}` : "..."}
+              </div>
+            </div>
+            <div>
               <div className="text-xs uppercase tracking-[0.16em]">Signatures Dir</div>
               <div className="mt-1 break-all text-ink">{status?.signaturesDir ?? "..."}</div>
             </div>
             <div className="pt-2">
-              <Link className="btn-secondary" to="/settings">Открыть настройки</Link>
+              <div className="flex flex-wrap gap-3">
+                <Link className="btn-secondary" to="/settings">Открыть настройки</Link>
+                <Link className="btn-secondary" to="/generation">Рабочая зона генерации</Link>
+              </div>
             </div>
           </div>
         </aside>

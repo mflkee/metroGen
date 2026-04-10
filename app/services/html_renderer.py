@@ -131,6 +131,7 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("max_abs_error_unit", "")
     ctx.setdefault("max_variation_value", "")
     ctx.setdefault("max_variation_unit", "%")
+    ctx.setdefault("show_abs_error_summary", False)
     ctx.setdefault("trainee_name", "")
     ctx.setdefault("trainee_sign_src", "")
     ctx.setdefault("trainee_sign_style", "display: none;")

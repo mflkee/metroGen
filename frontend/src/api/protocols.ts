@@ -5,6 +5,9 @@ export type InstrumentKind = "manometers" | "controllers" | "thermometers";
 type RawGenerationResponse = {
   files: string[];
   count: number;
+  run_id?: string | null;
+  export_folder?: string | null;
+  export_folder_name?: string | null;
   errors?: Array<{
     row?: number;
     serial?: string | null;
@@ -16,6 +19,9 @@ type RawGenerationResponse = {
 export type GenerationResponse = {
   files: string[];
   count: number;
+  runId: string | null;
+  exportFolder: string | null;
+  exportFolderName: string | null;
   errors: Array<{
     row?: number;
     serial?: string | null;
@@ -56,6 +62,9 @@ export async function generateProtocolPdf(
   return {
     files: response.files,
     count: response.count,
+    runId: response.run_id ?? null,
+    exportFolder: response.export_folder ?? null,
+    exportFolderName: response.export_folder_name ?? null,
     errors: response.errors ?? [],
   };
 }
@@ -68,6 +77,9 @@ export async function generateFailedManometerPdf(payload: FilePayload): Promise<
   return {
     files: response.files,
     count: response.count,
+    runId: response.run_id ?? null,
+    exportFolder: response.export_folder ?? null,
+    exportFolderName: response.export_folder_name ?? null,
     errors: response.errors ?? [],
   };
 }

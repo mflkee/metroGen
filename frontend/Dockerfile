@@ -10,6 +10,7 @@ ENV VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET}
 COPY frontend/package.json frontend/package-lock.json ./
 COPY frontend/tsconfig.json frontend/vite.config.ts frontend/eslint.config.js frontend/tailwind.config.ts ./
 COPY frontend/postcss.config.cjs frontend/index.html ./
+COPY frontend/public ./public
 COPY frontend/src ./src
 
 RUN npm ci

@@ -145,7 +145,7 @@ function NavItem({
     >
       <div className={["flex items-center gap-3", collapsed ? "lg:justify-center" : ""].join(" ")}>
         <div className="nav-icon-badge">
-          <Icon className={item.icon === "arshin" ? "h-9 w-9" : undefined} name={item.icon as IconName} />
+          <Icon name={item.icon as IconName} />
         </div>
         <div className={collapsed ? "block lg:hidden" : "block"}>
           <div className="text-sm font-semibold">{item.label}</div>
