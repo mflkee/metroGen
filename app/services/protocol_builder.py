@@ -1129,7 +1129,9 @@ async def build_context(
                     unit=context.get("unit") or "",
                 )
                 context["max_abs_error_value"] = max_abs_error_value
-                context["max_abs_error_unit"] = (context.get("unit") or "") if max_abs_error_value else ""
+                context["max_abs_error_unit"] = (
+                    context.get("unit") or ""
+                ) if max_abs_error_value else ""
                 context["max_variation_value"] = max_variation_value
                 context["max_variation_unit"] = "%" if max_variation_value else ""
 

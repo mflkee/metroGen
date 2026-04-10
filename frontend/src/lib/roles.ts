@@ -7,6 +7,10 @@ export const roleLabels: Record<UserRole, string> = {
   CUSTOMER: "Заказчик",
 };
 
+export function isDeveloperRole(role: UserRole | null | undefined): boolean {
+  return role === "DEVELOPER";
+}
+
 export function hasAdminAccess(role: UserRole | null | undefined): boolean {
   return role === "DEVELOPER" || role === "ADMINISTRATOR";
 }

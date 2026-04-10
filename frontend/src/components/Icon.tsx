@@ -1,6 +1,5 @@
 export type IconName =
   | "home"
-  | "arshin"
   | "verification"
   | "settings"
   | "users"
@@ -23,18 +22,6 @@ export function Icon({ name, className }: IconProps) {
         <svg className={baseClassName} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.9">
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 9.75V21h13.5V9.75" />
-        </svg>
-      );
-    case "arshin":
-      return (
-        <svg className={baseClassName} viewBox="0 0 399 208" fill="currentColor">
-          <path d="M23 23h22v155H23zm332 0h22v155h-22zm-266 111h23v44H89zm67 0h22v44h-22zm66 0h22v44h-22zm67 0h22v44h-22z" />
-          <path
-            fillRule="evenodd"
-            d="M89 23h22v88H89zm22 0h12c18 0 33 15 33 33s-15 33-33 33h-12zm0 21h10c8 0 14 6 14 12s-6 12-14 12h-10z"
-          />
-          <path d="M235.92 40.08A37 37 0 1 0 235.92 92.92" fill="none" stroke="currentColor" strokeWidth="23" />
-          <path d="M267 23h66v26h-22v62h-22V49h-22z" />
         </svg>
       );
     case "verification":

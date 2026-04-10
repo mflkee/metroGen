@@ -11,6 +11,11 @@ export type ArshinDetails = {
   result: Record<string, unknown>;
 };
 
+export type ArshinStatus = {
+  available: boolean;
+  message: string | null;
+};
+
 export async function resolveVriId(certificate: string): Promise<ArshinLookupResult> {
   const response = await apiRequest<{ vri_id: string | null }>(
     `/resolve/vri-id?cert=${encodeURIComponent(certificate)}`,
@@ -35,5 +40,16 @@ export async function fetchVriDetails(vriId: string): Promise<ArshinDetails> {
     etalonLine: response.etalon_line,
     fields: response.fields,
     result: response.result,
+  };
+}
+
+export async function fetchArshinStatus(token: string): Promise<ArshinStatus> {
+  const response = await apiRequest<{ available: boolean; message: string | null }>("/resolve/status", {
+    method: "GET",
+    token,
+  });
+  return {
+    available: response.available,
+    message: response.message,
   };
 }

@@ -1065,7 +1065,14 @@ async def controllers_pdf_files(
 
     rows = read_rows_as_dicts(controllers_data)
     if not rows:
-        return {"files": [], "count": 0}
+        return {
+            "files": [],
+            "count": 0,
+            "errors": [],
+            "run_id": None,
+            "export_folder": None,
+            "export_folder_name": None,
+        }
 
     logger.info(
         f"controllers_pdf_files: loaded {len(rows)} controller rows "
@@ -1195,6 +1202,7 @@ async def controllers_pdf_files(
                 ctx.get("verification_date"),
                 len(saved) + 1,
             )
+        ctx.setdefault("show_abs_error_summary", True)
 
         html = render_protocol_html(ctx)
         pdf_bytes = await html_to_pdf_bytes(html)
@@ -1237,7 +1245,14 @@ async def controllers_pdf_files(
         f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 
-    return {"files": saved, "count": len(saved), "errors": errors}
+    return {
+        "files": saved,
+        "count": len(saved),
+        "errors": errors,
+        "run_id": run_id,
+        "export_folder": str(exports_dir),
+        "export_folder_name": exports_dir.name,
+    }
 
 
 @router.post("/manometers/pdf-files")
@@ -1260,7 +1275,14 @@ async def manometers_pdf_files(
 
     rows = read_rows_as_dicts(manometers_data)
     if not rows:
-        return {"files": [], "count": 0, "errors": []}
+        return {
+            "files": [],
+            "count": 0,
+            "errors": [],
+            "run_id": None,
+            "export_folder": None,
+            "export_folder_name": None,
+        }
 
     logger.info(
         f"manometers_pdf_files: loaded {len(rows)} manometer rows "
@@ -1395,6 +1417,7 @@ async def manometers_pdf_files(
                 ctx.get("verification_date"),
                 len(saved) + 1,
             )
+        ctx.setdefault("show_abs_error_summary", True)
 
         html = render_protocol_html(ctx)
         pdf_bytes = await html_to_pdf_bytes(html)
@@ -1435,7 +1458,14 @@ async def manometers_pdf_files(
         f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 
-    return {"files": saved, "count": len(saved), "errors": errors}
+    return {
+        "files": saved,
+        "count": len(saved),
+        "errors": errors,
+        "run_id": run_id,
+        "export_folder": str(exports_dir),
+        "export_folder_name": exports_dir.name,
+    }
 
 
 @router.post("/manometers/failed/pdf-files")
@@ -1458,7 +1488,14 @@ async def manometers_failed_pdf_files(
 
     rows = read_rows_as_dicts(manometers_data)
     if not rows:
-        return {"files": [], "count": 0, "errors": []}
+        return {
+            "files": [],
+            "count": 0,
+            "errors": [],
+            "run_id": None,
+            "export_folder": None,
+            "export_folder_name": None,
+        }
 
     logger.info(
         f"manometers_failed_pdf_files: loaded {len(rows)} manometer rows "
@@ -1595,6 +1632,7 @@ async def manometers_failed_pdf_files(
             )
 
         ctx = _mark_failed_context(ctx)
+        ctx.setdefault("show_abs_error_summary", True)
         it.context = ctx
 
         html = render_protocol_html(ctx)
@@ -1636,7 +1674,14 @@ async def manometers_failed_pdf_files(
         f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 
-    return {"files": saved, "count": len(saved), "errors": errors}
+    return {
+        "files": saved,
+        "count": len(saved),
+        "errors": errors,
+        "run_id": run_id,
+        "export_folder": str(exports_dir),
+        "export_folder_name": exports_dir.name,
+    }
 
 
 @router.post("/manometers/html-preview", response_class=HTMLResponse)
@@ -1760,7 +1805,14 @@ async def thermometers_pdf_files(
 
     rows = read_rows_as_dicts(thermometers_data)
     if not rows:
-        return {"files": [], "count": 0, "errors": []}
+        return {
+            "files": [],
+            "count": 0,
+            "errors": [],
+            "run_id": None,
+            "export_folder": None,
+            "export_folder_name": None,
+        }
 
     logger.info(
         f"thermometers_pdf_files: loaded {len(rows)} thermometer rows "
@@ -1895,6 +1947,7 @@ async def thermometers_pdf_files(
                 ctx.get("verification_date"),
                 len(saved) + 1,
             )
+        ctx.setdefault("show_abs_error_summary", True)
 
         html = render_protocol_html(ctx)
         pdf_bytes = await html_to_pdf_bytes(html)
@@ -1935,7 +1988,14 @@ async def thermometers_pdf_files(
         f"{total_elapsed:.2f}s (files={len(saved)} errors={len(errors)})"
     )
 
-    return {"files": saved, "count": len(saved), "errors": errors}
+    return {
+        "files": saved,
+        "count": len(saved),
+        "errors": errors,
+        "run_id": run_id,
+        "export_folder": str(exports_dir),
+        "export_folder_name": exports_dir.name,
+    }
 
 
 @router.post("/thermometers/html-preview", response_class=HTMLResponse)
