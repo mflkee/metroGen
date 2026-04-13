@@ -41,10 +41,13 @@ class NotificationService:
         message["Subject"] = "metroGen: временный пароль"
         message["From"] = self._from_header()
         message["To"] = recipient_email
+        app_url = settings.FRONTEND_APP_URL.strip()
+        login_hint = f"Войти в сервис: {app_url}\n\n" if app_url else ""
         message.set_content(
             f"{recipient_name},\n\n"
             "Для вас создана учетная запись в metroGen.\n"
             f"Временный пароль: {temporary_password}\n\n"
+            f"{login_hint}"
             "После входа смените пароль в профиле."
         )
         self._send_message(message)
