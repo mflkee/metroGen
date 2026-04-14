@@ -1,63 +1,26 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useQuery } from "@tanstack/react-query";
 
+import { fetchSystemStatus } from "@/api/system";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { fetchExportFile, fetchExportFolderArchive, fetchSystemStatus } from "@/api/system";
 import { useAuthStore } from "@/store/auth";
 
 export function DashboardPage() {
   const token = useAuthStore((state) => state.token);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
   const statusQuery = useQuery({
     queryKey: ["system-status"],
     queryFn: () => fetchSystemStatus(token ?? ""),
     enabled: Boolean(token),
   });
 
-  async function openExport(path: string) {
-    if (!token) {
-      return;
-    }
-    setDownloadError(null);
-    try {
-      const blob = await fetchExportFile(token, path);
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "Не удалось открыть файл.");
-    }
-  }
-
-  async function downloadExportFolder(path: string, folderName: string) {
-    if (!token) {
-      return;
-    }
-    setDownloadError(null);
-    try {
-      const blob = await fetchExportFolderArchive(token, path);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${folderName}.zip`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "Не удалось скачать архив.");
-    }
-  }
-
   const status = statusQuery.data;
 
   return (
-    <section>
+    <section className="space-y-6">
       <PageHeader
         title="Главная"
-        description="Стартовая панель metroGen: быстрый переход к генерации, состояние приложения и последние экспортированные протоколы."
+        description="Стартовая панель metroGen: состояние приложения, база данных и быстрый переход к рабочим разделам."
         action={<Link className="btn-primary" to="/generation">Открыть генерацию</Link>}
       />
 
@@ -80,63 +43,42 @@ export function DashboardPage() {
         </article>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <section className="section-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold text-ink">Последние экспорты</h3>
+              <h3 className="text-lg font-semibold text-ink">Рабочие разделы</h3>
               <p className="mt-1 text-sm text-steel">
-                Последние папки генерации и файлы, которые уже можно открыть из интерфейса.
+                Основной поток теперь сосредоточен на странице генерации: запуск run, живой статус,
+                готовый ZIP и ошибки по строкам в одном месте.
               </p>
             </div>
             {status ? (
               <div className={["status-chip", status.pdfGenerationAvailable ? "status-chip--ok" : "status-chip--danger"].join(" ")}>
-                {status.pdfGenerationAvailable ? "Playwright готов" : "Нужно установить Chromium"}
+                {status.pdfGenerationAvailable ? "PDF-движок готов" : "Нужно установить Chromium"}
               </div>
             ) : null}
           </div>
-          {downloadError ? <p className="mt-4 text-sm text-[#b04c43]">{downloadError}</p> : null}
-          <div className="mt-5 space-y-4">
-            {statusQuery.isLoading ? (
-              <p className="text-sm text-steel">Загружаем сводку экспортов...</p>
-            ) : null}
-            {status?.recentExports.length ? (
-              status.recentExports.map((folder) => (
-                <article key={folder.path} className="tone-child rounded-3xl border border-line p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-base font-semibold text-ink">{folder.name}</h4>
-                      <p className="mt-1 text-xs text-steel">
-                        {folder.filesCount} файлов · {formatDateTime(folder.modifiedAt)}
-                      </p>
-                    </div>
-                    <button className="btn-primary btn-sm" type="button" onClick={() => void downloadExportFolder(folder.path, folder.name)}>
-                      Скачать ZIP
-                    </button>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {folder.files.map((file) => (
-                      <div
-                        key={file.path}
-                        className="flex flex-col gap-2 rounded-2xl border border-line px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-ink">{basename(file.path)}</div>
-                          <div className="mt-1 text-xs text-steel">
-                            {formatSize(file.sizeBytes)} · {formatDateTime(file.modifiedAt)}
-                          </div>
-                        </div>
-                        <button className="btn-secondary btn-sm shrink-0" type="button" onClick={() => void openExport(file.path)}>
-                          Открыть
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              ))
-            ) : statusQuery.isLoading ? null : (
-              <p className="text-sm text-steel">Пока нет экспортов. Сгенерируйте первый пакет на странице «Генерация».</p>
-            )}
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <Link className="rounded-3xl border border-line p-5 transition hover:bg-[color:var(--tone-child-bg)]" to="/generation">
+              <div className="text-base font-semibold text-ink">Генерация</div>
+              <p className="mt-2 text-sm text-steel">
+                Batch-PDF, HTML-превью, живой прогресс и доступ к готовому ZIP после завершения.
+              </p>
+            </Link>
+            <Link className="rounded-3xl border border-line p-5 transition hover:bg-[color:var(--tone-child-bg)]" to="/generation">
+              <div className="text-base font-semibold text-ink">База данных</div>
+              <p className="mt-2 text-sm text-steel">
+                Импорт реестра, проверка состояния справочников и фильтруемая таблица записей.
+              </p>
+            </Link>
+            <Link className="rounded-3xl border border-line p-5 transition hover:bg-[color:var(--tone-child-bg)]" to="/generation">
+              <div className="text-base font-semibold text-ink">Готовые генерации</div>
+              <p className="mt-2 text-sm text-steel">
+                История run-папок, повторное скачивание ZIP и доступ к отдельным PDF.
+              </p>
+            </Link>
           </div>
         </section>
 
@@ -154,6 +96,7 @@ export function DashboardPage() {
               </>
             ) : null}
           </div>
+
           <div className="mt-5 space-y-4 text-sm text-steel">
             <div>
               <div className="text-xs uppercase tracking-[0.16em]">Exports Dir</div>
@@ -187,22 +130,4 @@ export function DashboardPage() {
       </div>
     </section>
   );
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("ru-RU");
-}
-
-function formatSize(value: number): string {
-  if (value < 1024) {
-    return `${value} B`;
-  }
-  if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KB`;
-  }
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function basename(value: string): string {
-  return value.split(/[\\/]/).pop() ?? value;
 }

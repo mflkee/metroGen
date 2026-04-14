@@ -16,6 +16,28 @@ type RawGenerationResponse = {
   }>;
 };
 
+type RawGenerationJobAccepted = {
+  job_id: string;
+  status: string;
+  stage: string;
+  started_at: string;
+};
+
+type RawGenerationJob = {
+  job_id: string;
+  status: string;
+  stage: string;
+  total_items: number;
+  processed_items: number;
+  saved_count: number;
+  failed_count: number;
+  started_at: string;
+  updated_at: string;
+  finished_at?: string | null;
+  error?: string | null;
+  result?: RawGenerationResponse | null;
+};
+
 export type GenerationResponse = {
   files: string[];
   count: number;
@@ -28,6 +50,28 @@ export type GenerationResponse = {
     certificate?: string | null;
     reason?: string | null;
   }>;
+};
+
+export type GenerationJobAccepted = {
+  jobId: string;
+  status: string;
+  stage: string;
+  startedAt: string;
+};
+
+export type GenerationJob = {
+  jobId: string;
+  status: string;
+  stage: string;
+  totalItems: number;
+  processedItems: number;
+  savedCount: number;
+  failedCount: number;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+  error: string | null;
+  result: GenerationResponse | null;
 };
 
 type FilePayload = {
@@ -66,6 +110,60 @@ export async function generateProtocolPdf(
     exportFolder: response.export_folder ?? null,
     exportFolderName: response.export_folder_name ?? null,
     errors: response.errors ?? [],
+  };
+}
+
+export async function startGenerationJob(
+  kind: InstrumentKind,
+  payload: FilePayload,
+  failedMode = false,
+): Promise<GenerationJobAccepted> {
+  const formData = new FormData();
+  formData.append("instrument_kind", kind);
+  formData.append("failed_mode", String(failedMode));
+  formData.append("instrument_file", payload.instrumentFile);
+  if (payload.dbFile) {
+    formData.append("db_file", payload.dbFile);
+  }
+
+  const response = await apiRequest<RawGenerationJobAccepted>("/protocols/jobs", {
+    method: "POST",
+    body: formData,
+  });
+  return {
+    jobId: response.job_id,
+    status: response.status,
+    stage: response.stage,
+    startedAt: response.started_at,
+  };
+}
+
+export async function fetchGenerationJob(jobId: string): Promise<GenerationJob> {
+  const response = await apiRequest<RawGenerationJob>(`/protocols/jobs/${encodeURIComponent(jobId)}`, {
+    method: "GET",
+  });
+  return {
+    jobId: response.job_id,
+    status: response.status,
+    stage: response.stage,
+    totalItems: response.total_items,
+    processedItems: response.processed_items,
+    savedCount: response.saved_count,
+    failedCount: response.failed_count,
+    startedAt: response.started_at,
+    updatedAt: response.updated_at,
+    finishedAt: response.finished_at ?? null,
+    error: response.error ?? null,
+    result: response.result
+      ? {
+          files: response.result.files,
+          count: response.result.count,
+          runId: response.result.run_id ?? null,
+          exportFolder: response.result.export_folder ?? null,
+          exportFolderName: response.result.export_folder_name ?? null,
+          errors: response.result.errors ?? [],
+        }
+      : null,
   };
 }
 

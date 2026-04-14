@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import CurrentUser, get_db
+from app.db.repositories import RegistryRepository
+from app.schemas.registry import RegistryEntryListRead, RegistryEntryRead
 from app.services.registry_ingest import (
     REGISTRY_SERIAL_KEYS,
     ingest_registry_rows,
@@ -58,3 +60,47 @@ async def import_registry_file(
         "instrument_kind": instrument_kind or source_sheet,
         "source_file": db_file.filename or "registry.xlsx",
     }
+
+
+@router.get("/entries", response_model=RegistryEntryListRead)
+async def list_registry_entries(
+    _: CurrentUser,
+    *,
+    search: str | None = Query(
+        None,
+        min_length=1,
+        description="Свободный поиск по серийнику, документу или источнику",
+    ),
+    instrument_kind: str | None = Query(None, description="Фильтр по типу прибора"),
+    active_only: bool = Query(True, description="Показывать только активные записи"),
+    limit: int = Query(300, ge=1, le=1000),
+    session: AsyncSession = Depends(get_db),
+) -> RegistryEntryListRead:
+    total, entries = await RegistryRepository(session).list_entries(
+        search=search,
+        instrument_kind=instrument_kind,
+        active_only=active_only,
+        limit=limit,
+    )
+    return RegistryEntryListRead(
+        total=total,
+        items=[
+            RegistryEntryRead(
+                id=entry.id,
+                source_file=entry.source_file,
+                source_sheet=entry.source_sheet,
+                instrument_kind=entry.instrument_kind,
+                row_index=entry.row_index,
+                normalized_serial=entry.normalized_serial,
+                document_no=entry.document_no,
+                protocol_no=entry.protocol_no,
+                owner_name_raw=entry.owner_name_raw,
+                methodology_raw=entry.methodology_raw,
+                verification_date=entry.verification_date,
+                valid_to=entry.valid_to,
+                is_active=entry.is_active,
+                loaded_at=entry.loaded_at,
+            )
+            for entry in entries
+        ],
+    )

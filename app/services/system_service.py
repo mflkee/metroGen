@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
@@ -38,7 +39,7 @@ class SystemService:
 
     async def get_status(self) -> SystemStatusRead:
         exports_base = get_exports_base()
-        recent_exports = _collect_recent_exports(exports_base)
+        recent_exports = _collect_recent_exports(exports_base, tzinfo=_exports_timezone())
         users_count, active_users_count, database_snapshot = await asyncio.gather(
             self._users_count(),
             self._users_count(active_only=True),
@@ -125,7 +126,12 @@ class SystemService:
         return int(result.scalar() or 0)
 
 
-def _collect_recent_exports(base_path: Path, *, limit: int = 6) -> list[ExportFolderRead]:
+def _collect_recent_exports(
+    base_path: Path,
+    *,
+    tzinfo: ZoneInfo,
+    limit: int = 6,
+) -> list[ExportFolderRead]:
     if not base_path.exists():
         return []
 
@@ -146,7 +152,7 @@ def _collect_recent_exports(base_path: Path, *, limit: int = 6) -> list[ExportFo
             ExportFileRead(
                 path=str(path),
                 size_bytes=path.stat().st_size,
-                modified_at=datetime.fromtimestamp(path.stat().st_mtime),
+                modified_at=datetime.fromtimestamp(path.stat().st_mtime, tz=tzinfo),
             )
             for path in files
         ]
@@ -155,7 +161,7 @@ def _collect_recent_exports(base_path: Path, *, limit: int = 6) -> list[ExportFo
                 name=folder.name,
                 path=str(folder),
                 files_count=len([item for item in folder.iterdir() if item.is_file()]),
-                modified_at=datetime.fromtimestamp(folder.stat().st_mtime),
+                modified_at=datetime.fromtimestamp(folder.stat().st_mtime, tz=tzinfo),
                 files=file_items,
             )
         )
@@ -174,3 +180,10 @@ def _collect_export_totals(base_path: Path) -> tuple[int, int]:
         folders_count += 1
         files_count += sum(1 for child in item.iterdir() if child.is_file())
     return folders_count, files_count
+
+
+def _exports_timezone() -> ZoneInfo:
+    try:
+        return ZoneInfo(settings.APP_TIMEZONE)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")

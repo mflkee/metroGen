@@ -12,6 +12,7 @@ PROJECT_ROOT = CONFIG_FILE_PATH.parents[2]
 class Settings(BaseSettings):
     APP_NAME: str = "metroGen API"
     APP_ENV: str = "development"
+    APP_TIMEZONE: str = "Asia/Yekaterinburg"
     API_V1_PREFIX: str = "/api/v1"
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8001

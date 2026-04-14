@@ -4,7 +4,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import and_, delete, not_, or_, select
+from sqlalchemy import and_, delete, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -348,6 +348,51 @@ class RegistryRepository(BaseRepository):
             if entry.normalized_serial:
                 mapping.setdefault(entry.normalized_serial, []).append(entry)
         return mapping
+
+    async def list_entries(
+        self,
+        *,
+        search: str | None = None,
+        instrument_kind: str | None = None,
+        active_only: bool = False,
+        limit: int = 300,
+    ) -> tuple[int, list[models.VerificationRegistryEntry]]:
+        conditions = []
+        if active_only:
+            conditions.append(models.VerificationRegistryEntry.is_active.is_(True))
+        if instrument_kind:
+            conditions.append(models.VerificationRegistryEntry.instrument_kind == instrument_kind)
+
+        search_text = (search or "").strip()
+        if search_text:
+            pattern = f"%{search_text}%"
+            conditions.append(
+                or_(
+                    models.VerificationRegistryEntry.normalized_serial.ilike(pattern),
+                    models.VerificationRegistryEntry.document_no.ilike(pattern),
+                    models.VerificationRegistryEntry.protocol_no.ilike(pattern),
+                    models.VerificationRegistryEntry.owner_name_raw.ilike(pattern),
+                    models.VerificationRegistryEntry.methodology_raw.ilike(pattern),
+                    models.VerificationRegistryEntry.source_file.ilike(pattern),
+                )
+            )
+
+        count_stmt = select(func.count(models.VerificationRegistryEntry.id))
+        list_stmt = select(models.VerificationRegistryEntry).order_by(
+            models.VerificationRegistryEntry.verification_date.is_(None),
+            models.VerificationRegistryEntry.verification_date.desc(),
+            models.VerificationRegistryEntry.loaded_at.desc(),
+            models.VerificationRegistryEntry.row_index.desc(),
+        )
+        for condition in conditions:
+            count_stmt = count_stmt.where(condition)
+            list_stmt = list_stmt.where(condition)
+
+        result = await self.session.execute(count_stmt)
+        total = int(result.scalar() or 0)
+
+        rows = await self.session.execute(list_stmt.limit(max(1, min(limit, 1000))))
+        return total, list(rows.scalars().all())
 
 
 class UserRepository(BaseRepository):
