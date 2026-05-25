@@ -106,14 +106,11 @@
     <div class="split-20 spread-bottom">
       <p>Условия поверки:</p>
       <div>
-        <p class="line">
-          температура окружающего воздуха
-          <span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span>°С,
-          относительная влажность
-          <span id="setValue_humidity" data-format="0%">{{ humidity_plain }}{% if humidity_plain and '%' not in humidity_plain and humidity_plain != '///' %}%{% endif %}</span>
+        <p class="line line-left">
+          температура окружающего воздуха&nbsp;<span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span>&nbsp;°С,
+          относительная влажность&nbsp;<span id="setValue_humidity" data-format="0%">{{ humidity_plain }}{% if humidity_plain and '%' not in humidity_plain and humidity_plain != '///' %}%{% endif %}</span>
         </p>
-        <p class="line">атмосферное давление <span id="setValue_pressure">{{ pressure }}</span></p>
-        <p class="line">Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)</p>
+        <p class="line line-left">атмосферное давление&nbsp;<span id="setValue_pressure">{{ pressure }}</span></p>
         <p class="undertext">
           Указываются влияющие факторы, нормированные в НД на методику поверки,
           с указанием конкретных показателей (значений)
@@ -368,6 +365,10 @@
       padding: 0 0.2rem;
       text-align: center;
       width: 100%;
+    }
+    .line-left {
+      justify-content: flex-start;
+      text-align: left;
     }
     .verification-place-row {
       align-items: flex-end;
