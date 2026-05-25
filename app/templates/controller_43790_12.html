@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Форма контроллера</title>
+    <title>Протокол поверки контроллера</title>
   </head>
   <body>
     <p class="text-center">{{ header_name or 'Общество с ограниченной ответственностью "Многоцелевая Компания. Автоматизация. Исследования. Разработки"' }}</p>
@@ -51,15 +51,21 @@
     </div>
     <div class="split-20 spread-bottom">
       <div>
-        <p>Принадлежащее:</p>
+        <p>Принадлежит:</p>
       </div>
       <div>
         <div class="line">
-          <p class="h-center" id="setValue_owner">{{ owner_name }}</p>
+          <p class="h-center" style="gap: 10px">
+            <span>
+              <span id="setValue_owner">{{ owner_name }}</span>
+              <span>, ИНН</span>
+            </span>
+            <span id="setValue_ownerINN">{{ owner_inn }}</span>
+          </p>
         </div>
         <p class="undertext">
           наименование юридического/ фамилия имя и отчество физического лица-
-          владельца средства измерений
+          владельца средства измерений, ИНН/КПП
         </p>
       </div>
     </div>
@@ -72,20 +78,18 @@
         <p class="undertext">наименование и номер документа</p>
       </div>
     </div>
-    {% set etalons = etalon_entries %}
+    {% set means_entries = (etalon_entries or []) + (auxiliary_instruments or []) %}
     <div class="split-17 spread-bottom">
       <p>Средства поверки:</p>
       <div>
-        {% if etalons %}
-          {% for entry in etalons %}
-            <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
-              {{ entry.display_line or entry.line_top }}
-            </p>
+        {% if means_entries %}
+          {% for entry in means_entries %}
+          <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
+            {{ entry.display_line or entry.line_top }}
+          </p>
           {% endfor %}
         {% else %}
-          <p class="line" id="manual_etalonsMain">
-            {{ etalon_line_combined or etalon_line_top }}
-          </p>
+        <p class="line" id="manual_etalonsMain">{{ etalon_line_top }}</p>
         {% endif %}
         <p class="undertext">
           Указываются эталоны единиц величин, обеспечивающие передачу размера
@@ -99,19 +103,14 @@
         <p class="verification-place-value" id="setValue_verificationPlace">ООО "МКАИР"</p>
       </div>
     </div>
-    {% set temp_display = temperature_plain or temperature %}
-    {% set humidity_display = humidity_plain or humidity %}
     <div class="split-20 spread-bottom">
       <p>Условия поверки:</p>
       <div>
         <p class="line">
           температура окружающего воздуха
-          <span id="setValue_temperature" data-format="N1">{{ temp_display }}</span>
-          {% if temp_display and '°' not in temp_display %}°С{% endif %},
+          <span id="setValue_temperature" data-format="N1">{{ temperature_plain }}</span>°С,
           относительная влажность
-          <span id="setValue_humidity" data-format="0%">
-            {{ humidity_display }}{% if humidity_display and '%' not in humidity_display and humidity_display != '///' %}%{% endif %}
-          </span>
+          <span id="setValue_humidity" data-format="0%">{{ humidity_plain }}{% if humidity_plain and '%' not in humidity_plain and humidity_plain != '///' %}%{% endif %}</span>
         </p>
         <p class="line">атмосферное давление <span id="setValue_pressure">{{ pressure }}</span></p>
         <p class="line">Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)</p>
@@ -122,26 +121,45 @@
       </div>
     </div>
     <div class="spread-bottom" id="manual_checkups">
-      <p class="manual_checkup">
-        1. Результат внешнего осмотра:
-        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. {{ methodology_points.p1 or '8' }} МП 20-221-2021
-      </p>
-      <p class="manual_checkup">
-        2. Опробование СИ:
-        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. {{ methodology_points.p2 or '9' }} МП 20-221-2021
-      </p>
-      <p class="manual_checkup">
-        3. Проверка ПО:
-        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. {{ methodology_points.p3 or '10' }} МП 20-221-2021
-      </p>
-      <p class="manual_checkup">
-        4. Определение метрологических характеристик:
-        <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-        п. {{ methodology_points.p4 or '11' }} МП 20-221-2021
-      </p>
+      {% if methodology_point_items %}
+        {% for item in methodology_point_items %}
+          {% set description = item.description or '' %}
+          {% if item.point_type == 'bool' %}
+            <p class="manual_checkup">
+              {{ loop.index }}. {{ description or 'Результат проверки' }}:
+              <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+              п. <span class="manual_checkupValue">{{ item.code }}</span> методики поверки
+            </p>
+          {% else %}
+            <p class="manual_checkup">
+              {{ loop.index }}. {{ description or 'Проверка' }} в соответствии с п.
+              <span class="manual_checkupValue">{{ item.code }}</span>
+              методики поверки
+            </p>
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="manual_checkup">
+          1. Результат внешнего осмотра:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 or '8' }}</span> МП 20-221-2021
+        </p>
+        <p class="manual_checkup">
+          2. Опробование СИ:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p2 or '9' }}</span> МП 20-221-2021
+        </p>
+        <p class="manual_checkup">
+          3. Проверка ПО:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p3 or '10' }}</span> МП 20-221-2021
+        </p>
+        <p class="manual_checkup">
+          4. Определение метрологических характеристик:
+          <span style="text-decoration-line: underline">соответствует</span>/не соответствует
+          п. <span class="manual_checkupValue">{{ methodology_points.p4 or '11' }}</span> МП 20-221-2021
+        </p>
+      {% endif %}
     </div>
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
@@ -168,7 +186,8 @@
     <p class="undertext spread-bottom">{{ allowable_note }}</p>
     <p class="spread-bottom-large conclusion-line">
       Заключение: на основании результатов поверки, СИ признано
-      <span class="underline">пригодным</span> к применению
+      <span class="underline">пригодным</span>/<span>непригодным</span>
+      к применению
     </p>
     <div class="split-15">
       <p>Дата поверки:</p>
@@ -177,6 +196,35 @@
         <p class="undertext">Указывается дата поверки в формате ДД.ММ.ГГГГ.</p>
       </div>
     </div>
+    {% if trainee_name %}
+    <div class="split-15">
+      <p class="h-left v-bottom" style="padding-bottom: 15px">Измерения произвел стажер:</p>
+      <div class="sign-wrapper">
+        <div class="line sign-slot">
+          <div class="sign-column sign-column-left">
+            <img
+              alt="ПОДПИСЬ СТАЖЕРА"
+              id="trainee_sign"
+              src="{{ trainee_sign_src or '' }}"
+              style="width: auto; {{ trainee_sign_style or 'display: none;' }}"
+            />
+          </div>
+          <div class="sign-column sign-column-right">
+            <p class="sign-name">
+              <span class="v-bottom">{{ trainee_name }}</span>
+            </p>
+          </div>
+        </div>
+        <div class="sign-undertext">
+          <p class="sign-label sign-label-left">(подпись)</p>
+          <p class="sign-label sign-label-right">(фамилия, инициалы)</p>
+        </div>
+        {% if trainee_note %}
+        <p class="sign-note">{{ trainee_note }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
     <div class="split-15">
       <p class="h-left v-bottom" style="padding-bottom: 15px">Поверитель:</p>
       <div class="sign-wrapper">
@@ -271,35 +319,43 @@
     .split-50 > * { flex: 1; }
     .split-60 > *:first-child { flex: 0 0 60%; }
     .split-60 > *:last-child { flex: 0 0 40%; }
-    .vh-center {
+    .v-center {
       display: flex;
       align-items: center;
-      justify-content: center;
+    }
+    .v-bottom {
+      display: flex;
+      align-items: flex-end;
     }
     .h-center {
       display: flex;
       justify-content: center;
-      align-items: center;
     }
     .h-left {
       display: flex;
       justify-content: flex-start;
     }
-    .v-bottom {
+    .vh-center {
       display: flex;
-      align-items: flex-end;
+      align-items: center;
+      justify-content: center;
     }
     .undertext {
       display: flex;
       align-items: flex-start;
       justify-content: center;
       font-size: 0.5rem;
-      line-height: 1.1rem;
     }
     .text-center {
       text-align: center;
     }
     .bold {
+      font-weight: bold;
+    }
+    .manual_checkup {
+      margin-bottom: 0.3rem;
+    }
+    .manual_checkupValue {
       font-weight: bold;
     }
     .line {
@@ -317,13 +373,21 @@
       align-items: flex-end;
     }
     .verification-place-line {
-      min-height: 1.8rem;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      min-height: 1.6rem;
+      padding: 0 0.2rem;
     }
     .verification-place-value {
+      text-align: center;
       padding-bottom: 0.1rem;
     }
-    .manual_checkup {
-      margin-bottom: 0.3rem;
+    .conclusion-line {
+      text-align: left;
+    }
+    .underline {
+      text-decoration: underline;
     }
     .sign-wrapper {
       position: relative;
@@ -361,12 +425,25 @@
       padding-bottom: 0.2rem;
       text-align: center;
     }
-    .sign-label {
+    .sign-undertext {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 1rem;
+      margin-top: 0.1rem;
       font-size: 0.5rem;
-      text-align: center;
-      width: 100%;
     }
-    #sign {
+    .sign-label {
+      width: 50%;
+      text-align: center;
+    }
+    .sign-note {
+      margin-top: 0.1rem;
+      text-align: center;
+      font-size: 0.55rem;
+      line-height: 1.2;
+    }
+    #sign,
+    #trainee_sign {
       position: absolute;
       width: auto;
       mix-blend-mode: multiply;
@@ -375,12 +452,6 @@
     .channel-cell {
       font-weight: bold;
       vertical-align: middle;
-    }
-    .underline {
-      text-decoration: underline;
-    }
-    .conclusion-line {
-      text-align: left;
     }
   </style>
 </html>

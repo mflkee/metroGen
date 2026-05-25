@@ -5,3 +5,4 @@ output
 exports
 frontend/node_modules
 frontend/dist
+gas_data

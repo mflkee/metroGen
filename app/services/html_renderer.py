@@ -136,9 +136,16 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("trainee_sign_src", "")
     ctx.setdefault("trainee_sign_style", "display: none;")
     ctx.setdefault("trainee_note", "")
+    ctx.setdefault("sign_src", "")
+    ctx.setdefault("sign_style", "display: none;")
     ctx.setdefault("verification_failed", False)
     ctx.setdefault("hide_results_table", bool(ctx.get("verification_failed")))
     ctx.setdefault("conclusion_text", "")
+    ctx.setdefault("header_name", "")
+    ctx.setdefault("header_address", "")
+    ctx.setdefault("header_accreditation", "")
+    ctx.setdefault("methodology_point_items", [])
+    ctx.setdefault("methodology_points", {})
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")

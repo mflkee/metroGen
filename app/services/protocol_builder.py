@@ -1015,52 +1015,6 @@ async def build_context(
         combined_device = " ".join(x for x in [mitype_title, mitype_type] if x).strip()
         if combined_device:
             context["device_info"] = combined_device
-        entries = context.get("etalon_entries") or []
-        combined_segments: list[str] = []
-        if entries:
-            for entry in entries:
-                seg_parts = [
-                    entry.get("line_top") or "",
-                    entry.get("line_bottom") or "",
-                    entry.get("certificate_line") or "",
-                ]
-                segment = "; ".join(part.strip(" ;") for part in seg_parts if part)
-                if segment:
-                    combined_segments.append(segment)
-        else:
-            base_line = str(context.get("etalon_line") or "").replace("\n", " ").strip(" ;")
-            bottom_line = (
-                str(context.get("etalon_line_bottom") or "").replace("\n", " ").strip(" ;")
-            )
-            cert_line_text = context.get("etalon_certificate_line") or ""
-            parts: list[str] = []
-            if base_line:
-                parts.append(base_line)
-            if bottom_line:
-                parts.append(bottom_line)
-            combined = "; ".join(parts)
-            if cert_line_text:
-                combined = f"{combined}; ({cert_line_text})" if combined else f"({cert_line_text})"
-            if combined:
-                combined_segments.append(combined)
-
-        context["etalon_line_combined"] = " / ".join(combined_segments)
-        if not entries:
-            context["etalon_line_top"] = context["etalon_line_combined"]
-            context["etalon_line_bottom"] = ""
-            context["etalon_certificate_line"] = None
-
-        method_full = (context.get("methodology_full") or "").strip()
-        target_suffix = "МП 20-221-2021"
-        if method_full and target_suffix in method_full:
-            idx = method_full.find(target_suffix)
-            core = method_full[:idx].strip()
-            suffix = method_full[idx:].strip()
-            if core and not core.startswith('"'):
-                core = f'"{core}"'
-            context["methodology_full"] = f"{core} {suffix}".strip()
-        elif method_full and not method_full.startswith('"'):
-            context["methodology_full"] = f'"{method_full}"'
 
     ver_dt = verification_dt
     val_dt = _parse_date(context.get("valid_to_date"))
