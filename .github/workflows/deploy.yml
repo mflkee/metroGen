@@ -19,7 +19,7 @@ jobs:
       - name: Backup production database
         run: |
           cd ~/apps/metroGen
-          docker compose exec -T postgres pg_dump -U metrologenerator metrologenerator > /tmp/metroGen_backup_$(date +%Y%m%d_%H%M%S).sql
+          docker compose exec -T db pg_dump -U metrologenerator metrologenerator > /tmp/metroGen_backup_$(date +%Y%m%d_%H%M%S).sql
 
       - name: Build & deploy production
         run: |
