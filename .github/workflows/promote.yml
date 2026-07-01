@@ -10,7 +10,7 @@ on:
 
 jobs:
   promote:
-    runs-on: [self-hosted, mkair]
+    runs-on: [self-hosted, mkair-runner]
     environment: production
     if: github.event.inputs.confirm == 'deploy'
     steps:

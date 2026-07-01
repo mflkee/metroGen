@@ -3,6 +3,8 @@ from __future__ import annotations
 from .base import TableGenerator
 from .controller_43790_12 import GENERATOR as _CTRL43790
 from .controller_43790_12 import TEMPLATE_ID as _CTRL43790_ID
+from .controller_65685_16 import GENERATOR as _CTRL65685
+from .controller_65685_16 import TEMPLATE_ID as _CTRL65685_ID
 from .pressure_common import GENERATOR as _PRESSURE
 from .pressure_common import TEMPLATE_ID as _PRESSURE_ID
 from .rtd import GENERATOR as _RTD
@@ -38,4 +40,5 @@ def get_by_template(template_id: str | None) -> TableGenerator:
 # регистрация встроенных
 register_template(_PRESSURE_ID, _PRESSURE)
 register_template(_CTRL43790_ID, _CTRL43790)
+register_template(_CTRL65685_ID, _CTRL65685)
 register_template(_RTD_ID, _RTD)

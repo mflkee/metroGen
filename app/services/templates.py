@@ -64,6 +64,38 @@ TEMPLATES: dict[str, dict] = {
             "trainee_sign_style",
         ],
     },
+    "controller_65685_16": {
+        "title": "Контроллеры программируемые логические СК-1000 (65685-16)",
+        "points": 5,
+        "allowable_variation_pct": 0.1,
+        "path": "controller_65685_16.html",
+        "fields": [
+            "device_info",
+            "mitypeNumber",
+            "manufactureNum",
+            "manufactureYear",
+            "owner_name",
+            "owner_inn",
+            "methodology_full",
+            "methodology_points",
+            "methodology_point_items",
+            "temperature",
+            "humidity",
+            "pressure",
+            "etalon_entries",
+            "etalon_line_top",
+            "etalon_line_bottom",
+            "auxiliary_instruments",
+            "table_rows",
+            "allowable_note",
+            "verification_date",
+            "verifier_name",
+            "trainee_name",
+            "trainee_note",
+            "trainee_sign_src",
+            "trainee_sign_style",
+        ],
+    },
     "rtd_platinum": {
         "title": "Термопреобразователи сопротивления",
         "points": 2,
@@ -109,6 +141,8 @@ def resolve_template_id(method_code: str, mitype_number: str, mitype_title: str)
         return "rtd_platinum"
     if mn == "43790-12" or "СГМ ЭРИС-100" in mt:
         return "controller_43790_12"
+    if mn == "65685-16" or "СК-1000" in mt or "2539" in mc:
+        return "controller_65685_16"
     if "МАНОМЕТР" in mt or mn == "13535-93":
         return "pressure_common"
 

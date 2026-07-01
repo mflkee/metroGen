@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy-staging:
-    runs-on: [self-hosted, mkair]
+    runs-on: [self-hosted, mkair-runner]
     environment: staging
     steps:
       - name: Checkout staging code

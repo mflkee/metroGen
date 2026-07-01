@@ -838,9 +838,7 @@ async def build_context(
     auxiliary_entries: list[dict[str, str]] = []
     if isinstance(auxiliary_raw, list):
         auxiliary_entries = [
-            _build_auxiliary_entry(item)
-            for item in auxiliary_raw
-            if isinstance(item, Mapping)
+            _build_auxiliary_entry(item) for item in auxiliary_raw if isinstance(item, Mapping)
         ]
     elif isinstance(auxiliary_raw, Mapping):
         auxiliary_entries = [_build_auxiliary_entry(auxiliary_raw)]
@@ -1066,7 +1064,7 @@ async def build_context(
             if "point_groups" in gout:
                 context["point_groups"] = gout.get("point_groups") or []
             if "allowable_note" in gout:
-                    context["allowable_note"] = gout["allowable_note"]
+                context["allowable_note"] = gout["allowable_note"]
             for extra_key in (
                 "r0_deviation_pct",
                 "r0_allowable_pct",
@@ -1084,8 +1082,8 @@ async def build_context(
                 )
                 context["max_abs_error_value"] = max_abs_error_value
                 context["max_abs_error_unit"] = (
-                    context.get("unit") or ""
-                ) if max_abs_error_value else ""
+                    (context.get("unit") or "") if max_abs_error_value else ""
+                )
                 context["max_variation_value"] = max_variation_value
                 context["max_variation_unit"] = "%" if max_variation_value else ""
 
@@ -1245,6 +1243,12 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             allowable,
         )
 
+        protocol_number = _clean_str(
+            excel_row.get("№ протокола")
+            or excel_row.get("номер протокола")
+            or excel_row.get("Номер протокола")
+        )
+
         return await build_context(
             excel_row=excel_row,
             details=details,
@@ -1255,7 +1259,7 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             allowable_error=allowable,
             allowable_variation=allowable,
             allowable_display=allowable_display,
-            protocol_number=None,
+            protocol_number=protocol_number or None,
             http_client=http_client,
         )
 
