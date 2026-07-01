@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, mkair]
+    runs-on: [self-hosted, mkair-runner]
     environment: production
     steps:
       - name: Pull latest code
