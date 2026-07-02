@@ -288,28 +288,43 @@ RANGE_UNIT_KEYS: tuple[str, ...] = (
 
 
 def _extract_month_from_filename(filename: str | None) -> str | None:
+    result = _extract_year_month_from_filename(filename)
+    if result and "-" in result:
+        return result.split("-")[1]
+    return result
+
+
+def _extract_year_month_from_filename(filename: str | None) -> str | None:
     if not filename:
         return None
     stem = Path(filename).stem
 
-    pattern = re.compile(r"(0[1-9]|1[0-2])")
-    for match in pattern.finditer(stem):
-        start, end = match.span(1)
-        left = stem[start - 1] if start > 0 else ""
-        right = stem[end] if end < len(stem) else ""
-        if left.isdigit() or right.isdigit():
-            continue
-        return match.group(1)
+    tokens = re.findall(r"\d+", stem)
+    year: str | None = None
+    month: str | None = None
 
-    for token in re.findall(r"\d+", stem):
-        if len(token) == 2:
+    for token in tokens:
+        if len(token) == 6:
+            y, m = token[:4], token[4:6]
+            if 1 <= int(m) <= 12:
+                year, month = y, m
+        elif len(token) == 8:
+            y, m = token[:4], token[4:6]
+            if 1 <= int(m) <= 12:
+                year, month = y, m
+        elif len(token) == 4 and 2020 <= int(token) <= 2040:
+            year = token
+        elif len(token) == 2:
             value = int(token)
             if 1 <= value <= 12:
-                return f"{value:02d}"
-        if len(token) in (6, 8):
-            value = int(token[-2:])
-            if 1 <= value <= 12:
-                return f"{value:02d}"
+                month = f"{value:02d}"
+
+    if year and month:
+        return f"{year}-{month}"
+    if month:
+        return month
+    if year:
+        return year
     return None
 
 
@@ -385,6 +400,19 @@ def _resolve_run_month(
     forced_month: str | None, items: Sequence[ProtocolContextItem] | None
 ) -> str:
     if forced_month:
+        if re.match(r"^\d{4}-\d{2}$", forced_month):
+            return forced_month
+        if re.match(r"^\d{2}$", forced_month):
+            year = str(date.today().year)
+            if items:
+                for item in items:
+                    ctx = item.context or {}
+                    if ctx:
+                        ym = _extract_year_month_from_context(ctx)
+                        if ym and "-" in ym:
+                            year = ym.split("-")[0]
+                            break
+            return f"{year}-{forced_month}"
         return forced_month
     if items:
         for item in items:
@@ -1066,9 +1094,9 @@ async def _generate_pdf_files(
         f"({build_elapsed:.2f}s)"
     )
 
-    forced_month = _extract_month_from_filename(db_filename) if db_filename else None
+    forced_month = _extract_year_month_from_filename(db_filename) if db_filename else None
     if not forced_month and instrument_month_fallback:
-        forced_month = _extract_month_from_filename(instrument_filename)
+        forced_month = _extract_year_month_from_filename(instrument_filename)
     run_id = _make_run_time()
     pdf_unavailable = False
     saved: list[str] = []
