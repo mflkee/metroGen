@@ -301,13 +301,24 @@ export function GenerationPage() {
     if (!token || !selectedFilePaths.size) return;
     const confirmed = window.confirm(`Удалить ${selectedFilePaths.size} файл(ов)?`);
     if (!confirmed) return;
+    const pathsToDelete = Array.from(selectedFilePaths);
+    const pathsSet = new Set(pathsToDelete);
     setIsDeletingFiles(true);
+    setError(null);
     try {
-      const result = await deleteExportFiles(token, Array.from(selectedFilePaths));
-      setError(result.errors && Object.keys(result.errors).length ? `Ошибок: ${Object.keys(result.errors).length}` : null);
-      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      const result = await deleteExportFiles(token, pathsToDelete);
+      if (result.errors && Object.keys(result.errors).length) {
+        setError(`Удалено ${result.deleted}, ошибок: ${Object.keys(result.errors).length}`);
+      }
       setSelectedFilePaths(new Set());
-      setFolderFilesCache({});
+      setFolderFilesCache((prev) => {
+        const updated: Record<string, ExportFile[]> = {};
+        for (const [folder, files] of Object.entries(prev)) {
+          updated[folder] = files.filter((f) => !pathsSet.has(f.path));
+        }
+        return updated;
+      });
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
     } catch {
       setError("Не удалось удалить файлы.");
     } finally {
@@ -348,6 +359,8 @@ export function GenerationPage() {
           </button>
         ))}
       </div>
+
+      {error ? <p className="text-sm text-[#b04c43] mb-4">{error}</p> : null}
 
       {activeTab === "generation" ? (
         <div className="space-y-6">
@@ -398,8 +411,6 @@ export function GenerationPage() {
                 Браковочный протокол
               </label>
             ) : null}
-
-            {error ? <p className="text-sm text-[#b04c43]">{error}</p> : null}
 
             <button className="btn-primary w-full" disabled={isRunLocked} type="submit">
               {isRunLocked ? "Выполняется..." : mode === "html" ? "Собрать превью" : "Запустить генерацию"}
