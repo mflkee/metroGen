@@ -157,6 +157,39 @@ class MethodologyRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return list(result.unique().scalars().all())
 
+    async def get_by_id(self, methodology_id: int) -> models.Methodology | None:
+        stmt = (
+            select(models.Methodology)
+            .options(
+                selectinload(models.Methodology.points), selectinload(models.Methodology.aliases)
+            )
+            .where(models.Methodology.id == methodology_id)
+        )
+        result = await self.session.execute(stmt)
+        return result.unique().scalar_one_or_none()
+
+    async def update_methodology(
+        self,
+        methodology_id: int,
+        *,
+        title: str | None = None,
+        document: str | None = None,
+        notes: str | None = None,
+        allowable_variation_pct: float | None = None,
+    ) -> models.Methodology | None:
+        methodology = await self.get_by_id(methodology_id)
+        if methodology is None:
+            return None
+        if title is not None:
+            methodology.title = title
+        if document is not None:
+            methodology.document = document
+        if notes is not None:
+            methodology.notes = notes
+        if allowable_variation_pct is not None:
+            methodology.allowable_variation_pct = allowable_variation_pct
+        return methodology
+
     async def get_by_code(self, code: str) -> models.Methodology | None:
         stmt = (
             select(models.Methodology)
