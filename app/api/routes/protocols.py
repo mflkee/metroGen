@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-import secrets
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -370,26 +369,16 @@ def _determine_equipment_label(ctx: Mapping[str, Any], default: str) -> str:
     return default
 
 
-def _extract_month_from_context(ctx: Mapping[str, Any]) -> str:
-    protocol_number = str(ctx.get("protocol_number") or "").strip()
-    if protocol_number:
-        normalized = re.split(r"[\\/-]+", protocol_number)
-        for part in normalized:
-            digits = "".join(ch for ch in part if ch.isdigit())
-            if not digits:
-                continue
-            month_candidate = int(digits[:2])
-            if 1 <= month_candidate <= 12:
-                return f"{month_candidate:02d}"
+def _extract_year_month_from_context(ctx: Mapping[str, Any]) -> str:
     ver_date = _parse_date_value(ctx.get("verification_date") or ctx.get("Дата поверки"))
     if ver_date:
-        return f"{ver_date.month:02d}"
-    return f"{date.today().month:02d}"
+        return f"{ver_date.year}-{ver_date.month:02d}"
+    return f"{date.today().year}-{date.today().month:02d}"
 
 
-def _make_run_id() -> str:
-    """Return a short unique identifier for grouping exported files per request."""
-    return secrets.token_hex(4)
+def _make_run_time() -> str:
+    """Return current time string HH:MM for folder naming."""
+    return datetime.now().strftime("%H:%M")
 
 
 def _resolve_run_month(
@@ -401,8 +390,8 @@ def _resolve_run_month(
         for item in items:
             ctx = item.context or {}
             if ctx:
-                return _extract_month_from_context(ctx)
-    return f"{date.today().month:02d}"
+                return _extract_year_month_from_context(ctx)
+    return f"{date.today().year}-{date.today().month:02d}"
 
 
 def _exports_folder_label(
@@ -420,11 +409,9 @@ def _exports_folder_label(
         if use_default_only
         else _determine_equipment_label(ctx, default_equipment)
     )
-    month = forced_month or _extract_month_from_context(ctx)
-    base = f"{prefix} {equipment} {month}".strip()
-    if run_id:
-        base = f"{base} - {run_id}"
-    return base
+    ym = forced_month or _extract_year_month_from_context(ctx)
+    run_time = _make_run_time()
+    return f"{equipment} {ym} {run_time}".strip()
 
 
 def _context_pdf_filename(ctx: Mapping[str, Any]) -> str:
@@ -1082,7 +1069,7 @@ async def _generate_pdf_files(
     forced_month = _extract_month_from_filename(db_filename) if db_filename else None
     if not forced_month and instrument_month_fallback:
         forced_month = _extract_month_from_filename(instrument_filename)
-    run_id = _make_run_id()
+    run_id = _make_run_time()
     pdf_unavailable = False
     saved: list[str] = []
     errors: list[dict[str, object]] = []
@@ -1093,8 +1080,6 @@ async def _generate_pdf_files(
         default_equipment=default_equipment,
         forced_month=run_month,
         use_default_only=True,
-        prefix="Generation",
-        run_id=run_id,
         label_override=label_override,
     )
     exports_dir = get_named_exports_dir(folder_label)

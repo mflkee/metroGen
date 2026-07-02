@@ -17,9 +17,12 @@ import {
   type RegistryImportResponse,
 } from "@/api/registry";
 import {
+  deleteExportFiles,
   fetchExportFile,
   fetchExportFolderArchive,
+  fetchExportFolderFiles,
   fetchSystemStatus,
+  type ExportFile,
   type ExportFolder,
 } from "@/api/system";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -62,6 +65,12 @@ export function GenerationPage() {
   const [registryError, setRegistryError] = useState<string | null>(null);
   const [registryResult, setRegistryResult] = useState<RegistryImportResponse | null>(null);
   const [isImportingRegistry, setIsImportingRegistry] = useState(false);
+  const [expandedFolderPath, setExpandedFolderPath] = useState<string | null>(null);
+  const [folderFilesCache, setFolderFilesCache] = useState<Record<string, ExportFile[]>>({});
+  const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
+  const [isDeletingFiles, setIsDeletingFiles] = useState(false);
+  const [isLoadingFolderFiles, setIsLoadingFolderFiles] = useState(false);
+
   const [registrySearch, setRegistrySearch] = useState("");
   const [registryFilterKind, setRegistryFilterKind] = useState<InstrumentKind | "all">("all");
   const [registryActiveOnly, setRegistryActiveOnly] = useState(true);
@@ -249,6 +258,67 @@ export function GenerationPage() {
     } catch {
       setError("Не удалось скачать архив.");
     }
+  }
+
+  async function toggleFolder(folderPath: string) {
+    if (expandedFolderPath === folderPath) {
+      setExpandedFolderPath(null);
+      return;
+    }
+    setExpandedFolderPath(folderPath);
+    setSelectedFilePaths(new Set());
+    if (folderFilesCache[folderPath]) return;
+    if (!token) return;
+    setIsLoadingFolderFiles(true);
+    try {
+      const files = await fetchExportFolderFiles(token, folderPath);
+      setFolderFilesCache((prev) => ({ ...prev, [folderPath]: files }));
+    } catch {
+      setError("Не удалось загрузить список файлов.");
+    } finally {
+      setIsLoadingFolderFiles(false);
+    }
+  }
+
+  function toggleFileSelection(filePath: string) {
+    setSelectedFilePaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(filePath)) next.delete(filePath);
+      else next.add(filePath);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(files: ExportFile[]) {
+    if (files.every((f) => selectedFilePaths.has(f.path))) {
+      setSelectedFilePaths(new Set());
+    } else {
+      setSelectedFilePaths(new Set(files.map((f) => f.path)));
+    }
+  }
+
+  async function handleDeleteSelected() {
+    if (!token || !selectedFilePaths.size) return;
+    const confirmed = window.confirm(`Удалить ${selectedFilePaths.size} файл(ов)?`);
+    if (!confirmed) return;
+    setIsDeletingFiles(true);
+    try {
+      const result = await deleteExportFiles(token, Array.from(selectedFilePaths));
+      setError(result.errors && Object.keys(result.errors).length ? `Ошибок: ${Object.keys(result.errors).length}` : null);
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      setSelectedFilePaths(new Set());
+      setFolderFilesCache({});
+    } catch {
+      setError("Не удалось удалить файлы.");
+    } finally {
+      setIsDeletingFiles(false);
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} Б`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
   }
 
   const currentExportFolderPath = generationResult?.exportFolder ?? deriveFolderPath(generationResult?.files ?? []);
@@ -483,15 +553,62 @@ export function GenerationPage() {
         <div className="space-y-4">
           {statusQuery.isLoading ? <p className="text-sm text-steel">Загрузка...</p> : null}
           {statusQuery.data?.recentExports.length ? (
-            statusQuery.data.recentExports.map((folder) => (
-              <article key={folder.path} className="section-card flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h4 className="font-semibold text-ink">{folder.name}</h4>
-                  <p className="text-sm text-steel">{folder.filesCount} файлов · {new Date(folder.modifiedAt).toLocaleString("ru-RU")}</p>
-                </div>
-                <button className="btn-primary btn-sm" type="button" onClick={() => void downloadExportFolder(folder.path, folder.name)}>Скачать ZIP</button>
-              </article>
-            ))
+            statusQuery.data.recentExports.map((folder) => {
+              const isExpanded = expandedFolderPath === folder.path;
+              const cachedFiles = folderFilesCache[folder.path];
+              const displayFiles = cachedFiles ?? folder.files;
+              const allSelected = displayFiles.length > 0 && displayFiles.every((f) => selectedFilePaths.has(f.path));
+              return (
+                <article key={folder.path} className="section-card space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 cursor-pointer select-none" onClick={() => void toggleFolder(folder.path)}>
+                      <span className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                      <div>
+                        <h4 className="font-semibold text-ink">{folder.name}</h4>
+                        <p className="text-sm text-steel">{folder.filesCount} файлов · {new Date(folder.modifiedAt).toLocaleString("ru-RU")}</p>
+                      </div>
+                    </div>
+                    <button className="btn-primary btn-sm" type="button" onClick={() => void downloadExportFolder(folder.path, folder.name)}>Скачать ZIP</button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="space-y-2 border-t border-line pt-3">
+                      {selectedFilePaths.size > 0 ? (
+                        <div className="flex items-center gap-3 pb-2">
+                          <button className="btn-danger btn-sm" disabled={isDeletingFiles} type="button" onClick={() => void handleDeleteSelected()}>
+                            {isDeletingFiles ? "Удаление..." : `Удалить выбранные (${selectedFilePaths.size})`}
+                          </button>
+                        </div>
+                      ) : null}
+                      {isLoadingFolderFiles && !cachedFiles ? (
+                        <p className="text-sm text-steel">Загрузка файлов...</p>
+                      ) : (
+                        <>
+                          <label className="flex items-center gap-2 text-sm text-steel cursor-pointer select-none pb-1">
+                            <input checked={allSelected} type="checkbox" onChange={() => toggleSelectAll(displayFiles)} />
+                            <span className="font-medium text-ink">{allSelected ? "Снять все" : "Выбрать все"}</span>
+                          </label>
+                          <div className="max-h-64 space-y-1 overflow-y-auto">
+                            {displayFiles.map((file) => (
+                              <label key={file.path} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--tone-child-bg)] cursor-pointer">
+                                <input checked={selectedFilePaths.has(file.path)} type="checkbox" onChange={() => toggleFileSelection(file.path)} />
+                                <span className="flex-1 truncate text-ink">{file.path.split(/[\\/]/).pop()}</span>
+                                <span className="text-xs text-steel shrink-0">{formatFileSize(file.sizeBytes)}</span>
+                                <button className="text-xs text-signal-info hover:underline shrink-0" type="button" onClick={(e) => { e.preventDefault(); void openExport(file.path); }}>
+                                  Открыть
+                                </button>
+                              </label>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {cachedFiles && folder.filesCount > cachedFiles.length ? (
+                        <p className="text-xs text-steel">Показано {cachedFiles.length} из {folder.filesCount} файлов</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
           ) : statusQuery.isLoading ? null : (
             <p className="text-sm text-steel">История пуста.</p>
           )}
