@@ -136,25 +136,26 @@
           {% endif %}
         {% endfor %}
       {% else %}
+        {% set mcode = methodology_code or 'МИ 2539-99' %}
         <p class="manual_checkup">
           1. Результат внешнего осмотра:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p1 or '6.1' }}</span> МИ 2539-99
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 or '6.1' }}</span> {{ mcode }}
         </p>
         <p class="manual_checkup">
           2. Результат опробования:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p2 or '6.3' }}</span> МИ 2539-99
+          п. <span class="manual_checkupValue">{{ methodology_points.p2 or '6.3' }}</span> {{ mcode }}
         </p>
         <p class="manual_checkup">
           3. Подтверждение соответствия программного обеспечения:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p3 or '6.3.3' }}</span> МИ 2539-99
+          п. <span class="manual_checkupValue">{{ methodology_points.p3 or '6.3.3' }}</span> {{ mcode }}
         </p>
         <p class="manual_checkup">
           4. Проверка погрешности ИК преобразования сигналов напряжения или силы постоянного тока, активного электрического сопротивления и частоты переменного тока в цифровой код:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p4 or '6.4' }}</span> МИ 2539-99
+          п. <span class="manual_checkupValue">{{ methodology_points.p4 or '6.4' }}</span> {{ mcode }}
         </p>
       {% endif %}
     </div>
