@@ -978,6 +978,8 @@ async def build_context(
         "auxiliary_instruments_requested": [
             f"{reg}/{serial}" for reg, serial in auxiliary_requested_pairs
         ],
+        "channels_count": str(excel_row.get("channels_count", "")),
+        "points_per_channel": 5,
     }
     context["allowable_variation"] = allowable_fmt
 
@@ -1048,6 +1050,7 @@ async def build_context(
                     "method_code": method_code,
                     "mitype_number": mitype_number,
                     "mitype_title": mitype_title,
+                    "channels_count": excel_row.get("channels_count", ""),
                 },
             )
             gout = gen.generate(gi)

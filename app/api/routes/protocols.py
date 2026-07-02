@@ -964,6 +964,7 @@ async def _generate_pdf_files(
     mark_failed: bool = False,
     instrument_month_fallback: bool = False,
     job_id: str | None = None,
+    channels_count: int = 0,
 ) -> GenerationResultRead:
     await _ensure_pdf_generation_available()
     _update_generation_job(job_id, status="running", stage="preparation")
@@ -975,6 +976,9 @@ async def _generate_pdf_files(
         raise HTTPException(status_code=400, detail="empty db file")
 
     rows = read_rows_as_dicts(instrument_data)
+    if channels_count > 0:
+        for row in rows:
+            row["channels_count"] = str(channels_count)
     if not rows:
         result = GenerationResultRead()
         _update_generation_job(
@@ -1344,6 +1348,7 @@ async def _run_generation_job(
     instrument_filename: str | None,
     db_data: bytes | None,
     db_filename: str | None,
+    channels_count: int = 0,
 ) -> None:
     try:
         session_factory = get_sessionmaker()
@@ -1366,6 +1371,7 @@ async def _run_generation_job(
                         default_equipment="Контроллеры",
                         instrument_month_fallback=True,
                         job_id=job_id,
+                        channels_count=channels_count,
                     )
                 elif instrument_kind == "thermometers":
                     await _generate_pdf_files(
@@ -1436,6 +1442,7 @@ async def _run_generation_job(
 async def start_generation_job(
     instrument_kind: str = Form(...),
     failed_mode: bool = Form(False),
+    channels_count: int = Form(0, ge=0),
     instrument_file: UploadFile = File(...),
     db_file: UploadFile | None = File(default=None),
 ) -> GenerationJobAcceptedRead:
@@ -1460,6 +1467,7 @@ async def start_generation_job(
             job_id=job.job_id,
             instrument_kind=resolved_kind,
             failed_mode=failed_mode,
+            channels_count=channels_count,
             instrument_data=instrument_data,
             instrument_filename=instrument_file.filename,
             db_data=db_data,

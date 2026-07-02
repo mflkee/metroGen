@@ -117,10 +117,12 @@ export async function startGenerationJob(
   kind: InstrumentKind,
   payload: FilePayload,
   failedMode = false,
+  channelsCount = 0,
 ): Promise<GenerationJobAccepted> {
   const formData = new FormData();
   formData.append("instrument_kind", kind);
   formData.append("failed_mode", String(failedMode));
+  formData.append("channels_count", String(channelsCount));
   formData.append("instrument_file", payload.instrumentFile);
   if (payload.dbFile) {
     formData.append("db_file", payload.dbFile);

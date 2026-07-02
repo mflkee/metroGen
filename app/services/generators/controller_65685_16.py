@@ -7,9 +7,6 @@ from .base import GenInput, TableGenerator
 SET_VALUES_MA: tuple[float, ...] = (4.0, 8.0, 12.0, 16.0, 20.0)
 SPAN_MA: float = max(SET_VALUES_MA) - min(SET_VALUES_MA)
 DELTA_LIMIT_MA: float = 0.015  # keep error within ±0.1 % относительно диапазона 16 мА
-CHANNEL_COUNT: int = 4
-
-
 def _fmt(value: float, digits: int) -> str:
     return f"{value:.{digits}f}"
 
@@ -18,9 +15,10 @@ class Controller65685(TableGenerator):
     """Генератор таблицы результатов для контроллеров 65685-16 (СК-1000)."""
 
     def generate(self, gi: GenInput) -> dict[str, object]:
+        channels = int(gi.ctx.get("channels_count", 4))
         rows: list[dict[str, str]] = []
 
-        for channel in range(1, CHANNEL_COUNT + 1):
+        for channel in range(1, channels + 1):
             for idx, set_ma in enumerate(SET_VALUES_MA):
                 delta = uniform(-DELTA_LIMIT_MA, DELTA_LIMIT_MA)
                 measured = set_ma + delta

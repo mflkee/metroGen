@@ -168,10 +168,11 @@
         </tr>
       </thead>
       <tbody>
+        {% set ppc = points_per_channel | default(5) %}
         {% for row in table_rows %}
         <tr>
-          {% if loop.index0 % 5 == 0 %}
-          <td class="channel-cell" rowspan="5">{{ row.channel or '1' }}</td>
+          {% if loop.index0 % ppc == 0 %}
+          <td class="channel-cell" rowspan="{{ ppc }}">{{ row.channel or '1' }}</td>
           {% endif %}
           <td>{{ row.set_value }}</td>
           <td>{{ row.measured_value }}</td>
