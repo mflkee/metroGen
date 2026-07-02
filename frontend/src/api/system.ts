@@ -135,3 +135,23 @@ export async function fetchExportFile(token: string, path: string): Promise<Blob
 export async function fetchExportFolderArchive(token: string, path: string): Promise<Blob> {
   return fetchBinary(`/system/export-folder-archive?path=${encodeURIComponent(path)}`, token);
 }
+
+export async function fetchExportFolderFiles(token: string, path: string): Promise<ExportFile[]> {
+  const raw = await apiRequest<RawExportFile[]>(`/system/export-folder-files?path=${encodeURIComponent(path)}`, {
+    method: "GET",
+    token,
+  });
+  return raw.map((f) => ({
+    path: f.path,
+    sizeBytes: f.size_bytes,
+    modifiedAt: f.modified_at,
+  }));
+}
+
+export async function deleteExportFiles(token: string, paths: string[]): Promise<{ deleted: number; errors: Record<string, string> }> {
+  return apiRequest<{ deleted: number; errors: Record<string, string> }>("/system/export-files/delete", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ paths }),
+  });
+}

@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from app.api.deps import CurrentUser, DbSession
-from app.schemas.system import SystemStatusRead
+from app.schemas.system import ExportFileRead, SystemStatusRead
 from app.services.system_service import SystemService
 from app.utils.paths import get_exports_base
 
@@ -49,6 +51,60 @@ async def export_folder_archive(
         filename=f"{requested_path.name}.zip",
         background=BackgroundTask(_cleanup_archive, archive_path),
     )
+
+
+@router.get("/export-folder-files", response_model=list[ExportFileRead])
+async def export_folder_files(
+    _: CurrentUser,
+    path: str = Query(..., min_length=1),
+) -> list[ExportFileRead]:
+    requested_path = _resolve_export_path(path)
+    if not requested_path.is_dir():
+        raise HTTPException(status_code=404, detail="Export folder not found.")
+
+    files: list[ExportFileRead] = []
+    for item in sorted(requested_path.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not item.is_file():
+            continue
+        files.append(
+            ExportFileRead(
+                path=str(item),
+                size_bytes=item.stat().st_size,
+                modified_at=datetime.fromtimestamp(item.stat().st_mtime),
+            )
+        )
+    return files
+
+
+class DeleteExportFilesRequest(BaseModel):
+    paths: list[str]
+
+
+class DeleteExportFilesResponse(BaseModel):
+    deleted: int
+    errors: dict[str, str]
+
+
+@router.post("/export-files/delete", response_model=DeleteExportFilesResponse)
+async def delete_export_files(
+    _: CurrentUser,
+    body: DeleteExportFilesRequest,
+) -> DeleteExportFilesResponse:
+    deleted = 0
+    errors: dict[str, str] = {}
+    for raw_path in body.paths:
+        try:
+            resolved = _resolve_export_path(raw_path)
+            if not resolved.is_file():
+                errors[raw_path] = "File not found."
+                continue
+            resolved.unlink()
+            deleted += 1
+        except HTTPException:
+            raise
+        except OSError as exc:
+            errors[raw_path] = str(exc)
+    return DeleteExportFilesResponse(deleted=deleted, errors=errors)
 
 
 def _resolve_export_path(path: str) -> Path:
