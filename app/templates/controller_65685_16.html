@@ -84,12 +84,12 @@
       <div>
         {% if means_entries %}
           {% for entry in means_entries %}
-          <p class="line" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
+          <p class="line line-left" {% if loop.first %}id="manual_etalonsMain"{% endif %}>
             {{ entry.display_line or entry.line_top }}
           </p>
           {% endfor %}
         {% else %}
-        <p class="line" id="manual_etalonsMain">{{ etalon_line_top }}</p>
+        <p class="line line-left" id="manual_etalonsMain">{{ etalon_line_top }}</p>
         {% endif %}
         <p class="undertext">
           Указываются эталоны единиц величин, обеспечивающие передачу размера
@@ -170,8 +170,8 @@
       <tbody>
         {% for row in table_rows %}
         <tr>
-          {% if loop.first %}
-          <td class="channel-cell" rowspan="{{ table_rows|length }}">{{ row.channel or '1' }}</td>
+          {% if loop.index0 % 5 == 0 %}
+          <td class="channel-cell" rowspan="5">{{ row.channel or '1' }}</td>
           {% endif %}
           <td>{{ row.set_value }}</td>
           <td>{{ row.measured_value }}</td>
