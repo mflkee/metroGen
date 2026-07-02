@@ -13,6 +13,7 @@ from app.schemas.methodology import (
     MethodologyCreate,
     MethodologyOut,
     MethodologyPointIn,
+    MethodologyUpdate,
 )
 
 router = APIRouter(prefix="/api/v1/methodologies", tags=["methodologies"])
@@ -60,6 +61,7 @@ def _payload_points(points: Iterable[MethodologyPointIn]) -> list[MethodologyPoi
                 position=point.position,
                 label=label,
                 point_type=_infer_point_type(point),
+                default_text=point.default_text,
             )
         )
     return payload
@@ -98,7 +100,48 @@ async def create_methodology(
     await session.commit()
 
     refreshed = await repo.get_by_code(body.code)
-    if refreshed is None:  # pragma: no cover - defensive
+    if refreshed is None:
         raise HTTPException(status_code=500, detail="failed to load methodology")
 
+    return MethodologyOut.from_orm_obj(refreshed)
+
+
+@router.get("/{methodology_id}", response_model=MethodologyOut)
+async def get_methodology(
+    methodology_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> MethodologyOut:
+    repo = MethodologyRepository(session)
+    methodology = await repo.get_by_id(methodology_id)
+    if methodology is None:
+        raise HTTPException(status_code=404, detail="methodology not found")
+    return MethodologyOut.from_orm_obj(methodology)
+
+
+@router.patch("/{methodology_id}", response_model=MethodologyOut)
+async def update_methodology(
+    methodology_id: int,
+    body: MethodologyUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> MethodologyOut:
+    repo = MethodologyRepository(session)
+    methodology = await repo.update_methodology(
+        methodology_id,
+        title=body.title,
+        document=body.document,
+        notes=body.notes,
+        allowable_variation_pct=body.allowable_variation_pct,
+    )
+    if methodology is None:
+        raise HTTPException(status_code=404, detail="methodology not found")
+
+    if body.points is not None:
+        payload_points = _payload_points(body.points)
+        if payload_points:
+            await repo.replace_points(methodology, payload_points)
+
+    await session.commit()
+    refreshed = await repo.get_by_id(methodology_id)
+    if refreshed is None:
+        raise HTTPException(status_code=500, detail="failed to load methodology after update")
     return MethodologyOut.from_orm_obj(refreshed)

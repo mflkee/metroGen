@@ -11,6 +11,7 @@ class MethodologyPointIn(BaseModel):
     position: int = Field(..., ge=1)
     label: str = Field(..., min_length=1)
     point_type: MethodologyPointType | None = None
+    default_text: str | None = None
 
 
 class MethodologyCreate(BaseModel):
@@ -23,10 +24,19 @@ class MethodologyCreate(BaseModel):
     points: list[MethodologyPointIn] = Field(default_factory=list)
 
 
+class MethodologyUpdate(BaseModel):
+    title: str | None = None
+    document: str | None = None
+    notes: str | None = None
+    allowable_variation_pct: float | None = None
+    points: list[MethodologyPointIn] | None = None
+
+
 class MethodologyPointOut(BaseModel):
     position: int
     label: str
     point_type: MethodologyPointType
+    default_text: str | None = None
 
 
 class MethodologyOut(BaseModel):
@@ -45,6 +55,7 @@ class MethodologyOut(BaseModel):
                 position=point.position,
                 label=point.label,
                 point_type=MethodologyPointType(point.point_type),
+                default_text=point.default_text,
             )
             for point in sorted(obj.points, key=lambda p: (p.position, p.id or 0))
         ]
