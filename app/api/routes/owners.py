@@ -10,6 +10,16 @@ from app.schemas.owner import OwnerCreate, OwnerOut, OwnerUpdate
 router = APIRouter(prefix="/api/v1/owners", tags=["owners"])
 
 
+@router.get("", response_model=list[OwnerOut])
+async def list_owners(
+    search: str | None = None,
+    session: AsyncSession = Depends(get_db),
+) -> list[OwnerOut]:
+    repo = OwnerRepository(session)
+    rows = await repo.list_all(search=search)
+    return [OwnerOut.from_model(r) for r in rows]
+
+
 @router.post(
     "",
     response_model=OwnerOut,

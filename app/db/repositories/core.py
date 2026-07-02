@@ -53,6 +53,13 @@ class OwnerRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def list_all(self, search: str | None = None) -> list[models.Owner]:
+        stmt = select(models.Owner).order_by(models.Owner.name)
+        if search:
+            stmt = stmt.where(models.Owner.name.ilike(f"%{search}%"))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_name(self, name: str) -> models.Owner | None:
         if not name:
             return None
@@ -139,6 +146,17 @@ class MethodologyPointPayload:
 
 
 class MethodologyRepository(BaseRepository):
+    async def list_all(self, search: str | None = None) -> list[models.Methodology]:
+        stmt = (
+            select(models.Methodology)
+            .options(selectinload(models.Methodology.points))
+            .order_by(models.Methodology.code)
+        )
+        if search:
+            stmt = stmt.where(models.Methodology.code.ilike(f"%{search}%"))
+        result = await self.session.execute(stmt)
+        return list(result.unique().scalars().all())
+
     async def get_by_code(self, code: str) -> models.Methodology | None:
         stmt = (
             select(models.Methodology)

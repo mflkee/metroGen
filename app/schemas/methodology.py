@@ -30,6 +30,7 @@ class MethodologyPointOut(BaseModel):
 
 
 class MethodologyOut(BaseModel):
+    id: int
     code: str
     title: str
     document: str | None
@@ -48,6 +49,7 @@ class MethodologyOut(BaseModel):
             for point in sorted(obj.points, key=lambda p: (p.position, p.id or 0))
         ]
         return cls(
+            id=obj.id,
             code=obj.code,
             title=obj.title,
             document=obj.document,
