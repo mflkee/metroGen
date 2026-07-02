@@ -136,25 +136,26 @@
           {% endif %}
         {% endfor %}
       {% else %}
+        {% set mcode = methodology_code or 'МП 20-221-2021' %}
         <p class="manual_checkup">
           1. Результат внешнего осмотра:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p1 or '8' }}</span> МП 20-221-2021
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 or '8' }}</span> {{ mcode }}
         </p>
         <p class="manual_checkup">
           2. Опробование СИ:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p2 or '9' }}</span> МП 20-221-2021
+          п. <span class="manual_checkupValue">{{ methodology_points.p2 or '9' }}</span> {{ mcode }}
         </p>
         <p class="manual_checkup">
           3. Проверка ПО:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p3 or '10' }}</span> МП 20-221-2021
+          п. <span class="manual_checkupValue">{{ methodology_points.p3 or '10' }}</span> {{ mcode }}
         </p>
         <p class="manual_checkup">
           4. Определение метрологических характеристик:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p4 or '11' }}</span> МП 20-221-2021
+          п. <span class="manual_checkupValue">{{ methodology_points.p4 or '11' }}</span> {{ mcode }}
         </p>
       {% endif %}
     </div>

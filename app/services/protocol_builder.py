@@ -728,6 +728,7 @@ async def build_context(
     allowable_variation: float,
     allowable_display: str | None = None,
     protocol_number: str | None = None,
+    methodology_code: str | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     if owner_name and not (owner_inn or "").strip():
@@ -942,6 +943,7 @@ async def build_context(
         "owner_name": owner_name,
         "owner_inn": owner_inn or "",
         "methodology_full": excel_row.get("_methodology_full") or vri.get("docTitle") or "",
+        "methodology_code": methodology_code or "",
         "methodology_points": methodology_points,
         "methodology_point_items": point_items,
         "temperature": excel_row.get("Температура") or "",
@@ -1180,8 +1182,10 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
         else:
             method_info = None
 
+        method_code_value: str | None = None
         if method_info:
             excel_row["_methodology_full"] = method_info.title
+            method_code_value = method_info.code
             if method_info.points:
                 methodology_points.update(method_info.points)
             if method_info.point_items:
@@ -1263,6 +1267,7 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             allowable_variation=allowable,
             allowable_display=allowable_display,
             protocol_number=protocol_number or None,
+            methodology_code=method_code_value,
             http_client=http_client,
         )
 

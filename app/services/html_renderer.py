@@ -148,6 +148,7 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("header_accreditation", "")
     ctx.setdefault("methodology_point_items", [])
     ctx.setdefault("methodology_points", {})
+    ctx.setdefault("methodology_code", "")
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")
