@@ -5,6 +5,19 @@ import { RequireAuth, RequireGuest, RequireRoles } from "@/app/RouteGuards";
 import { ShellLayout } from "@/app/ShellLayout";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 
+const AdminAuxInstrumentsPage = lazy(() =>
+  import("@/pages/AdminAuxInstrumentsPage").then((module) => ({
+    default: module.AdminAuxInstrumentsPage,
+  })),
+);
+const AdminMethodologiesPage = lazy(() =>
+  import("@/pages/AdminMethodologiesPage").then((module) => ({
+    default: module.AdminMethodologiesPage,
+  })),
+);
+const AdminOwnersPage = lazy(() =>
+  import("@/pages/AdminOwnersPage").then((module) => ({ default: module.AdminOwnersPage })),
+);
 const AdminUsersPage = lazy(() =>
   import("@/pages/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })),
 );
@@ -70,6 +83,9 @@ export const router = createBrowserRouter([
               { path: "/developer", element: <DeveloperDashboardPage /> },
               { path: "/admin/users", element: <AdminUsersPage /> },
               { path: "/admin/users/:userId", element: <UserDetailsPage /> },
+              { path: "/admin/owners", element: <AdminOwnersPage /> },
+              { path: "/admin/methodologies", element: <AdminMethodologiesPage /> },
+              { path: "/admin/aux-instruments", element: <AdminAuxInstrumentsPage /> },
             ],
           },
         ],

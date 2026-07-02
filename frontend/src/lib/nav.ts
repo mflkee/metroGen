@@ -33,10 +33,37 @@ const adminUsersNavigationItem: NavigationItem = {
   to: "/admin/users",
 };
 
+const adminOwnersNavigationItem: NavigationItem = {
+  icon: "details",
+  label: "Владельцы",
+  description: "Справочник организаций-владельцев СИ",
+  to: "/admin/owners",
+};
+
+const adminMethodologiesNavigationItem: NavigationItem = {
+  icon: "verification",
+  label: "Методики",
+  description: "Справочник методик поверки СИ",
+  to: "/admin/methodologies",
+};
+
+const adminAuxInstrumentsNavigationItem: NavigationItem = {
+  icon: "settings",
+  label: "Вспом. СИ",
+  description: "Вспомогательные средства измерений",
+  to: "/admin/aux-instruments",
+};
+
 export function getNavigationItems(role: UserRole | null | undefined): NavigationItem[] {
   const items = [...baseNavigationItems];
   if (hasAdminAccess(role)) {
-    items.push(developerNavigationItem, adminUsersNavigationItem);
+    items.push(
+      developerNavigationItem,
+      adminUsersNavigationItem,
+      adminOwnersNavigationItem,
+      adminMethodologiesNavigationItem,
+      adminAuxInstrumentsNavigationItem,
+    );
   }
   return items;
 }

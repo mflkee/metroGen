@@ -18,6 +18,16 @@ from app.schemas.methodology import (
 router = APIRouter(prefix="/api/v1/methodologies", tags=["methodologies"])
 
 
+@router.get("", response_model=list[MethodologyOut])
+async def list_methodologies(
+    search: str | None = None,
+    session: AsyncSession = Depends(get_db),
+) -> list[MethodologyOut]:
+    repo = MethodologyRepository(session)
+    rows = await repo.list_all(search=search)
+    return [MethodologyOut.from_orm_obj(r) for r in rows]
+
+
 def _infer_point_type(payload: MethodologyPointIn) -> MethodologyPointType:
     if payload.point_type:
         return payload.point_type
