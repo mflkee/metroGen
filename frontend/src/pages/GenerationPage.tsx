@@ -423,7 +423,7 @@ export function GenerationPage() {
                   onChange={(event) => setKind(event.target.value as InstrumentKind)}
                 >
                   <option value="manometers">Манометры</option>
-                  <option value="controllers">СГМ ЭРИС 43790-12</option>
+                  <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
                 </select>
               </label>
@@ -779,7 +779,7 @@ export function GenerationPage() {
                   onChange={(event) => setRegistryInstrumentKind(event.target.value as InstrumentKind)}
                 >
                   <option value="manometers">Манометры</option>
-                  <option value="controllers">СГМ ЭРИС 43790-12</option>
+                  <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
                 </select>
               </label>
@@ -955,7 +955,7 @@ export function GenerationPage() {
                 >
                   <option value="all">Все типы</option>
                   <option value="manometers">Манометры</option>
-                  <option value="controllers">СГМ ЭРИС 43790-12</option>
+                  <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
                 </select>
               </label>
@@ -1133,7 +1133,7 @@ function ExportFolderCard({
 
 function describeScenario(kind: InstrumentKind, mode: "pdf" | "html", failedMode: boolean): string {
   const kindLabel =
-    kind === "controllers" ? "СГМ ЭРИС 43790-12" : kind === "thermometers" ? "термопреобразователи" : "манометры";
+    kind === "controllers" ? "контроллеры" : kind === "thermometers" ? "термопреобразователи" : "манометры";
   if (mode === "html") {
     return `HTML-превью · ${kindLabel}`;
   }
