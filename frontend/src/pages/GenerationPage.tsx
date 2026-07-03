@@ -45,7 +45,7 @@ export function GenerationPage() {
   const [kind, setKind] = useState<InstrumentKind>("manometers");
   const [mode, setMode] = useState<"pdf" | "html">("pdf");
   const [failedMode, setFailedMode] = useState(false);
-  const [channelsCount, setChannelsCount] = useState(4);
+  const [channelsCountStr, setChannelsCountStr] = useState("4");
   const [previewRow, setPreviewRow] = useState(1);
   const [instrumentFile, setInstrumentFile] = useState<File | null>(null);
   const [dbFile, setDbFile] = useState<File | null>(null);
@@ -176,6 +176,7 @@ export function GenerationPage() {
         setCurrentStageIndex(4);
         setRunStatus("success");
       } else {
+        const channelsCount = Math.max(1, parseInt(channelsCountStr, 10) || 1);
         const job = await startGenerationJob(kind, { instrumentFile, dbFile }, kind === "manometers" && failedMode, kind === "controllers" ? channelsCount : 0);
         const startedAtMs = Date.parse(job.startedAt);
         if (Number.isFinite(startedAtMs)) setRunStartedAt(startedAtMs);
@@ -401,7 +402,7 @@ export function GenerationPage() {
             {kind === "controllers" && mode === "pdf" ? (
               <label className="block text-sm text-steel">
                 Количество каналов
-                <input className="form-input mt-1" min={1} max={99} type="number" value={channelsCount} onChange={(e) => setChannelsCount(Math.max(1, Number(e.target.value) || 1))} />
+                <input className="form-input mt-1" min={1} max={99} type="number" value={channelsCountStr} onChange={(e) => setChannelsCountStr(e.target.value)} />
               </label>
             ) : null}
 
