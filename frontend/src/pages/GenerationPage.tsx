@@ -25,6 +25,7 @@ import {
   type ExportFile,
   type ExportFolder,
 } from "@/api/system";
+import { ApiError } from "@/api/client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useAuthStore } from "@/store/auth";
 
@@ -39,6 +40,7 @@ const workspaceTabs: Array<{ id: WorkspaceTab; label: string }> = [
 
 export function GenerationPage() {
   const token = useAuthStore((state) => state.token);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("generation");
@@ -239,7 +241,11 @@ export function GenerationPage() {
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        return;
+      }
       setError("Не удалось открыть файл.");
     }
   }
@@ -256,7 +262,11 @@ export function GenerationPage() {
       anchor.click();
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        return;
+      }
       setError("Не удалось скачать архив.");
     }
   }
