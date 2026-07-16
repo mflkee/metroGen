@@ -1,11 +1,11 @@
-from datetime import date
+from datetime import date, time, timedelta
 
 import pytest
 from sqlalchemy import delete, select
 
 from app.db import models
 from app.db.session import get_sessionmaker
-from app.services.registry_ingest import ingest_registry_rows
+from app.services.registry_ingest import _sanitize_payload, ingest_registry_rows
 
 
 @pytest.mark.anyio
@@ -94,3 +94,18 @@ async def test_ingest_registry_rows_persists_owner_and_methodology():
         )
         await session.execute(delete(models.Owner).where(models.Owner.name == owner_name))
         await session.commit()
+
+
+def test_sanitize_payload_serializes_time_and_timedelta():
+    """Cells formatted as time in Excel are returned as datetime.time by openpyxl."""
+    raw = {
+        "moment": time(14, 30, 0),
+        "duration": timedelta(hours=2, minutes=15),
+        "plain": "text",
+        "count": 42,
+    }
+    sanitized = _sanitize_payload(raw)
+    assert sanitized["moment"] == "14:30:00"
+    assert sanitized["duration"] == 8100.0
+    assert sanitized["plain"] == "text"
+    assert sanitized["count"] == 42
