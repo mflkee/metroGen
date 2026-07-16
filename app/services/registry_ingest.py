@@ -4,6 +4,7 @@ import re
 import time
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
+from datetime import time as dt_time
 from typing import Any
 
 from loguru import logger
@@ -189,6 +190,14 @@ def _sanitize_payload(row: Mapping[str, Any]) -> dict[str, Any]:
             sanitized[key] = value.isoformat()
         elif isinstance(value, date):
             sanitized[key] = value.isoformat()
+        elif isinstance(value, dt_time):
+            sanitized[key] = value.isoformat()
+        elif isinstance(value, timedelta):
+            sanitized[key] = value.total_seconds()
+        elif isinstance(value, float) and (
+            value != value or value in (float("inf"), float("-inf"))
+        ):
+            sanitized[key] = None
         else:
             sanitized[key] = value
     return sanitized
