@@ -110,6 +110,9 @@ export async function fetchRegistryEntries(
     search?: string;
     instrumentKind?: string;
     activeOnly?: boolean;
+    source?: string;
+    loadedAtFrom?: string;
+    loadedAtTo?: string;
     limit?: number;
   } = {},
 ): Promise<RegistryEntryList> {
@@ -122,6 +125,15 @@ export async function fetchRegistryEntries(
   }
   if (params.activeOnly !== undefined) {
     search.set("active_only", String(params.activeOnly));
+  }
+  if (params.source?.trim()) {
+    search.set("source", params.source.trim());
+  }
+  if (params.loadedAtFrom?.trim()) {
+    search.set("loaded_at_from", params.loadedAtFrom.trim());
+  }
+  if (params.loadedAtTo?.trim()) {
+    search.set("loaded_at_to", params.loadedAtTo.trim());
   }
   if (params.limit) {
     search.set("limit", String(params.limit));

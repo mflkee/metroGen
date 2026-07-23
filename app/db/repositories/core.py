@@ -406,6 +406,9 @@ class RegistryRepository(BaseRepository):
         search: str | None = None,
         instrument_kind: str | None = None,
         active_only: bool = False,
+        source: str | None = None,
+        loaded_at_from: str | None = None,
+        loaded_at_to: str | None = None,
         limit: int = 300,
     ) -> tuple[int, list[models.VerificationRegistryEntry]]:
         conditions = []
@@ -413,6 +416,12 @@ class RegistryRepository(BaseRepository):
             conditions.append(models.VerificationRegistryEntry.is_active.is_(True))
         if instrument_kind:
             conditions.append(models.VerificationRegistryEntry.instrument_kind == instrument_kind)
+        if source:
+            conditions.append(models.VerificationRegistryEntry.source_file.ilike(f"%{source}%"))
+        if loaded_at_from:
+            conditions.append(models.VerificationRegistryEntry.loaded_at >= loaded_at_from)
+        if loaded_at_to:
+            conditions.append(models.VerificationRegistryEntry.loaded_at <= loaded_at_to)
 
         search_text = (search or "").strip()
         if search_text:

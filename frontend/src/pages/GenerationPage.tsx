@@ -69,6 +69,9 @@ export function GenerationPage() {
   const [registrySearch, setRegistrySearch] = useState("");
   const [registryFilterKind, setRegistryFilterKind] = useState<InstrumentKind | "all">("all");
   const [registryActiveOnly, setRegistryActiveOnly] = useState(true);
+  const [registrySource, setRegistrySource] = useState("");
+  const [registryLoadedAtFrom, setRegistryLoadedAtFrom] = useState("");
+  const [registryLoadedAtTo, setRegistryLoadedAtTo] = useState("");
 
   const statusQuery = useQuery({
     queryKey: ["system-status", "generation"],
@@ -78,12 +81,24 @@ export function GenerationPage() {
   });
 
   const registryEntriesQuery = useQuery({
-    queryKey: ["registry-entries", token, registrySearch, registryFilterKind, registryActiveOnly],
+    queryKey: [
+      "registry-entries",
+      token,
+      registrySearch,
+      registryFilterKind,
+      registryActiveOnly,
+      registrySource,
+      registryLoadedAtFrom,
+      registryLoadedAtTo,
+    ],
     queryFn: () =>
       fetchRegistryEntries(token ?? "", {
         search: registrySearch || undefined,
         instrumentKind: registryFilterKind === "all" ? undefined : registryFilterKind,
         activeOnly: registryActiveOnly,
+        source: registrySource || undefined,
+        loadedAtFrom: registryLoadedAtFrom || undefined,
+        loadedAtTo: registryLoadedAtTo || undefined,
         limit: 500,
       }),
     enabled: Boolean(token) && activeTab === "database",
@@ -466,6 +481,15 @@ export function GenerationPage() {
                     <option value="controllers">Контроллеры</option>
                     <option value="thermometers">Термопреобразователи</option>
                   </select>
+                  <input className="form-input max-w-[180px]" placeholder="Источник файла..." type="text" value={registrySource} onChange={(e) => setRegistrySource(e.target.value)} />
+                  <label className="flex items-center gap-1 text-sm text-steel">
+                    от
+                    <input className="form-input w-[130px]" type="date" value={registryLoadedAtFrom} onChange={(e) => setRegistryLoadedAtFrom(e.target.value)} />
+                  </label>
+                  <label className="flex items-center gap-1 text-sm text-steel">
+                    до
+                    <input className="form-input w-[130px]" type="date" value={registryLoadedAtTo} onChange={(e) => setRegistryLoadedAtTo(e.target.value)} />
+                  </label>
                   <label className="flex items-center gap-2 text-sm text-steel">
                     <input checked={registryActiveOnly} type="checkbox" onChange={(e) => setRegistryActiveOnly(e.target.checked)} />
                     Активные
@@ -477,17 +501,19 @@ export function GenerationPage() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-[var(--surface-2)] text-left text-steel">
                     <tr>
-                      <th className="px-3 py-2 font-medium">Дата</th>
+                      <th className="px-3 py-2 font-medium">Дата поверки</th>
                       <th className="px-3 py-2 font-medium">Серийник</th>
                       <th className="px-3 py-2 font-medium">Документ</th>
                       <th className="px-3 py-2 font-medium">Владелец</th>
                       <th className="px-3 py-2 font-medium">Методика</th>
+                      <th className="px-3 py-2 font-medium">Источник</th>
+                      <th className="px-3 py-2 font-medium">Загружено</th>
                       <th className="px-3 py-2 font-medium">Статус</th>
                     </tr>
                   </thead>
                   <tbody>
                     {registryEntriesQuery.isLoading ? (
-                      <tr><td className="px-3 py-4 text-steel" colSpan={6}>Загрузка...</td></tr>
+                      <tr><td className="px-3 py-4 text-steel" colSpan={8}>Загрузка...</td></tr>
                     ) : registryEntriesQuery.data?.items.length ? (
                       registryEntriesQuery.data.items.map((entry) => (
                         <tr key={entry.id} className="border-t border-line">
@@ -496,11 +522,13 @@ export function GenerationPage() {
                           <td className="px-3 py-2 text-ink">{entry.documentNo ?? "—"}</td>
                           <td className="px-3 py-2 text-ink">{entry.ownerName ?? "—"}</td>
                           <td className="px-3 py-2 text-ink">{entry.methodology ?? "—"}</td>
+                          <td className="px-3 py-2 text-ink text-xs">{entry.sourceFile ?? "—"}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.loadedAt ? new Date(entry.loadedAt).toLocaleDateString("ru-RU") : "—"}</td>
                           <td className="px-3 py-2"><span className={["status-chip", entry.isActive ? "status-chip--ok" : ""].join(" ")}>{entry.isActive ? "Активна" : "Архив"}</span></td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td className="px-3 py-4 text-steel" colSpan={6}>Нет записей.</td></tr>
+                      <tr><td className="px-3 py-4 text-steel" colSpan={8}>Нет записей.</td></tr>
                     )}
                   </tbody>
                 </table>
