@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDeleteMutation } from "@/hooks/useDeleteMutation";
 
 import type { UserRole } from "@/api/auth";
 import {
@@ -102,14 +103,16 @@ export function AdminUsersPage() {
     },
   });
 
-  const deleteUserMutation = useMutation({
-    mutationFn: (userId: number) => deleteUser(token ?? "", userId),
-    onSuccess: () => {
-      setDeleteMessage("Пользователь удален.");
-      setDeleteUserId(null);
-      void queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+  const deleteUserMutation = useDeleteMutation(
+    (userId: number) => deleteUser(token ?? "", userId),
+    ["admin-users"],
+    {
+      onSuccess: () => {
+        setDeleteMessage("Пользователь удален.");
+        setDeleteUserId(null);
+      },
     },
-  });
+  );
 
   const sortedUsers = useMemo(
     () =>
