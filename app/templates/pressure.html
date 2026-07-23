@@ -138,11 +138,21 @@
     </div>
     <div class="spread-bottom" id="manual_checkups">
       {% if verification_failed %}
-        <p class="manual_checkup">
-          1. Результаты внешнего осмотра:
-          <span class="manual_checkup-fail">НЕ соответствует</span>
-          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки{% if methodology_full %} {{ methodology_full }}{% endif %}
-        </p>
+        {% if methodology_point_items %}
+          {% set first_item = methodology_point_items[0] %}
+          {% set description = first_item.description or 'Результат проверки' %}
+          <p class="manual_checkup">
+            1. {{ description }}:
+            <span class="manual_checkup-fail">НЕ соответствует</span>
+            {% if first_item.code %}п. <span class="manual_checkupValue">{{ first_item.code }}</span> методики поверки{% else %}методики поверки{% endif %}{% if methodology_full %} {{ methodology_full }}{% endif %}
+          </p>
+        {% else %}
+          <p class="manual_checkup">
+            1. Результаты внешнего осмотра:
+            <span class="manual_checkup-fail">НЕ соответствует</span>
+            {% if methodology_points.p1 %}п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки{% else %}методики поверки{% endif %}{% if methodology_full %} {{ methodology_full }}{% endif %}
+          </p>
+        {% endif %}
       {% elif methodology_point_items %}
         {% set ns = namespace(num=0) %}
         {% for item in methodology_point_items %}
