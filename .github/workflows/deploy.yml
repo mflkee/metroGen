@@ -13,8 +13,26 @@ jobs:
       - name: Pull latest code
         run: |
           cd ~/apps/metroGen
+          # Сохраняем существующий .env перед git reset --hard
+          if [ -f .env ]; then
+            cp .env /tmp/metrogen_env_backup
+            echo "Backed up existing .env"
+          fi
           git fetch origin
           git reset --hard origin/${{ github.ref_name }}
+          # Восстанавливаем .env (он был удалён из git для security)
+          if [ -f /tmp/metrogen_env_backup ]; then
+            cp /tmp/metrogen_env_backup .env
+            echo "Restored .env from backup"
+          else
+            echo "WARNING: no existing .env found, creating from .env.example"
+            cp .env.example .env
+          fi
+          # Убеждаемся что .env не попадёт в git accidentally
+          if ! grep -q "^\.env$" .gitignore 2>/dev/null; then
+            echo ".env" >> .gitignore
+          fi
+          git update-index --assume-unchanged .env
 
       - name: Backup production database
         run: |

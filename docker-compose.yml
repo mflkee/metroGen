@@ -31,7 +31,7 @@ services:
       ARSHIN_RETRY_ATTEMPTS: "4"
       ARSHIN_FAST_FAIL: "0"
       PROTOCOL_BUILD_CONCURRENCY: "2"
-      UVICORN_RELOAD: "1"
+      UVICORN_RELOAD: "0"
     depends_on:
       db:
         condition: service_healthy
@@ -44,8 +44,9 @@ services:
     ports:
       - "${API_PORT:-8001}:8000"
     volumes:
-      - .:/app
       - api_venv:/app/.venv
+      - exports:/app/exports
+      - signatures:/app/signatures
     deploy:
       resources:
         limits:
@@ -72,3 +73,5 @@ services:
 volumes:
   api_venv:
   pgdata:
+  exports:
+  signatures:
