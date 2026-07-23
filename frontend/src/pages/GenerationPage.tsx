@@ -179,7 +179,7 @@ export function GenerationPage() {
         setRunStatus("success");
       } else {
         const channelsCount = Math.max(1, parseInt(channelsCountStr, 10) || 1);
-        const job = await startGenerationJob(kind, { instrumentFile, dbFile }, kind === "manometers" && failedMode, kind === "controllers" ? channelsCount : 0);
+        const job = await startGenerationJob(kind, { instrumentFile, dbFile }, (kind === "manometers" || kind === "pressure_sensors") && failedMode, kind === "controllers" ? channelsCount : 0);
         const startedAtMs = Date.parse(job.startedAt);
         if (Number.isFinite(startedAtMs)) setRunStartedAt(startedAtMs);
         setCurrentStageIndex(resolvePdfStageIndex(job.stage));
@@ -381,6 +381,7 @@ export function GenerationPage() {
                 Тип прибора
                 <select className="form-input mt-1" value={kind} onChange={(e) => setKind(e.target.value as InstrumentKind)}>
                   <option value="manometers">Манометры</option>
+                  <option value="pressure_sensors">Датчики давления</option>
                   <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
                 </select>
@@ -416,7 +417,7 @@ export function GenerationPage() {
               </label>
             ) : null}
 
-            {kind === "manometers" && mode === "pdf" ? (
+            {(kind === "manometers" || kind === "pressure_sensors") && mode === "pdf" ? (
               <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
                 <input checked={failedMode} type="checkbox" onChange={(e) => setFailedMode(e.target.checked)} />
                 Браковочный протокол
@@ -498,6 +499,7 @@ export function GenerationPage() {
                 Тип прибора
                 <select className="form-input mt-1" value={registryInstrumentKind} onChange={(e) => setRegistryInstrumentKind(e.target.value as InstrumentKind)}>
                   <option value="manometers">Манометры</option>
+                  <option value="pressure_sensors">Датчики давления</option>
                   <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
                 </select>
@@ -522,7 +524,8 @@ export function GenerationPage() {
                   <input className="form-input max-w-[200px]" placeholder="Поиск..." type="text" value={registrySearch} onChange={(e) => setRegistrySearch(e.target.value)} />
                   <select className="form-input max-w-[160px]" value={registryFilterKind} onChange={(e) => setRegistryFilterKind(e.target.value as InstrumentKind | "all")}>
                     <option value="all">Все типы</option>
-                    <option value="manometers">Манометры</option>
+                  <option value="manometers">Манометры</option>
+                  <option value="pressure_sensors">Датчики давления</option>
                     <option value="controllers">Контроллеры</option>
                     <option value="thermometers">Термопреобразователи</option>
                   </select>

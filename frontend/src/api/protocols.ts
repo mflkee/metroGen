@@ -1,6 +1,10 @@
 import { apiRequest } from "@/api/client";
 
-export type InstrumentKind = "manometers" | "controllers" | "thermometers";
+export type InstrumentKind = "manometers" | "pressure_sensors" | "controllers" | "thermometers";
+
+function mapKindToApi(kind: InstrumentKind): "manometers" | "controllers" | "thermometers" {
+  return kind === "pressure_sensors" ? "manometers" : kind;
+}
 
 type RawGenerationResponse = {
   files: string[];
@@ -81,9 +85,10 @@ type FilePayload = {
 
 function buildPdfPayload(kind: InstrumentKind, payload: FilePayload): FormData {
   const formData = new FormData();
-  if (kind === "manometers") {
+  const apiKind = mapKindToApi(kind);
+  if (apiKind === "manometers") {
     formData.append("manometers_file", payload.instrumentFile);
-  } else if (kind === "controllers") {
+  } else if (apiKind === "controllers") {
     formData.append("controllers_file", payload.instrumentFile);
   } else {
     formData.append("thermometers_file", payload.instrumentFile);
@@ -120,7 +125,7 @@ export async function startGenerationJob(
   channelsCount = 0,
 ): Promise<GenerationJobAccepted> {
   const formData = new FormData();
-  formData.append("instrument_kind", kind);
+  formData.append("instrument_kind", mapKindToApi(kind));
   formData.append("failed_mode", String(failedMode));
   formData.append("channels_count", String(channelsCount));
   formData.append("instrument_file", payload.instrumentFile);
@@ -201,13 +206,14 @@ export async function fetchHtmlPreview(
 }
 
 function resolvePdfPath(kind: InstrumentKind, failed: boolean): string {
-  if (kind === "manometers" && failed) {
+  const apiKind = mapKindToApi(kind);
+  if (apiKind === "manometers" && failed) {
     return "/protocols/manometers/failed/pdf-files";
   }
-  if (kind === "controllers") {
+  if (apiKind === "controllers") {
     return "/protocols/controllers/pdf-files";
   }
-  if (kind === "thermometers") {
+  if (apiKind === "thermometers") {
     return "/protocols/thermometers/pdf-files";
   }
   return "/protocols/manometers/pdf-files";
@@ -215,9 +221,10 @@ function resolvePdfPath(kind: InstrumentKind, failed: boolean): string {
 
 function buildPreviewPayload(kind: InstrumentKind, payload: FilePayload): FormData {
   const formData = new FormData();
-  if (kind === "controllers") {
+  const apiKind = mapKindToApi(kind);
+  if (apiKind === "controllers") {
     formData.append("file", payload.instrumentFile);
-  } else if (kind === "thermometers") {
+  } else if (apiKind === "thermometers") {
     formData.append("thermometers_file", payload.instrumentFile);
   } else {
     formData.append("manometers_file", payload.instrumentFile);
@@ -229,10 +236,11 @@ function buildPreviewPayload(kind: InstrumentKind, payload: FilePayload): FormDa
 }
 
 function resolvePreviewUrl(kind: InstrumentKind, row: number): string {
+  const apiKind = mapKindToApi(kind);
   const path =
-    kind === "controllers"
+    apiKind === "controllers"
       ? `/api/v1/protocols/html-by-excel?instrument_kind=controllers&row=${row}`
-      : kind === "thermometers"
+      : apiKind === "thermometers"
         ? `/api/v1/protocols/thermometers/html-preview?row=${row}`
         : `/api/v1/protocols/manometers/html-preview?row=${row}`;
   return path;
