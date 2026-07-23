@@ -158,49 +158,35 @@
         {% set ns = namespace(num=0) %}
         {% for item in methodology_point_items %}
           {% set description = item.description or '' %}
-          {% if item.code %}
-            {% set ns.num = ns.num + 1 %}
-            {% if item.point_type == 'bool' %}
+          {% set ns.num = ns.num + 1 %}
+          {% if item.point_type == 'bool' %}
             <p class="manual_checkup">
               {{ ns.num }}. {{ description or 'Результат проверки' }}:
               <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-              п. <span class="manual_checkupValue">{{ item.code }}</span> методики поверки
+              {% if item.code %}п. <span class="manual_checkupValue">{{ item.code }}</span> {% endif %}методике поверки
             </p>
-            {% else %}
-            <p class="manual_checkup">
-              {{ ns.num }}. {{ description or 'Проверка' }} в соответствии с п.
-              <span class="manual_checkupValue">{{ item.code }}</span>
-              методики поверки
-            </p>
-            {% endif %}
           {% else %}
-            {% if item.point_type == 'bool' %}
             <p class="manual_checkup">
-              {{ description or 'Результат проверки' }}:
-              <span style="text-decoration-line: underline">соответствует</span>/не соответствует методики поверки
+              {{ ns.num }}. {{ description or 'Проверка' }}{% if item.code %} в соответствии с п. <span class="manual_checkupValue">{{ item.code }}</span>{% endif %}
+              методике поверки
             </p>
-            {% else %}
-            <p class="manual_checkup">
-              {{ description or 'Проверка' }}
-            </p>
-            {% endif %}
           {% endif %}
         {% endfor %}
       {% else %}
         <p class="manual_checkup">
           1. Результат внешнего осмотра:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методики поверки
+          п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> методике поверки
         </p>
         <p class="manual_checkup">
           2. Результат опробования:
           <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-          п. <span class="manual_checkupValue">{{ methodology_points.p2 }}</span> методики поверки
+          п. <span class="manual_checkupValue">{{ methodology_points.p2 }}</span> методике поверки
         </p>
         <p class="manual_checkup">
           3. Определение основной погрешности в соответствии с п.
           <span class="manual_checkupValue">{{ methodology_points.p3 }}</span>
-          методики поверки
+          методике поверки
         </p>
       {% endif %}
     </div>
