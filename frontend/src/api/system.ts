@@ -155,3 +155,11 @@ export async function deleteExportFiles(token: string, paths: string[]): Promise
     body: JSON.stringify({ paths }),
   });
 }
+
+export async function deleteExportFolder(token: string, path: string): Promise<void> {
+  await apiRequest<void>("/system/export-folder/delete", {
+    method: "POST",
+    token,
+    body: JSON.stringify({ path }),
+  });
+}

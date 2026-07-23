@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -105,6 +106,21 @@ async def delete_export_files(
         except OSError as exc:
             errors[raw_path] = str(exc)
     return DeleteExportFilesResponse(deleted=deleted, errors=errors)
+
+
+class DeleteExportFolderRequest(BaseModel):
+    path: str
+
+
+@router.post("/export-folder/delete", status_code=204)
+async def delete_export_folder(
+    _: CurrentUser,
+    body: DeleteExportFolderRequest,
+) -> None:
+    resolved = _resolve_export_path(body.path)
+    if not resolved.is_dir():
+        raise HTTPException(status_code=404, detail="Export folder not found.")
+    shutil.rmtree(resolved)
 
 
 def _resolve_export_path(path: str) -> Path:
