@@ -73,6 +73,9 @@ async def list_registry_entries(
     ),
     instrument_kind: str | None = Query(None, description="Фильтр по типу прибора"),
     active_only: bool = Query(True, description="Показывать только активные записи"),
+    source: str | None = Query(None, description="Фильтр по имени файла-источника"),
+    loaded_at_from: str | None = Query(None, description="Дата загрузки от (YYYY-MM-DD)"),
+    loaded_at_to: str | None = Query(None, description="Дата загрузки до (YYYY-MM-DD)"),
     limit: int = Query(300, ge=1, le=1000),
     session: AsyncSession = Depends(get_db),
 ) -> RegistryEntryListRead:
@@ -80,6 +83,9 @@ async def list_registry_entries(
         search=search,
         instrument_kind=instrument_kind,
         active_only=active_only,
+        source=source,
+        loaded_at_from=loaded_at_from,
+        loaded_at_to=loaded_at_to,
         limit=limit,
     )
     return RegistryEntryListRead(
