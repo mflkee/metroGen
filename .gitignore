@@ -1,3 +1,6 @@
+.env
+.env.local
+.env.*.local
 project_source_code.txt
 AGENTS.md
 pgdata
