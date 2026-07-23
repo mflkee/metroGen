@@ -9,7 +9,7 @@ from app.db.models import MethodologyPointType
 
 class MethodologyPointIn(BaseModel):
     position: int = Field(..., ge=1)
-    label: str = Field(..., min_length=1)
+    label: str = Field(default="")
     point_type: MethodologyPointType | None = None
     default_text: str | None = None
 

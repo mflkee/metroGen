@@ -33,7 +33,9 @@ def _infer_point_type(payload: MethodologyPointIn) -> MethodologyPointType:
     if payload.point_type:
         return payload.point_type
 
-    label = payload.label.strip().lower()
+    label = (payload.label or "").strip().lower()
+    if not label:
+        return MethodologyPointType.CLAUSE
     if "____" in label or "__" in label:
         return MethodologyPointType.CUSTOM
 
@@ -54,14 +56,15 @@ def _payload_points(points: Iterable[MethodologyPointIn]) -> list[MethodologyPoi
     payload: list[MethodologyPointPayload] = []
     for point in points:
         label = _strip_label(point.label)
-        if not label:
+        default_text = (point.default_text or "").strip()
+        if not label and not default_text:
             continue
         payload.append(
             MethodologyPointPayload(
                 position=point.position,
                 label=label,
                 point_type=_infer_point_type(point),
-                default_text=point.default_text,
+                default_text=default_text or None,
             )
         )
     return payload
@@ -94,7 +97,7 @@ async def create_methodology(
 
     payload_points = _payload_points(body.points)
     if not payload_points:
-        raise HTTPException(status_code=400, detail="at least one point must have non-empty label")
+        raise HTTPException(status_code=400, detail="at least one point must have a label or description")
 
     await repo.replace_points(methodology, payload_points)
     await session.commit()
