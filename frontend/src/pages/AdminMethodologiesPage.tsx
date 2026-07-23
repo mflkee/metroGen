@@ -158,9 +158,9 @@ export function AdminMethodologiesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {editPoints.map((p) => (
-                      <tr key={p.position} className="border-t border-line">
-                        <td className="px-3 py-2 text-steel">{p.position}</td>
+                    {editPoints.map((p, idx) => (
+                      <tr key={`${p.position}-${idx}`} className="border-t border-line">
+                        <td className="px-3 py-2 text-steel">{idx + 1}</td>
                         <td className="px-3 py-2">
                           <input className="form-input text-sm py-1" type="text" value={p.label} onChange={(e) => updatePoint(p.position, "label", e.target.value)} />
                         </td>
@@ -225,9 +225,9 @@ export function AdminMethodologiesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {m.points.map((p) => (
-                        <tr key={p.position} className="border-t border-line">
-                          <td className="px-3 py-2 text-steel">{p.position}</td>
+                      {m.points.map((p, idx) => (
+                        <tr key={`${p.position ?? "p"}-${idx}`} className="border-t border-line">
+                          <td className="px-3 py-2 text-steel">{idx + 1}</td>
                           <td className="px-3 py-2 text-ink">{p.label}</td>
                           <td className="px-3 py-2 text-steel">{p.point_type}</td>
                           <td className="px-3 py-2 text-steel">{p.default_text ?? "—"}</td>
