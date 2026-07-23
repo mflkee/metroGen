@@ -66,24 +66,25 @@ async def bulk_upsert_auxiliary_instruments(
 ) -> AuxiliaryInstrumentBulkResult:
     repo = AuxiliaryInstrumentRepository(session)
 
-    pairs: list[tuple[str, str]] = []
-    for item in payload.items:
-        pairs.append((item.reg_number, item.manufacture_num))
-        await repo.upsert_instrument(
-            reg_number=item.reg_number,
-            manufacture_num=item.manufacture_num,
-            values={
-                "title": item.title,
-                "modification": item.modification,
-                "certificate_no": item.certificate_no,
-                "verification_date": item.verification_date,
-                "valid_to": item.valid_to,
-            },
-        )
+    items = [
+        {
+            "reg_number": item.reg_number,
+            "manufacture_num": item.manufacture_num,
+            "title": item.title,
+            "modification": item.modification,
+            "certificate_no": item.certificate_no,
+            "verification_date": item.verification_date,
+            "valid_to": item.valid_to,
+        }
+        for item in payload.items
+    ]
 
+    updated, created = await repo.bulk_upsert_instruments(items)
+
+    pairs = [(item.reg_number, item.manufacture_num) for item in payload.items]
     deleted = 0
     if payload.replace_all:
         deleted = await repo.prune_to_pairs(pairs)
 
     await session.commit()
-    return AuxiliaryInstrumentBulkResult(upserted=len(payload.items), deleted=deleted)
+    return AuxiliaryInstrumentBulkResult(upserted=updated + created, deleted=deleted)

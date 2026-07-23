@@ -607,6 +607,57 @@ class AuxiliaryInstrumentRepository(BaseRepository):
 
         return instrument
 
+    async def bulk_upsert_instruments(
+        self,
+        items: Sequence[dict[str, Any]],
+    ) -> tuple[int, int]:
+        """Bulk upsert instruments. Returns (updated_count, created_count)."""
+        if not items:
+            return 0, 0
+
+        pairs = [
+            (str(item["reg_number"]).strip(), normalize_serial(str(item["manufacture_num"])))
+            for item in items
+            if str(item.get("reg_number") or "").strip() and str(item.get("manufacture_num") or "").strip()
+        ]
+        existing = await self.find_by_pairs(pairs)
+
+        updated = 0
+        created = 0
+        new_instruments: list[models.AuxiliaryVerificationInstrument] = []
+
+        for item in items:
+            reg = str(item.get("reg_number") or "").strip()
+            serial = normalize_serial(str(item.get("manufacture_num") or "").strip())
+            if not reg or not serial:
+                continue
+
+            values = {k: v for k, v in item.items() if k not in ("reg_number", "manufacture_num", "normalized_serial")}
+            key = (reg, serial)
+
+            if key in existing:
+                instrument = existing[key]
+                instrument.manufacture_num = item.get("manufacture_num", instrument.manufacture_num)
+                for k, v in values.items():
+                    setattr(instrument, k, v)
+                updated += 1
+            else:
+                new_instruments.append(
+                    models.AuxiliaryVerificationInstrument(
+                        reg_number=reg,
+                        normalized_serial=serial,
+                        manufacture_num=item.get("manufacture_num", ""),
+                        **values,
+                    )
+                )
+                created += 1
+
+        if new_instruments:
+            self.session.add_all(new_instruments)
+
+        await self.session.flush()
+        return updated, created
+
     async def list_all(self) -> list[models.AuxiliaryVerificationInstrument]:
         stmt = (
             select(models.AuxiliaryVerificationInstrument)
