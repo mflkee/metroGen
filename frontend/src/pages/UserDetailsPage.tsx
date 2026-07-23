@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useDeleteMutation } from "@/hooks/useDeleteMutation";
 
 import { deleteUser, fetchUserById, resetUserPassword, updateUser } from "@/api/users";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -78,18 +79,19 @@ export function UserDetailsPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!token) {
-      return;
-    }
+  const deleteMutation = useDeleteMutation(
+    () => deleteUser(token ?? "", parsedUserId),
+    ["users"],
+    {
+      onSuccess: () => navigate("/admin/users"),
+      onError: (err) => setError(err.message),
+    },
+  );
+
+  function handleDelete() {
+    if (!token) return;
     setError(null);
-    try {
-      await deleteUser(token, parsedUserId);
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-      navigate("/admin/users");
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Не удалось удалить пользователя.");
-    }
+    deleteMutation.mutate();
   }
 
   const user = userQuery.data;
