@@ -7,7 +7,7 @@ from tempfile import NamedTemporaryFile
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
@@ -112,15 +112,16 @@ class DeleteExportFolderRequest(BaseModel):
     path: str
 
 
-@router.post("/export-folder/delete", status_code=204)
+@router.post("/export-folder/delete")
 async def delete_export_folder(
     _: CurrentUser,
     body: DeleteExportFolderRequest,
-) -> None:
+) -> Response:
     resolved = _resolve_export_path(body.path)
     if not resolved.is_dir():
         raise HTTPException(status_code=404, detail="Export folder not found.")
     shutil.rmtree(resolved)
+    return Response(status_code=204)
 
 
 def _resolve_export_path(path: str) -> Path:
