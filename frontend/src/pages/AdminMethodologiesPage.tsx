@@ -90,7 +90,7 @@ export function AdminMethodologiesPage() {
       if (editAllowable) {
         payload.allowable_variation_pct = parseFloat(editAllowable);
       }
-      const validPoints = editPoints.filter((p) => p.label.trim());
+      const validPoints = editPoints.filter((p) => p.label.trim() || p.default_text.trim());
       if (validPoints.length) {
         payload.points = validPoints.map((p) => ({
           position: p.position,
