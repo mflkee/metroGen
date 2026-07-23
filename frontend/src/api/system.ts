@@ -152,7 +152,7 @@ export async function deleteExportFiles(token: string, paths: string[]): Promise
   return apiRequest<{ deleted: number; errors: Record<string, string> }>("/system/export-files/delete", {
     method: "POST",
     token,
-    body: JSON.stringify({ paths }),
+    body: { paths },
   });
 }
 
@@ -160,6 +160,6 @@ export async function deleteExportFolder(token: string, path: string): Promise<v
   await apiRequest<void>("/system/export-folder/delete", {
     method: "POST",
     token,
-    body: JSON.stringify({ path }),
+    body: { path },
   });
 }

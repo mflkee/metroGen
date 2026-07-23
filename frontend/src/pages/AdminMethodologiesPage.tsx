@@ -145,7 +145,6 @@ export function AdminMethodologiesPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-steel">Пункты методики</span>
-                <button className="btn-secondary btn-sm" type="button" onClick={addPoint}>+ Добавить пункт</button>
               </div>
               <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="min-w-full text-sm">
@@ -182,6 +181,9 @@ export function AdminMethodologiesPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="mt-2">
+                <button className="btn-secondary btn-sm" type="button" onClick={addPoint}>+ Добавить пункт</button>
               </div>
             </div>
 
