@@ -91,7 +91,7 @@ export function UserDetailsPage() {
   function handleDelete() {
     if (!token) return;
     setError(null);
-    deleteMutation.mutate();
+    deleteMutation.mutate(undefined);
   }
 
   const user = userQuery.data;
