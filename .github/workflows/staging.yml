@@ -16,6 +16,37 @@ jobs:
           git fetch origin
           git reset --hard origin/main
 
+      - name: Prepare .env
+        run: |
+          cd ~/apps/metroGen
+          # Восстановление .env после git reset --hard (security: .env удалён из tracking)
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            echo "Restored .env from .env.example"
+          fi
+          # Устанавливаем staging-специфичные значения
+          sed -i 's/^APP_ENV=.*/APP_ENV=staging/' .env
+          sed -i 's/^FRONTEND_APP_URL=.*/FRONTEND_APP_URL=http:\/\/localhost:9174/' .env
+          # Инжектируем secrets из GitHub Actions
+          if [ -n "$STAGING_SECRET_KEY" ]; then
+            sed -i '/^SECRET_KEY=/d' .env
+            echo "SECRET_KEY=$STAGING_SECRET_KEY" >> .env
+          fi
+          if [ -n "$STAGING_SMTP_PASSWORD" ]; then
+            sed -i '/^SMTP_PASSWORD=/d' .env
+            echo "SMTP_PASSWORD=$STAGING_SMTP_PASSWORD" >> .env
+          fi
+          if [ -n "$STAGING_BOOTSTRAP_PASSWORD" ]; then
+            sed -i '/^BOOTSTRAP_ADMIN_PASSWORD=/d' .env
+            echo "BOOTSTRAP_ADMIN_PASSWORD=$STAGING_BOOTSTRAP_PASSWORD" >> .env
+          fi
+          # Sanity check
+          grep -q "^SECRET_KEY=" .env || { echo "ERROR: SECRET_KEY missing in .env"; exit 1; }
+        env:
+          STAGING_SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
+          STAGING_SMTP_PASSWORD: ${{ secrets.STAGING_SMTP_PASSWORD }}
+          STAGING_BOOTSTRAP_PASSWORD: ${{ secrets.STAGING_BOOTSTRAP_PASSWORD }}
+
       - name: Build & deploy staging
         run: |
           cd ~/apps/metroGen
