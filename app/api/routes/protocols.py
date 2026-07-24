@@ -1841,3 +1841,132 @@ async def thermometers_html_preview(
     out_path.write_text(html, encoding="utf-8")
 
     return HTMLResponse(content=html, media_type="text/html")
+
+
+@router.post("/level-meters/pdf-files")
+async def level_meters_pdf_files(
+    level_meters_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+    session: AsyncSession = Depends(get_db),
+):
+    level_meters_data = await level_meters_file.read()
+    db_data = await db_file.read() if db_file is not None else None
+    return await _generate_pdf_files(
+        label="level_meters_pdf_files",
+        source_sheet="level_meters",
+        instrument_label="level_meters",
+        instrument_data=level_meters_data,
+        instrument_filename=level_meters_file.filename,
+        db_data=db_data,
+        db_filename=db_file.filename if db_file is not None else None,
+        client=client,
+        sem=sem,
+        session=session,
+        strict_certificate_match=True,
+        default_equipment="level_meters",
+        label_override="level_meters",
+        retry_contexts=True,
+    )
+
+
+@router.post("/level-meters/html-preview", response_class=HTMLResponse)
+async def level_meters_html_preview(
+    level_meters_file: UploadFile = File(...),
+    db_file: UploadFile | None = File(default=None),
+    row: int = 1,
+    client: httpx.AsyncClient = Depends(get_http_client),
+    sem: asyncio.Semaphore = Depends(get_semaphore),
+    session: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Рендерит HTML по данным level_meters_file/db_file для выбранной строки."""
+
+    level_meters_data = await level_meters_file.read()
+    db_data = await db_file.read() if db_file is not None else None
+
+    if not level_meters_data:
+        raise HTTPException(status_code=400, detail="empty level_meters file")
+    if db_file is not None and not db_data:
+        raise HTTPException(status_code=400, detail="empty db file")
+
+    rows = read_rows_as_dicts(level_meters_data)
+    if not rows:
+        raise HTTPException(status_code=400, detail="no rows in level_meters file")
+
+    row_index = max(1, row)
+    if row_index > len(rows):
+        raise HTTPException(status_code=400, detail="row index is out of range")
+    target_row = dict(rows[row_index - 1])
+
+    if db_data is not None:
+        db_rows = read_rows_with_required_headers(
+            db_data,
+            header_row=5,
+            data_start_row=6,
+            required_headers=DB_SERIAL_KEYS,
+        )
+        if not db_rows:
+            raise HTTPException(status_code=400, detail="db file has no serial entries")
+
+        logger.info(
+            f"level_meters_html_preview: ingesting {len(db_rows)} registry rows "
+            f"from {db_file.filename or 'registry.xlsx'}"
+        )
+        ingest_started = time.perf_counter()
+        ingest_result = await ingest_registry_rows(
+            session,
+            source_file=db_file.filename or "registry.xlsx",
+            rows=db_rows,
+            source_sheet="level_meters",
+        )
+        logger.info(
+            "level_meters_html_preview: registry ingest finished "
+            f"processed={ingest_result.get('processed', 0)} "
+            f"deactivated={ingest_result.get('deactivated', 0)} "
+            f"({time.perf_counter() - ingest_started:.2f}s)"
+        )
+
+    registry_repo = RegistryRepository(session)
+    lookup_serials = {
+        normalize_serial(_extract_first_value(row_data, SERIAL_SOURCE_KEYS)) for row_data in rows
+    }
+    registry_entries = await registry_repo.find_active_by_serials(lookup_serials)
+    db_index = _entries_to_index(registry_entries)
+
+    session_factory = _make_worker_session_factory(session)
+    normalized_serial = normalize_serial(_extract_first_value(target_row, SERIAL_SOURCE_KEYS))
+    db_entries = db_index.get(normalized_serial or "")
+
+    context_item = await _build_context_from_db(
+        target_row,
+        db_entries=db_entries,
+        client=client,
+        sem=sem,
+        session_factory=session_factory,
+        strict_certificate_match=True,
+    )
+    if context_item.error or not context_item.context:
+        raise HTTPException(
+            status_code=502,
+            detail=context_item.error or "failed to build context",
+        )
+
+    ctx = dict(context_item.context)
+    if not ctx.get("protocol_number"):
+        ctx["protocol_number"] = make_protocol_number(
+            ctx.get("verifier_name"),
+            ctx.get("verification_date"),
+            row_index,
+        )
+
+    html = render_protocol_html(ctx)
+
+    out_dir = get_output_dir()
+    base_name = suggest_filename(ctx) or suggest_filename(target_row) or "protocol-preview"
+    if not base_name.lower().endswith(".html"):
+        base_name = f"{base_name}.html"
+    out_path = _unique_output_path(out_dir, base_name)
+    out_path.write_text(html, encoding="utf-8")
+
+    return HTMLResponse(content=html, media_type="text/html")

@@ -125,6 +125,38 @@ TEMPLATES: dict[str, dict] = {
             "w100_allowable",
         ],
     },
+    "level_meter": {
+        "title": "Уровнемеры",
+        "points": 5,
+        "allowable_variation_pct": 0.0,
+        "path": "level_meter.html",
+        "fields": [
+            "device_info",
+            "mitypeNumber",
+            "manufactureNum",
+            "manufactureYear",
+            "owner_name",
+            "owner_inn",
+            "methodology_full",
+            "methodology_points",
+            "methodology_point_items",
+            "temperature",
+            "humidity",
+            "pressure",
+            "etalon_entries",
+            "etalon_line_top",
+            "etalon_line_bottom",
+            "auxiliary_instruments",
+            "table_rows",
+            "allowable_error_fmt",
+            "verification_date",
+            "verifier_name",
+            "trainee_name",
+            "trainee_note",
+            "trainee_sign_src",
+            "trainee_sign_style",
+        ],
+    },
     # добавляй новые шаблоны ниже
     # "thermometer_mercury": {...},
     # "rtp_tsp": {...},
@@ -145,6 +177,8 @@ def resolve_template_id(method_code: str, mitype_number: str, mitype_title: str)
         return "controller_65685_16"
     if "МАНОМЕТР" in mt or mn == "13535-93":
         return "pressure_common"
+    if "УРОВНЕМЕР" in mt or "УРОВН" in mt or "LEVEL" in mt:
+        return "level_meter"
 
     # по умолчанию
     return "pressure_common"
