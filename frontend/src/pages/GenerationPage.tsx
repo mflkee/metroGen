@@ -454,6 +454,7 @@ export function GenerationPage() {
                   <option value="pressure_sensors">Датчики давления</option>
                   <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
+                  <option value="level_meters">Уровнемеры</option>
                 </select>
               </label>
               {registryError ? <p className="text-sm text-[#b04c43]">{registryError}</p> : null}
@@ -478,8 +479,9 @@ export function GenerationPage() {
                     <option value="all">Все типы</option>
                   <option value="manometers">Манометры</option>
                   <option value="pressure_sensors">Датчики давления</option>
-                    <option value="controllers">Контроллеры</option>
-                    <option value="thermometers">Термопреобразователи</option>
+                  <option value="controllers">Контроллеры</option>
+                  <option value="thermometers">Термопреобразователи</option>
+                  <option value="level_meters">Уровнемеры</option>
                   </select>
                   <input className="form-input max-w-[180px]" placeholder="Источник файла..." type="text" value={registrySource} onChange={(e) => setRegistrySource(e.target.value)} />
                   <label className="flex items-center gap-1 text-sm text-steel">

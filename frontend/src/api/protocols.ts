@@ -1,8 +1,8 @@
 import { apiRequest } from "@/api/client";
 
-export type InstrumentKind = "manometers" | "pressure_sensors" | "controllers" | "thermometers";
+export type InstrumentKind = "manometers" | "pressure_sensors" | "controllers" | "thermometers" | "level_meters";
 
-function mapKindToApi(kind: InstrumentKind): "manometers" | "controllers" | "thermometers" {
+function mapKindToApi(kind: InstrumentKind): "manometers" | "controllers" | "thermometers" | "level_meters" {
   return kind === "pressure_sensors" ? "manometers" : kind;
 }
 
@@ -216,6 +216,9 @@ function resolvePdfPath(kind: InstrumentKind, failed: boolean): string {
   if (apiKind === "thermometers") {
     return "/protocols/thermometers/pdf-files";
   }
+  if (apiKind === "level_meters") {
+    return "/protocols/level-meters/pdf-files";
+  }
   return "/protocols/manometers/pdf-files";
 }
 
@@ -226,6 +229,8 @@ function buildPreviewPayload(kind: InstrumentKind, payload: FilePayload): FormDa
     formData.append("file", payload.instrumentFile);
   } else if (apiKind === "thermometers") {
     formData.append("thermometers_file", payload.instrumentFile);
+  } else if (apiKind === "level_meters") {
+    formData.append("level_meters_file", payload.instrumentFile);
   } else {
     formData.append("manometers_file", payload.instrumentFile);
   }
@@ -242,6 +247,8 @@ function resolvePreviewUrl(kind: InstrumentKind, row: number): string {
       ? `/api/v1/protocols/html-by-excel?instrument_kind=controllers&row=${row}`
       : apiKind === "thermometers"
         ? `/api/v1/protocols/thermometers/html-preview?row=${row}`
-        : `/api/v1/protocols/manometers/html-preview?row=${row}`;
+        : apiKind === "level_meters"
+          ? `/api/v1/protocols/level-meters/html-preview?row=${row}`
+          : `/api/v1/protocols/manometers/html-preview?row=${row}`;
   return path;
 }
