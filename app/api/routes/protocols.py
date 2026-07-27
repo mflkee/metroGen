@@ -1238,6 +1238,7 @@ _INSTRUMENT_META = {
     "manometers": {"source_sheet": "manometers", "strict_certificate_match": True},
     "controllers": {"source_sheet": "controllers", "strict_certificate_match": False},
     "thermometers": {"source_sheet": "thermometers", "strict_certificate_match": True},
+    "level_meters": {"source_sheet": "level_meters", "strict_certificate_match": True},
 }
 
 
@@ -1267,6 +1268,17 @@ def _detect_instrument_kind(row: Mapping[str, Any]) -> str:
         return "thermometers"
     if "43790-12" in combined or "КОНТРОЛЛЕР" in combined or "СГМ" in combined:
         return "controllers"
+    if (
+        "УРОВНЕМЕР" in combined
+        or "УРОВН" in combined
+        or "LEVEL" in combined
+        or "FMP" in combined
+        or "VEGA" in combined
+        or "PROSONIC" in combined
+        or "INSOL" in combined
+        or "ПМП" in combined
+    ):
+        return "level_meters"
     return "manometers"
 
 
@@ -1319,6 +1331,24 @@ async def _run_generation_job(
                         strict_certificate_match=True,
                         default_equipment="rtd",
                         label_override="rtd",
+                        retry_contexts=True,
+                        job_id=job_id,
+                    )
+                elif instrument_kind == "level_meters":
+                    await _generate_pdf_files(
+                        label="level_meters_pdf_files",
+                        source_sheet="level_meters",
+                        instrument_label="level_meters",
+                        instrument_data=instrument_data,
+                        instrument_filename=instrument_filename,
+                        db_data=db_data,
+                        db_filename=db_filename,
+                        client=client,
+                        sem=sem,
+                        session=session,
+                        strict_certificate_match=True,
+                        default_equipment="level_meters",
+                        label_override="level_meters",
                         retry_contexts=True,
                         job_id=job_id,
                     )
