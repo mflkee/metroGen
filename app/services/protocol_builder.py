@@ -1081,8 +1081,7 @@ async def build_context(
                 "has_current_output_table",
                 "current_output_rows",
             ):
-                if extra_key in gout:
-                    context[extra_key] = gout[extra_key]
+                context[extra_key] = gout.get(extra_key) if extra_key in gout else context.get(extra_key)
 
             if template_id == "pressure_common":
                 max_abs_error_value, max_variation_value = _build_pressure_summary(
