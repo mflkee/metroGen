@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from random import uniform
 
 from .base import GenInput, TableGenerator
+
+logger = logging.getLogger(__name__)
 
 
 class LevelMeter(TableGenerator):
@@ -21,6 +24,9 @@ class LevelMeter(TableGenerator):
     def generate(self, gi: GenInput) -> dict[str, object]:
         fsv = float(gi.range_max or 0.0)
         if fsv <= 0:
+            logger.warning(
+                "level_meter: fsv=%s (range_max=%s) — returning empty rows", fsv, gi.range_max
+            )
             return {
                 "rows": [],
                 "unit_label": "мм",

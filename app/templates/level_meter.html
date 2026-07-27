@@ -144,13 +144,13 @@
           <p class="manual_checkup">
             1. {{ description }}:
             <span class="manual_checkup-fail">НЕ соответствует</span>
-            {% if first_item.code %}п. <span class="manual_checkupValue">{{ first_item.code }}</span> {% endif %}методике поверки{% if methodology_full %} {{ methodology_full }}{% endif %}
+            {% if first_item.code %}п. <span class="manual_checkupValue">{{ first_item.code }}</span> {% endif %}методике поверки
           </p>
         {% else %}
           <p class="manual_checkup">
             1. Результаты внешнего осмотра:
             <span class="manual_checkup-fail">НЕ соответствует</span>
-            {% if methodology_points.p1 %}п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> {% endif %}методике поверки{% if methodology_full %} {{ methodology_full }}{% endif %}
+            {% if methodology_points.p1 %}п. <span class="manual_checkupValue">{{ methodology_points.p1 }}</span> {% endif %}методике поверки
           </p>
         {% endif %}
       {% elif methodology_point_items %}
@@ -162,7 +162,7 @@
             <p class="manual_checkup">
               {{ ns.num }}. {{ description or 'Результат проверки' }}:
               <span style="text-decoration-line: underline">соответствует</span>/не соответствует
-              {% if item.code %}п. <span class="manual_checkupValue">{{ item.code }}</span> {% endif %}методике поверки{% if methodology_full %} {{ methodology_full }}{% endif %}
+              {% if item.code %}п. <span class="manual_checkupValue">{{ item.code }}</span> {% endif %}методике поверки
             </p>
           {% else %}
             <p class="manual_checkup">
@@ -191,6 +191,9 @@
     </div>
     {% if not hide_results_table %}
     {# === Основная таблица === #}
+    {% if insol_two_tables %}
+    <p class="spread-bottom" style="margin-top: 0.5rem; font-weight: bold;">А.1 Результаты измерений уровня жидкости:</p>
+    {% endif %}
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
         <tr>
