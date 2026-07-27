@@ -336,6 +336,7 @@ export function GenerationPage() {
                   <option value="pressure_sensors">Датчики давления</option>
                   <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
+                  <option value="level_meters">Уровнемеры</option>
                 </select>
               </label>
               <label className="block text-sm text-steel">
@@ -454,8 +455,8 @@ export function GenerationPage() {
                   <option value="pressure_sensors">Датчики давления</option>
                   <option value="controllers">Контроллеры</option>
                   <option value="thermometers">Термопреобразователи</option>
-                  <option value="level_meters">Уровнемеры</option>
                 </select>
+                  <option value="level_meters">Уровнемеры</option>
               </label>
               {registryError ? <p className="text-sm text-[#b04c43]">{registryError}</p> : null}
               {registryResult ? (
