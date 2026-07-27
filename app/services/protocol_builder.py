@@ -80,6 +80,20 @@ def _parse_range_text(text: str | None) -> tuple[float | None, float | None, str
     return lo, hi, unit or None
 
 
+def _parse_single_value_as_max(text: str | None) -> tuple[float | None, float | None, str | None]:
+    """Парсит строку вида '3000 мм' как диапазон 0..3000 мм."""
+    if not text:
+        return None, None, None
+    normalized = _normalized_range_text(text.strip())
+    match = re.search(r"[+-]?\d+(?:[.,]\d+)?", normalized)
+    if not match:
+        return None, None, None
+    val = float(match.group(0).replace(",", "."))
+    unit_text = normalized[match.end() :].strip()
+    unit = _norm_unit(unit_text) if unit_text else None
+    return 0.0, val, unit or None
+
+
 def _parse_range_and_unit(
     additional_info: str | None,
 ) -> tuple[float | None, float | None, str | None]:
@@ -810,6 +824,31 @@ async def build_context(
         if lo is not None and hi is not None:
             range_min, range_max, unit = lo, hi, _norm_unit(u)
             range_source = range_source or "arshin"
+
+    # Fallback: поиск диапазона в других колонках Excel (для уровнемеров и т.п.)
+    if range_min is None or range_max is None or not unit:
+        for col_name in ("Диапазон", "Диапазон измерений", "Measurement range", "Range"):
+            rng_alt = _clean_str(excel_row.get(col_name))
+            if rng_alt:
+                lo, hi, u = _parse_range_text(rng_alt)
+                if lo is not None and hi is not None:
+                    range_min, range_max, unit = lo, hi, _norm_unit(u)
+                    range_source = "excel_alt"
+                    break
+                lo_s, hi_s, u_s = _parse_single_value_as_max(rng_alt)
+                if hi_s is not None:
+                    range_min, range_max, unit = lo_s, hi_s, _norm_unit(u_s)
+                    range_source = "excel_alt_single"
+                    break
+
+    # Fallback: одно число с единицей в "Прочие сведения" (например, "3000 мм")
+    if range_min is None or range_max is None or not unit:
+        rng_txt = _clean_str(excel_row.get("Прочие сведения"))
+        if rng_txt:
+            lo, hi, u = _parse_single_value_as_max(rng_txt)
+            if hi is not None:
+                range_min, range_max, unit = lo, hi, _norm_unit(u)
+                range_source = "excel_single"
 
     if range_min is not None and range_max is not None and range_max < range_min:
         range_min, range_max = range_max, range_min
