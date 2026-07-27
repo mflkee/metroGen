@@ -19,7 +19,7 @@ jobs:
             echo "Backed up existing .env"
           fi
           git fetch origin
-          git reset --hard origin/main
+          git reset --hard origin/${GITHUB_REF_NAME}
           # Восстанавливаем .env (он был удалён из git для security)
           if [ -f /tmp/metrogen_env_backup ]; then
             cp /tmp/metrogen_env_backup .env
