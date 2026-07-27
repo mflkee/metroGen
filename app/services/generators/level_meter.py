@@ -102,25 +102,21 @@ class LevelMeter(TableGenerator):
 
         # === Levelflex FMP51 47249-16 — токовый выход мА ===
         if mitype_number == "47249-16":
+            def _current_row(ref: float, err_max: float) -> dict[str, str]:
+                err = uniform(-err_max, err_max)
+                err = max(-err_max, min(err_max, err))
+                si = ref + err
+                return {
+                    "si_val": _fmt_current(si),
+                    "ref_val": _fmt_current(float(ref)),
+                    "abs_err": _fmt_current(err),
+                    "allowable": "±0,25 мА",
+                }
+
             current_output_rows = [
-                {
-                    "si_val": "4",
-                    "ref_val": "4",
-                    "abs_err": "0",
-                    "allowable": "±0,25 мА",
-                },
-                {
-                    "si_val": "12",
-                    "ref_val": "12",
-                    "abs_err": "0",
-                    "allowable": "±0,25 мА",
-                },
-                {
-                    "si_val": _fmt_current(20.0 + uniform(-0.15, 0.15)),
-                    "ref_val": "20",
-                    "abs_err": _fmt_current(uniform(-0.15, 0.15)),
-                    "allowable": "±0,25 мА",
-                },
+                _current_row(4.0, 0.05),
+                _current_row(12.0, 0.08),
+                _current_row(20.0, 0.12),
             ]
             result["has_current_output_table"] = True
             result["current_output_rows"] = current_output_rows
