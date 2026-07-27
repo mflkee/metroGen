@@ -72,11 +72,11 @@
       <div>
         <div class="line">
           <p class="h-center" style="gap: 10px">
-            <span>
-              <span id="setValue_owner">{{ owner_name }}</span>
-              <span>, ИНН</span>
-            </span>
+            <span id="setValue_owner">{{ owner_name }}</span>
+            {% if owner_inn %}
+            <span>, ИНН</span>
             <span id="setValue_ownerINN">{{ owner_inn }}</span>
+            {% endif %}
           </p>
         </div>
         <p class="undertext">
