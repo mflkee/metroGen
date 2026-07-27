@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from random import uniform
 
 from .base import GenInput, TableGenerator

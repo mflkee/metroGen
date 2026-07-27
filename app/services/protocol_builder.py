@@ -1075,6 +1075,10 @@ async def build_context(
                 "r0_allowable_pct",
                 "w100_value",
                 "w100_allowable",
+                "table_rows_b",
+                "insol_two_tables",
+                "has_current_output_table",
+                "current_output_rows",
             ):
                 if extra_key in gout:
                     context[extra_key] = gout[extra_key]
