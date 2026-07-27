@@ -72,11 +72,11 @@
       <div>
         <div class="line">
           <p class="h-center" style="gap: 10px">
-            <span>
-              <span id="setValue_owner">{{ owner_name }}</span>
-              <span>, ИНН</span>
-            </span>
+            <span id="setValue_owner">{{ owner_name }}</span>
+            {% if owner_inn %}
+            <span>, ИНН</span>
             <span id="setValue_ownerINN">{{ owner_inn }}</span>
+            {% endif %}
           </p>
         </div>
         <p class="undertext">
@@ -190,36 +190,93 @@
       {% endif %}
     </div>
     {% if not hide_results_table %}
+    {# === Основная таблица === #}
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
         <tr>
           <th rowspan="2">№ пп</th>
-          <th>Заданный уровень</th>
-          <th>Показания поверяемого СИ</th>
-          <th>Абсолютная погрешность</th>
-          <th>Приведенная погрешность, %</th>
-          <th rowspan="2">Допустимая приведенная погрешность, %</th>
+          <th colspan="2">Измеренное значение СИ, мм</th>
+          <th colspan="2">Основная погрешность</th>
         </tr>
         <tr class="units-row">
-          <th>{{ unit_label }}</th>
-          <th>{{ unit_label }}</th>
-          <th>{{ unit_label }}</th>
-          <th>—</th>
+          <th>Поверяемое</th>
+          <th>Эталонное</th>
+          <th>Действительная, мм</th>
+          <th>Допускаемая</th>
         </tr>
       </thead>
       <tbody>
         {% for row in table_rows %}
         <tr>
           <td>{{ loop.index }}</td>
-          <td>{{ row.ref_val }}</td>
           <td>{{ row.si_val }}</td>
+          <td>{{ row.ref_val }}</td>
           <td>{{ row.abs_err }}</td>
-          <td>{{ row.err_pct }}</td>
-          <td>{{ allowable_error }}</td>
+          <td>{{ row.allowable_error }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+
+    {# === Таблица токового выхода (Levelflex FMP51) === #}
+    {% if has_current_output_table %}
+    <p class="spread-bottom" style="margin-top: 0.5rem; font-weight: bold;">Поверка токового выхода:</p>
+    <table class="spread-bottom-large" id="currentOutputTable">
+      <thead>
+        <tr>
+          <th colspan="2">Значение токового выхода, мА</th>
+          <th colspan="2">Значение погрешности, мА</th>
+        </tr>
+        <tr class="units-row">
+          <th>на выходе уровнемера</th>
+          <th>заданное</th>
+          <th>действительное</th>
+          <th>допустимое</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in current_output_rows %}
+        <tr>
+          <td>{{ row.si_val }}</td>
+          <td>{{ row.ref_val }}</td>
+          <td>{{ row.abs_err }}</td>
+          <td>{{ row.allowable }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {# === Вторая таблица (Insol — раздела сред) === #}
+    {% if insol_two_tables %}
+    <p class="spread-bottom" style="margin-top: 0.5rem; font-weight: bold;">А.2 Результаты измерений уровня раздела сред:</p>
+    <table class="spread-bottom-large" id="valuesTableB">
+      <thead>
+        <tr>
+          <th rowspan="2">№ пп</th>
+          <th colspan="2">Измеренное значение СИ, мм</th>
+          <th colspan="2">Основная погрешность</th>
+        </tr>
+        <tr class="units-row">
+          <th>Поверяемое</th>
+          <th>Эталонное</th>
+          <th>Действительная, мм</th>
+          <th>Допускаемая</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in table_rows_b %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ row.si_val }}</td>
+          <td>{{ row.ref_val }}</td>
+          <td>{{ row.abs_err }}</td>
+          <td>{{ row.allowable_error }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
     {% endif %}
     {% if verification_failed %}
     <p class="spread-bottom-large">
@@ -324,15 +381,29 @@
     /* Единообразные тонкие границы только для таблицы значений */
     #valuesTable,
     #valuesTable th,
-    #valuesTable td {
+    #valuesTable td,
+    #valuesTableB,
+    #valuesTableB th,
+    #valuesTableB td,
+    #currentOutputTable,
+    #currentOutputTable th,
+    #currentOutputTable td {
       border: 0.5pt solid #555;
     }
     #valuesTable th,
-    #valuesTable td {
+    #valuesTable td,
+    #valuesTableB th,
+    #valuesTableB td,
+    #currentOutputTable th,
+    #currentOutputTable td {
       text-align: center;
     }
     #valuesTable .units-row th,
-    #valuesTable .header-row th {
+    #valuesTable .header-row th,
+    #valuesTableB .units-row th,
+    #valuesTableB .header-row th,
+    #currentOutputTable .units-row th,
+    #currentOutputTable .header-row th {
       border-width: 0.5pt;
     }
     .spread-header {

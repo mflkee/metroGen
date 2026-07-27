@@ -123,9 +123,13 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("humidity_plain", ctx.get("humidity"))
     ctx.setdefault("allowable_note", "")
     ctx.setdefault("table_rows", [])
+    ctx.setdefault("table_rows_b", [])
     ctx.setdefault("point_groups", [])
     ctx.setdefault("etalon_entries", [])
     ctx.setdefault("etalon_lines", [])
+    ctx.setdefault("etalon_line", "")
+    ctx.setdefault("etalon_line_top", "")
+    ctx.setdefault("etalon_line_bottom", "")
     ctx.setdefault("etalon_certificates", [])
     ctx.setdefault("auxiliary_instruments", [])
     ctx.setdefault("auxiliary_instruments_requested", [])
@@ -151,6 +155,9 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("methodology_point_items", [])
     ctx.setdefault("methodology_points", {})
     ctx.setdefault("methodology_code", "")
+    ctx.setdefault("has_current_output_table", False)
+    ctx.setdefault("insol_two_tables", False)
+    ctx.setdefault("current_output_rows", [])
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")

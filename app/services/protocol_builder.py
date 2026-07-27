@@ -731,8 +731,9 @@ async def build_context(
     methodology_code: str | None = None,
     http_client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    if owner_name and not (owner_inn or "").strip():
-        raise ValueError(f"owner INN not found for '{owner_name}'")
+    # ИНН не обязателен — если нет, просто не показываем в протоколе
+    if not (owner_inn or "").strip():
+        owner_inn = ""
 
     methodology_points = dict(methodology_points or {})
     point_items: list[dict[str, Any]] = []
@@ -1075,6 +1076,10 @@ async def build_context(
                 "r0_allowable_pct",
                 "w100_value",
                 "w100_allowable",
+                "table_rows_b",
+                "insol_two_tables",
+                "has_current_output_table",
+                "current_output_rows",
             ):
                 if extra_key in gout:
                     context[extra_key] = gout[extra_key]
