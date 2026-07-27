@@ -179,9 +179,17 @@ def resolve_template_id(method_code: str, mitype_number: str, mitype_title: str)
         return "controller_43790_12"
     if mn == "65685-16" or "СК-1000" in mt or "2539" in mc:
         return "controller_65685_16"
+    _LEVEL_MITYPE_NUMBERS = {
+        "86065-22", "53779-13", "24715-03",
+        "17670-08", "17670-13", "26355-09",
+        "27284-04", "27283-12", "27284-09",
+        "36668-08", "47249-11", "47249-16",
+        "47981-11", "48164-11", "53857-13",
+        "38679-08",
+    }
     if "МАНОМЕТР" in mt or mn == "13535-93":
         return "pressure_common"
-    if "УРОВНЕМЕР" in mt or "УРОВН" in mt or "LEVEL" in mt:
+    if "УРОВНЕМЕР" in mt or "УРОВН" in mt or "LEVEL" in mt or mn in _LEVEL_MITYPE_NUMBERS:
         return "level_meter"
 
     # по умолчанию
