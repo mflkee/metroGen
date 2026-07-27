@@ -824,6 +824,14 @@ async def build_context(
         if lo is not None and hi is not None:
             range_min, range_max, unit = lo, hi, _norm_unit(u)
             range_source = range_source or "arshin"
+        else:
+            # single-value fallback for Arshin additional_info (e.g. "3000 мм")
+            lo_s, hi_s, u_s = _parse_single_value_as_max(
+                (details.get("info") or {}).get("additional_info")
+            )
+            if hi_s is not None:
+                range_min, range_max, unit = lo_s, hi_s, _norm_unit(u_s)
+                range_source = range_source or "arshin_single"
 
     # Fallback: поиск диапазона в других колонках Excel (для уровнемеров и т.п.)
     if range_min is None or range_max is None or not unit:
