@@ -59,8 +59,7 @@ export function GenerationPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<GenerationJob | null>(null);
 
-  const [registryFile, setRegistryFile] = useState<File | null>(null);
-  const [registryInstrumentKind, setRegistryInstrumentKind] = useState<InstrumentKind>("manometers");
+  const [registryFiles, setRegistryFiles] = useState<File[]>([]);
   const [registryError, setRegistryError] = useState<string | null>(null);
   const [registryResult, setRegistryResult] = useState<RegistryImportResponse | null>(null);
   const [isImportingRegistry, setIsImportingRegistry] = useState(false);
@@ -220,17 +219,23 @@ export function GenerationPage() {
     if (!token) return;
     setRegistryError(null);
     setRegistryResult(null);
-    if (!registryFile) {
-      setRegistryError("Выберите файл выгрузки реестра.");
+    if (!registryFiles.length) {
+      setRegistryError("Выберите файл(ы) выгрузки реестра.");
       return;
     }
     setIsImportingRegistry(true);
     try {
-      const result = await importRegistryFile(token, {
-        file: registryFile,
-        instrumentKind: registryInstrumentKind,
+      const results = await Promise.all(
+        registryFiles.map((file) => importRegistryFile(token, { file }))
+      );
+      const totalProcessed = results.reduce((sum, r) => sum + r.processed, 0);
+      const totalDeactivated = results.reduce((sum, r) => sum + r.deactivated, 0);
+      setRegistryResult({
+        processed: totalProcessed,
+        deactivated: totalDeactivated,
+        instrumentKind: null,
+        sourceFile: `${results.length} файл(ов)`,
       });
-      setRegistryResult(result);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["system-status"] }),
         queryClient.invalidateQueries({ queryKey: ["registry-entries"] }),
@@ -445,25 +450,29 @@ export function GenerationPage() {
             <form className="section-card space-y-4" onSubmit={handleRegistryImport}>
               <h3 className="font-semibold text-ink">Импорт реестра</h3>
               <label className="block text-sm text-steel">
-                Excel-файл
-                <input className="form-input mt-1" accept=".xlsx,.xlsm,.xls" type="file" onChange={(e) => setRegistryFile(e.target.files?.[0] ?? null)} />
+                Excel-файл(ы)
+                <input
+                  className="form-input mt-1"
+                  accept=".xlsx,.xlsm,.xls"
+                  type="file"
+                  multiple
+                  onChange={(e) => setRegistryFiles(Array.from(e.target.files ?? []))}
+                />
               </label>
-              <label className="block text-sm text-steel">
-                Тип прибора
-                <select className="form-input mt-1" value={registryInstrumentKind} onChange={(e) => setRegistryInstrumentKind(e.target.value as InstrumentKind)}>
-                  <option value="manometers">Манометры</option>
-                  <option value="pressure_sensors">Датчики давления</option>
-                  <option value="controllers">Контроллеры</option>
-                  <option value="thermometers">Термопреобразователи</option>
-                </select>
-                  <option value="level_meters">Уровнемеры</option>
-              </label>
+              {registryFiles.length > 0 ? (
+                <ul className="text-xs text-steel space-y-1">
+                  {registryFiles.map((f) => (
+                    <li key={f.name}>{f.name}</li>
+                  ))}
+                </ul>
+              ) : null}
               {registryError ? <p className="text-sm text-[#b04c43]">{registryError}</p> : null}
               {registryResult ? (
                 <div className="rounded-2xl border border-line p-3 text-sm text-steel">
                   <div className="text-ink font-medium">Импорт завершён</div>
-                  <div>Файл: {registryResult.sourceFile}</div>
-                  <div>Строк: {registryResult.processed}</div>
+                  <div>Файлов: {registryResult.sourceFile}</div>
+                  <div>Строк обработано: {registryResult.processed}</div>
+                  {registryResult.deactivated ? <div>Деактивировано: {registryResult.deactivated}</div> : null}
                 </div>
               ) : null}
               <button className="btn-primary w-full" disabled={isImportingRegistry} type="submit">
