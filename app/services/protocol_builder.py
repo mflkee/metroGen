@@ -45,6 +45,25 @@ _RANGE_EXPR_RE = re.compile(
 )
 
 
+_METER_UNITS_RE = re.compile(r"^\s*[мМmM](?:етр[а-я]*|[mM])?\s*$")
+
+
+def _normalize_range_unit_to_mm(
+    range_min: float | None, range_max: float | None, unit: str | None
+) -> tuple[float | None, float | None, str | None]:
+    """Если диапазон указан в метрах — переводим в мм (×1000)."""
+    if range_min is None or range_max is None or not unit:
+        return range_min, range_max, unit
+    norm = _norm_unit(unit)
+    if not norm or not _METER_UNITS_RE.match(norm):
+        return range_min, range_max, norm
+    if range_min is not None:
+        range_min = range_min * 1000.0
+    if range_max is not None:
+        range_max = range_max * 1000.0
+    return range_min, range_max, "мм"
+
+
 def _normalized_range_text(value: str) -> str:
     text = value.replace("−", "-").replace("–", "-").replace("—", "-")
     text = text.replace("…", "..")
@@ -857,6 +876,9 @@ async def build_context(
             if hi is not None:
                 range_min, range_max, unit = lo, hi, _norm_unit(u)
                 range_source = "excel_single"
+
+    # Уровнемеры и др. СИ могут указывать диапазон в метрах — переводим в мм
+    range_min, range_max, unit = _normalize_range_unit_to_mm(range_min, range_max, unit)
 
     if range_min is not None and range_max is not None and range_max < range_min:
         range_min, range_max = range_max, range_min
