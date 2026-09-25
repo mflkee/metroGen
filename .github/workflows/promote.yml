@@ -1,66 +1,49 @@
-name: Promote to Production
-
+name: Promote metroGen (staging -> prod)
 on:
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type "deploy" to promote staging to production'
-        required: true
-        default: ''
+      tag:
+        description: 'Образ для прода (staging = текущий стейдж, sha-<hash> = откат)'
+        required: false
+        default: 'staging'
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   promote:
     runs-on: [self-hosted, mkair-runner]
     environment: production
-    if: github.event.inputs.confirm == 'deploy'
     steps:
-      - name: Pull latest code
+      - name: Pull repo code
+        run: |
+          mkdir -p ~/apps ~/.backups
+          cd ~/apps/metroGen || git clone git@github.com:mflkee/metroGen.git ~/apps/metroGen
+          cd ~/apps/metroGen
+          if [ -f .env ]; then cp .env ~/.backups/metrogen_env_prod_$(date +%Y%m%d_%H%M%S).bak; fi
+          git fetch origin && git reset --hard origin/main
+          if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || true; fi
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Backup DB
+        run: |
+          mkdir -p ~/.backups
+          cd ~/apps/metroGen
+          docker compose exec -T db pg_dump -U metrologenerator metrologenerator > ~/.backups/metroGen_db_promote_$(date +%Y%m%d_%H%M%S).sql
+      - name: Promote (same image, tag=${{ inputs.tag }})
         run: |
           cd ~/apps/metroGen
-          # Сохраняем существующий .env перед git reset --hard
-          if [ -f .env ]; then
-            cp .env /tmp/metrogen_env_backup
-            echo "Backed up existing .env"
-          fi
-          git fetch origin
-          git reset --hard origin/main
-          # Восстанавливаем .env (он был удалён из git для security)
-          if [ -f /tmp/metrogen_env_backup ]; then
-            cp /tmp/metrogen_env_backup .env
-            echo "Restored .env from backup"
-          else
-            echo "WARNING: no existing .env found, creating from .env.example"
-            cp .env.example .env
-          fi
-          # Убеждаемся что .env не попадёт в git accidentally
-          if ! grep -q "^\.env$" .gitignore 2>/dev/null; then
-            echo ".env" >> .gitignore
-          fi
-
-      - name: Backup production database
+          IMAGE_TAG=${{ inputs.tag }} docker compose pull
+          IMAGE_TAG=${{ inputs.tag }} docker compose up -d
+      - name: Prod health
         run: |
-          cd ~/apps/metroGen
-          docker compose exec -T db pg_dump -U metrologenerator metrologenerator > /tmp/metroGen_backup_$(date +%Y%m%d_%H%M%S).sql
-
-      - name: Build & deploy production
-        run: |
-          cd ~/apps/metroGen
-          docker compose up -d --build
-
-      - name: Production health check
-        run: |
-          for _ in {1..30}; do
-            if curl -fsS http://127.0.0.1:8001/docs >/dev/null 2>&1; then
-              echo "Production API is ready"
-              exit 0
-            fi
-            sleep 1
+          for _ in {1..60}; do
+            curl -fsS http://127.0.0.1:8001/docs >/dev/null 2>&1 && { echo PROD_OK; exit 0; }
+            sleep 2
           done
-          echo "Production API failed to become ready within 30s"
-          exit 1
-
-      - name: Show production status
-        if: always()
-        run: |
-          cd ~/apps/metroGen
-          docker compose ps
+          echo PROD_FAIL; exit 1
