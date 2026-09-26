@@ -19,6 +19,7 @@ services:
       - "${POSTGRES_PORT:-5433}:5432"
 
   api:
+    image: ghcr.io/mflkee/metrogen-api:${IMAGE_TAG:-latest}
     build: .
     restart: unless-stopped
     env_file:
@@ -57,6 +58,7 @@ services:
           memory: 128M
 
   frontend:
+    image: ghcr.io/mflkee/metrogen-frontend:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: frontend/Dockerfile

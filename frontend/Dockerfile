@@ -8,12 +8,12 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET}
 
 COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/tsconfig.json frontend/vite.config.ts frontend/eslint.config.js frontend/tailwind.config.ts ./
 COPY frontend/postcss.config.cjs frontend/index.html ./
 COPY frontend/public ./public
 COPY frontend/src ./src
 
-RUN npm ci
 RUN npm run build
 
 FROM nginx:1.27-alpine
