@@ -20,6 +20,7 @@ services:
       - "${POSTGRES_STG_PORT:-5437}:5432"
 
   api:
+    image: ghcr.io/mflkee/metrogen-api:${IMAGE_TAG:-latest}
     build: .
     container_name: metroGen_api_stg
     restart: unless-stopped
@@ -58,6 +59,7 @@ services:
           memory: 128M
 
   frontend:
+    image: ghcr.io/mflkee/metrogen-frontend:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: frontend/Dockerfile
