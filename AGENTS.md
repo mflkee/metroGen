@@ -3,6 +3,19 @@
 Документ фиксирует текущее состояние агентной архитектуры сервиса генерации протоколов поверки.
 Цель: дать новому разработчику рабочую карту модулей, зависимостей и поведения при ошибках.
 
+## ⚠️ Working rule: verify on the server, deploy via Actions
+
+> **All work is executed and verified on the server `mkair-server-tmn`** (Netbird `100.89.18.223`),
+> **not** on a local machine. Do not build, run or deploy locally.
+>
+> **Deploy only via GitHub Actions** (push):
+> - push to `main` / `stage` → **staging** (`.github/workflows/staging.yml`);
+> - push to `release/*`, or run `promote.yml` manually → **production** (`.github/workflows/deploy.yml`).
+>
+> Prod and staging both live on that host (`mkair-server-tmn`) in `~/apps/metroGen`;
+> runner is `[self-hosted, mkair-runner]`. Verify the result on the server
+> (`docker compose ps`, `/docs` health-check, container logs).
+
 ## Область покрытия
 Актуализация выполнена по всем исходным текстовым файлам репозитория:
 - root-конфиги и инфраструктура (`README.md`, `pyproject.toml`, Docker/Alembic/pytest config);
