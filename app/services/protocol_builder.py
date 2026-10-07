@@ -292,6 +292,22 @@ def _split_point_label(value: str) -> tuple[str, str]:
     return text, ""
 
 
+# Стрелочные (показывающие) СИ давления/температуры — им уместна строка про
+# «колебания стрелки». Датчики/преобразователи стрелок не имеют.
+_POINTER_INSTRUMENT_KEYWORDS: tuple[str, ...] = (
+    "манометр",
+    "вакуумметр",
+    "напоромер",
+    "тягомер",
+    "тягонапоромер",
+)
+
+
+def _instrument_has_pointer(*names: str | None) -> bool:
+    text = " ".join(name for name in names if name).lower()
+    return any(keyword in text for keyword in _POINTER_INSTRUMENT_KEYWORDS)
+
+
 def _clean_str(value: Any) -> str:
     if value is None:
         return ""
@@ -1012,6 +1028,9 @@ async def build_context(
         "device_info": device_info,
         "device_type_name": device_type_name,
         "device_modification": device_modification,
+        "show_vibration_line": _instrument_has_pointer(
+            device_type_name, device_modification
+        ),
         "mitypeNumber": excel_row.get("Обозначение СИ") or mi_single.get("mitypeNumber") or "",
         "manufactureNum": excel_row.get("Заводской номер") or mi_single.get("manufactureNum") or "",
         "manufactureYear": str(
