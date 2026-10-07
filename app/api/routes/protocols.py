@@ -762,6 +762,13 @@ async def _build_context_from_db(
                     "Etalon registry resolution failed, using Arshin details instead: {}",
                     exc,
                 )
+                # Сессия могла остаться в «отравленном» состоянии после ошибки
+                # flush — откатываем, иначе следующий запрос по этой же сессии
+                # упадёт с "transaction has been rolled back ...".
+                try:
+                    await worker_session.rollback()
+                except Exception:
+                    pass
                 etalon_devices, et_certs = [], []
 
             if etalon_devices or et_certs:
@@ -877,6 +884,13 @@ async def _build_context_from_excel_row(
                     "Etalon registry resolution failed, using Arshin details instead: {}",
                     exc,
                 )
+                # Сессия могла остаться в «отравленном» состоянии после ошибки
+                # flush — откатываем, иначе следующий запрос по этой же сессии
+                # упадёт с "transaction has been rolled back ...".
+                try:
+                    await worker_session.rollback()
+                except Exception:
+                    pass
                 etalon_devices, et_certs = [], []
 
             if etalon_devices or et_certs:

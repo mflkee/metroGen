@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import and_, delete, func, not_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -559,17 +560,39 @@ class EtalonRepository(BaseRepository):
         manufacture_num: str | None,
         values: dict[str, Any],
     ) -> models.EtalonDevice:
-        """Upsert эталона по ФИФ-номеру (код уникален для конкретного эталона)."""
-        device = await self.get_by_code(code)
-        if device is None:
-            device = models.EtalonDevice(
-                reg_number=code,
-                manufacture_num=manufacture_num,
-                **values,
-            )
-            await self.add(device)
-            return device
+        """Upsert эталона по ФИФ-номеру (код уникален для конкретного эталона).
 
+        Безопасен к гонке: при параллельной генерации два воркера могут
+        одновременно вставить один и тот же эталон. Вставка идёт в SAVEPOINT,
+        и на ``IntegrityError`` (нарушение ``uq_etalon_device_reg_manufacture``)
+        мы читаем уже вставленную запись и обновляем её.
+        """
+        device = await self.get_by_code(code)
+        if device is not None:
+            return self._apply_device_values(device, manufacture_num, values)
+
+        try:
+            async with self.session.begin_nested():
+                device = models.EtalonDevice(
+                    reg_number=code,
+                    manufacture_num=manufacture_num,
+                    **values,
+                )
+                self.session.add(device)
+                await self.session.flush()
+            return device
+        except IntegrityError:
+            existing = await self.get_by_code(code)
+            if existing is None:
+                raise
+            return self._apply_device_values(existing, manufacture_num, values)
+
+    @staticmethod
+    def _apply_device_values(
+        device: models.EtalonDevice,
+        manufacture_num: str | None,
+        values: dict[str, Any],
+    ) -> models.EtalonDevice:
         if manufacture_num:
             device.manufacture_num = manufacture_num
         for key, value in values.items():
