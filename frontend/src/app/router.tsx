@@ -10,6 +10,11 @@ const AdminAuxInstrumentsPage = lazy(() =>
     default: module.AdminAuxInstrumentsPage,
   })),
 );
+const AdminEtalonsPage = lazy(() =>
+  import("@/pages/AdminEtalonsPage").then((module) => ({
+    default: module.AdminEtalonsPage,
+  })),
+);
 const AdminMethodologiesPage = lazy(() =>
   import("@/pages/AdminMethodologiesPage").then((module) => ({
     default: module.AdminMethodologiesPage,
@@ -86,6 +91,7 @@ export const router = createBrowserRouter([
               { path: "/admin/owners", element: <AdminOwnersPage /> },
               { path: "/admin/methodologies", element: <AdminMethodologiesPage /> },
               { path: "/admin/aux-instruments", element: <AdminAuxInstrumentsPage /> },
+              { path: "/admin/etalons", element: <AdminEtalonsPage /> },
             ],
           },
         ],

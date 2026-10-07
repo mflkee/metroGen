@@ -883,17 +883,24 @@ async def build_context(
     if range_min is not None and range_max is not None and range_max < range_min:
         range_min, range_max = range_max, range_min
 
-    # Эталоны: собираем все доступные источники
+    # Эталоны: приоритет — локальный справочник (эталоны уже развёрнуты в БД
+    # сервисом etalon_registry), иначе собираем источники из ответа Аршина.
     requested_etalon_reg_numbers = extract_requested_etalon_reg_numbers(excel_row)
-    raw_etalon_sources = list(_etalon_sources(details))
-    if requested_etalon_reg_numbers:
-        filtered_sources = [
-            entry
-            for entry in raw_etalon_sources
-            if _clean_str(entry.get("regNumber")) in set(requested_etalon_reg_numbers)
+    resolved_devices = excel_row.get("_resolved_etalon_devices")
+    if isinstance(resolved_devices, list) and resolved_devices:
+        raw_etalon_sources = [
+            entry for entry in resolved_devices if isinstance(entry, Mapping)
         ]
-        if filtered_sources:
-            raw_etalon_sources = filtered_sources
+    else:
+        raw_etalon_sources = list(_etalon_sources(details))
+        if requested_etalon_reg_numbers:
+            filtered_sources = [
+                entry
+                for entry in raw_etalon_sources
+                if _clean_str(entry.get("regNumber")) in set(requested_etalon_reg_numbers)
+            ]
+            if filtered_sources:
+                raw_etalon_sources = filtered_sources
 
     raw_entries = [_build_etalon_entry(entry) for entry in raw_etalon_sources]
     etalon_entries = [

@@ -537,6 +537,69 @@ class EtalonRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_code(self, code: str) -> models.EtalonDevice | None:
+        """Эталон по его ФИФ-номеру (``regNumber`` из Аршина).
+
+        Например ``77090.19.2Р.00761949`` — именно этот код пишется во входном
+        Excel в колонке «СИ, применяемые в качестве эталона».
+        """
+        stmt = (
+            select(models.EtalonDevice)
+            .where(models.EtalonDevice.reg_number == code)
+            .order_by(models.EtalonDevice.id.asc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def upsert_device_by_code(
+        self,
+        *,
+        code: str,
+        manufacture_num: str | None,
+        values: dict[str, Any],
+    ) -> models.EtalonDevice:
+        """Upsert эталона по ФИФ-номеру (код уникален для конкретного эталона)."""
+        device = await self.get_by_code(code)
+        if device is None:
+            device = models.EtalonDevice(
+                reg_number=code,
+                manufacture_num=manufacture_num,
+                **values,
+            )
+            await self.add(device)
+            return device
+
+        if manufacture_num:
+            device.manufacture_num = manufacture_num
+        for key, value in values.items():
+            setattr(device, key, value)
+        return device
+
+    async def list_certifications(
+        self, device_id: int
+    ) -> list[models.EtalonCertification]:
+        stmt = (
+            select(models.EtalonCertification)
+            .where(models.EtalonCertification.etalon_device_id == device_id)
+            .order_by(models.EtalonCertification.valid_to.desc().nullslast())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_devices(self) -> list[models.EtalonDevice]:
+        stmt = select(models.EtalonDevice).order_by(
+            models.EtalonDevice.reg_number.asc()
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def latest_certification(
+        self, device_id: int
+    ) -> models.EtalonCertification | None:
+        certs = await self.list_certifications(device_id)
+        return certs[0] if certs else None
+
     async def upsert_device(
         self,
         *,

@@ -95,8 +95,8 @@ async def test_html_by_excel_returns_html(async_client, header, monkeypatch):
         )
     )
 
-    async def fake_find_certs(client, details, sem=None, preferred_reg_numbers=None):
-        return [
+    async def fake_resolve_etalons(session, client, *, requested_codes, details, sem=None):
+        return [], [
             {
                 "docnum": "ET-123",
                 "verification_date": "01.01.2025",
@@ -108,7 +108,7 @@ async def test_html_by_excel_returns_html(async_client, header, monkeypatch):
             }
         ]
 
-    monkeypatch.setattr("app.api.routes.protocols.find_etalon_certificates", fake_find_certs)
+    monkeypatch.setattr("app.api.routes.protocols.resolve_etalons", fake_resolve_etalons)
 
     xlsx = _make_excel_row(cert, header=header)
     files = {

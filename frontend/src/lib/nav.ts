@@ -54,6 +54,13 @@ const adminAuxInstrumentsNavigationItem: NavigationItem = {
   to: "/admin/aux-instruments",
 };
 
+const adminEtalonsNavigationItem: NavigationItem = {
+  icon: "etalon",
+  label: "Эталоны",
+  description: "Справочник эталонов (ФИФ) с обновлением из Аршина",
+  to: "/admin/etalons",
+};
+
 export function getNavigationItems(role: UserRole | null | undefined): NavigationItem[] {
   const items = [...baseNavigationItems];
   if (hasAdminAccess(role)) {
@@ -63,6 +70,7 @@ export function getNavigationItems(role: UserRole | null | undefined): Navigatio
       adminOwnersNavigationItem,
       adminMethodologiesNavigationItem,
       adminAuxInstrumentsNavigationItem,
+      adminEtalonsNavigationItem,
     );
   }
   return items;

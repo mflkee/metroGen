@@ -29,8 +29,8 @@ from app.schemas.protocol import (
 from app.services.arshin_client import (
     fetch_vri_details,
     fetch_vri_id_by_certificate,
-    find_etalon_certificates,
 )
+from app.services.etalon_registry import resolve_etalons
 from app.services.html_renderer import render_protocol_html
 from app.services.pdf import html_to_pdf_bytes, pdf_generation_available
 from app.services.protocol_builder import (
@@ -746,18 +746,40 @@ async def _build_context_from_db(
                 error="not found",
             )
 
-        preferred_reg_numbers = extract_requested_etalon_reg_numbers(row_data)
-        et_certs = await find_etalon_certificates(
-            client,
-            details,
-            sem=sem,
-            preferred_reg_numbers=preferred_reg_numbers or None,
-        )
-        if et_certs:
-            row_data["_resolved_etalon_certs"] = et_certs
-            row_data["_resolved_etalon_cert"] = et_certs[0]
-
         async with session_factory() as worker_session:
+            # Эталоны: локальный справочник + ленивое обновление из Аршина.
+            # Ни ошибка чтения, ни ошибка записи кэша не должны ломать генерацию.
+            try:
+                etalon_devices, et_certs = await resolve_etalons(
+                    worker_session,
+                    client,
+                    requested_codes=extract_requested_etalon_reg_numbers(row_data),
+                    details=details,
+                    sem=sem,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Etalon registry resolution failed, using Arshin details instead: {}",
+                    exc,
+                )
+                etalon_devices, et_certs = [], []
+
+            if etalon_devices or et_certs:
+                try:
+                    await worker_session.commit()
+                except Exception as exc:
+                    logger.warning("Failed to persist etalon cache: {}", exc)
+                    try:
+                        await worker_session.rollback()
+                    except Exception:
+                        pass
+
+            if etalon_devices:
+                row_data["_resolved_etalon_devices"] = etalon_devices
+            if et_certs:
+                row_data["_resolved_etalon_certs"] = et_certs
+                row_data["_resolved_etalon_cert"] = et_certs[0]
+
             ctx = await build_protocol_context(
                 row_data,
                 details,
@@ -839,18 +861,40 @@ async def _build_context_from_excel_row(
                 error="not found",
             )
 
-        preferred_reg_numbers = extract_requested_etalon_reg_numbers(row_data)
-        et_certs = await find_etalon_certificates(
-            client,
-            details,
-            sem=sem,
-            preferred_reg_numbers=preferred_reg_numbers or None,
-        )
-        if et_certs:
-            row_data["_resolved_etalon_certs"] = et_certs
-            row_data["_resolved_etalon_cert"] = et_certs[0]
-
         async with session_factory() as worker_session:
+            # Эталоны: локальный справочник + ленивое обновление из Аршина.
+            # Ни ошибка чтения, ни ошибка записи кэша не должны ломать генерацию.
+            try:
+                etalon_devices, et_certs = await resolve_etalons(
+                    worker_session,
+                    client,
+                    requested_codes=extract_requested_etalon_reg_numbers(row_data),
+                    details=details,
+                    sem=sem,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Etalon registry resolution failed, using Arshin details instead: {}",
+                    exc,
+                )
+                etalon_devices, et_certs = [], []
+
+            if etalon_devices or et_certs:
+                try:
+                    await worker_session.commit()
+                except Exception as exc:
+                    logger.warning("Failed to persist etalon cache: {}", exc)
+                    try:
+                        await worker_session.rollback()
+                    except Exception:
+                        pass
+
+            if etalon_devices:
+                row_data["_resolved_etalon_devices"] = etalon_devices
+            if et_certs:
+                row_data["_resolved_etalon_certs"] = et_certs
+                row_data["_resolved_etalon_cert"] = et_certs[0]
+
             ctx = await build_protocol_context(
                 row_data,
                 details,

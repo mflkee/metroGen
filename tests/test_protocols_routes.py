@@ -136,8 +136,8 @@ def _make_manometers_db_excel_multi(rows: list[dict[str, str]]) -> bytes:
 
 
 def _patch_etalon_certificates(monkeypatch, *, docnum: str = "ET-123") -> None:
-    async def fake_find_certs(client, details, sem=None, preferred_reg_numbers=None):
-        return [
+    async def fake_resolve_etalons(session, client, *, requested_codes, details, sem=None):
+        return [], [
             {
                 "docnum": docnum,
                 "verification_date": "01.01.2025",
@@ -149,7 +149,7 @@ def _patch_etalon_certificates(monkeypatch, *, docnum: str = "ET-123") -> None:
             }
         ]
 
-    monkeypatch.setattr("app.api.routes.protocols.find_etalon_certificates", fake_find_certs)
+    monkeypatch.setattr("app.api.routes.protocols.resolve_etalons", fake_resolve_etalons)
 
 
 @pytest.mark.anyio
@@ -832,8 +832,8 @@ async def test_contexts_by_excel_includes_multiple_etalons(async_client, monkeyp
         )
     )
 
-    async def fake_find_certs(client, details, sem=None, preferred_reg_numbers=None):
-        return [
+    async def fake_resolve_etalons(session, client, *, requested_codes, details, sem=None):
+        return [], [
             {
                 "line": "свидетельство о поверке № ET-001; действительно до 31.12.2025;",
                 "manufacture_num": "E-001",
@@ -846,7 +846,7 @@ async def test_contexts_by_excel_includes_multiple_etalons(async_client, monkeyp
             },
         ]
 
-    monkeypatch.setattr("app.api.routes.protocols.find_etalon_certificates", fake_find_certs)
+    monkeypatch.setattr("app.api.routes.protocols.resolve_etalons", fake_resolve_etalons)
 
     xlsx = _make_protocols_excel_row(cert)
     files = {

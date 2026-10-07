@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.models import User, UserRole
-from app.db.repositories import AuxiliaryInstrumentRepository, UserRepository
+from app.db.repositories import (
+    AuxiliaryInstrumentRepository,
+    EtalonRepository,
+    UserRepository,
+)
 from app.db.session import get_sessionmaker
 from app.services.mappings import _methodology_seed, _org_seed, ensure_methodology, ensure_owner
 from app.utils.password_policy import validate_password_policy
@@ -98,18 +102,85 @@ async def seed_auxiliary_instruments(session: AsyncSession) -> int:
     return count
 
 
+async def seed_etalons(session: AsyncSession) -> int:
+    """Предзаполнить справочник эталонов (ключ — ФИФ-номер эталона)."""
+    repo = EtalonRepository(session)
+    items = [
+        {
+            "code": "77090.19.2Р.00761949",
+            "manufacture_num": "3104",
+            "mitype_number": "77090-19",
+            "title": "Преобразователи давления эталонные",
+            "notation": "ЭЛМЕТРО-Паскаль-04, Паскаль-04",
+            "modification": "60М-0,02-Т35",
+            "manufacture_year": 2020,
+            "rank_code": "2Р",
+            "rank_title": "Эталон 2-го разряда",
+            "schema_title": "Приказ Росстандарта № 2653 от 20 октября 2022 г.",
+            "certificate_no": "С-ВЯ/05-02-2026/503716191",
+            "verification_date": date(2026, 2, 5),
+            "valid_to": date(2027, 2, 4),
+        },
+        {
+            "code": "73828.19.1Р.00156416",
+            "manufacture_num": "0050",
+            "mitype_number": "73828-19",
+            "title": "Калибраторы многофункциональные",
+            "notation": "ЭЛМЕТРО-Паскаль-03, Паскаль-03",
+            "modification": None,
+            "manufacture_year": 2020,
+            "rank_code": "1Р",
+            "rank_title": "Эталон 1-го разряда",
+            "schema_title": "Приказ Росстандарта № 2091 от 01.10.2018 г.",
+            "certificate_no": "С-ВЯ/05-02-2026/503716224",
+            "verification_date": date(2026, 2, 5),
+            "valid_to": date(2027, 2, 4),
+        },
+    ]
+
+    count = 0
+    for item in items:
+        device = await repo.upsert_device_by_code(
+            code=item["code"],
+            manufacture_num=item["manufacture_num"],
+            values={
+                "mitype_number": item["mitype_number"],
+                "title": item["title"],
+                "notation": item["notation"],
+                "modification": item["modification"],
+                "manufacture_year": item["manufacture_year"],
+                "rank_code": item["rank_code"],
+                "rank_title": item["rank_title"],
+                "schema_title": item["schema_title"],
+            },
+        )
+        await repo.upsert_certification(
+            device=device,
+            certificate_no=item["certificate_no"],
+            values={
+                "verification_date": item["verification_date"],
+                "valid_to": item["valid_to"],
+                "source": "seed",
+            },
+        )
+        count += 1
+    return count
+
+
 async def seed_database(session: AsyncSession) -> dict[str, int]:
     """Populate the relational database with seed data from JSON files."""
 
     owners = await seed_owners(session)
     methodologies = await seed_methodologies(session)
     auxiliary_instruments = await seed_auxiliary_instruments(session)
+    etalons = await seed_etalons(session)
     users = await seed_users(session)
     await session.commit()
     return {
         "owners": owners,
         "methodologies": methodologies,
         "auxiliary_instruments": auxiliary_instruments,
+        "etalons": etalons,
         "users": users,
     }
 
