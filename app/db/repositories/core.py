@@ -687,20 +687,34 @@ class AuxiliaryInstrumentRepository(BaseRepository):
         result = await self.session.execute(stmt)
         instrument = result.scalar_one_or_none()
 
-        if instrument is None:
-            instrument = models.AuxiliaryVerificationInstrument(
-                reg_number=reg_number,
-                normalized_serial=normalized,
-                manufacture_num=manufacture_num,
-                **values,
-            )
-            await self.add(instrument)
-        else:
+        if instrument is not None:
             instrument.manufacture_num = manufacture_num
             for key, value in values.items():
                 setattr(instrument, key, value)
+            return instrument
 
-        return instrument
+        # Вставка в SAVEPOINT: при гонке (параллельные воркеры) ловим
+        # IntegrityError по uq_aux_vi_reg_serial и читаем уже созданную запись.
+        try:
+            async with self.session.begin_nested():
+                instrument = models.AuxiliaryVerificationInstrument(
+                    reg_number=reg_number,
+                    normalized_serial=normalized,
+                    manufacture_num=manufacture_num,
+                    **values,
+                )
+                self.session.add(instrument)
+                await self.session.flush()
+            return instrument
+        except IntegrityError:
+            result = await self.session.execute(stmt)
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                raise
+            existing.manufacture_num = manufacture_num
+            for key, value in values.items():
+                setattr(existing, key, value)
+            return existing
 
     async def bulk_upsert_instruments(
         self,

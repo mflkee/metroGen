@@ -16,6 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import HTMLResponse
 
 from app.api.deps import get_db, get_http_client, get_semaphore
+from app.api.routes._protocol_jobs import (
+    _create_generation_job,
+    _get_generation_job,
+    _snapshot_generation_job,
+    _update_generation_job,
+    _utcnow,
+)
 from app.core.config import settings
 from app.db.repositories import RegistryRepository
 from app.db.session import get_sessionmaker
@@ -30,10 +37,12 @@ from app.services.arshin_client import (
     fetch_vri_details,
     fetch_vri_id_by_certificate,
 )
+from app.services.auxiliary_registry import resolve_auxiliary
 from app.services.etalon_registry import resolve_etalons
 from app.services.html_renderer import render_protocol_html
 from app.services.pdf import html_to_pdf_bytes, pdf_generation_available
 from app.services.protocol_builder import (
+    _auxiliary_pairs_from_row,
     build_protocol_context,
     extract_requested_etalon_reg_numbers,
     make_protocol_number,
@@ -47,14 +56,6 @@ from app.utils.excel import (
 )
 from app.utils.normalization import normalize_serial
 from app.utils.paths import get_named_exports_dir, get_output_dir, sanitize_filename
-
-from app.api.routes._protocol_jobs import (
-    _create_generation_job,
-    _get_generation_job,
-    _snapshot_generation_job,
-    _update_generation_job,
-    _utcnow,
-)
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
 
@@ -771,7 +772,28 @@ async def _build_context_from_db(
                     pass
                 etalon_devices, et_certs = [], []
 
-            if etalon_devices or et_certs:
+            # Вспом. СИ: обновляем свидетельство из Аршина, если просрочено.
+            try:
+                aux_entries = await resolve_auxiliary(
+                    worker_session,
+                    client,
+                    requested_pairs=_auxiliary_pairs_from_row(row_data),
+                    details=details,
+                    sem=sem,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Auxiliary registry resolution failed, using db values: {}", exc
+                )
+                try:
+                    await worker_session.rollback()
+                except Exception:
+                    pass
+                aux_entries = []
+            if aux_entries:
+                row_data["_resolved_auxiliary_instruments"] = aux_entries
+
+            if etalon_devices or et_certs or aux_entries:
                 try:
                     await worker_session.commit()
                 except Exception as exc:
@@ -893,7 +915,28 @@ async def _build_context_from_excel_row(
                     pass
                 etalon_devices, et_certs = [], []
 
-            if etalon_devices or et_certs:
+            # Вспом. СИ: обновляем свидетельство из Аршина, если просрочено.
+            try:
+                aux_entries = await resolve_auxiliary(
+                    worker_session,
+                    client,
+                    requested_pairs=_auxiliary_pairs_from_row(row_data),
+                    details=details,
+                    sem=sem,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Auxiliary registry resolution failed, using db values: {}", exc
+                )
+                try:
+                    await worker_session.rollback()
+                except Exception:
+                    pass
+                aux_entries = []
+            if aux_entries:
+                row_data["_resolved_auxiliary_instruments"] = aux_entries
+
+            if etalon_devices or et_certs or aux_entries:
                 try:
                     await worker_session.commit()
                 except Exception as exc:

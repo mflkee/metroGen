@@ -1285,7 +1285,9 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             methodology_points = default_points.copy()
             methodology_point_items = [dict(item) for item in default_point_items]
 
-        if session:
+        # Если вспом. СИ уже разрешены оркестратором (с обновлением из Аршина) —
+        # не перезаписываем их «сырым» чтением из БД.
+        if session and not excel_row.get("_resolved_auxiliary_instruments"):
             requested_aux_pairs = _auxiliary_pairs_from_row(excel_row)
             if requested_aux_pairs:
                 aux_repo = AuxiliaryInstrumentRepository(session)
