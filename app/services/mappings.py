@@ -227,11 +227,10 @@ async def ensure_methodology(
             changed = True
 
         if changed:
-            # Дефолты из seed должны сохраниться и подтянуться в этом же запросе.
+            # Дефолты из seed должны сохраниться и подтянуться в этом же запросе
+            # (коллекция points уже выгружена и «залипла» бы пустой).
             await session.commit()
-            refreshed = await repo.get_by_code(methodology.code)
-            if refreshed is not None:
-                return refreshed
+            await session.refresh(methodology, attribute_names=["points"])
         return methodology
 
     for candidate in (code, sanitized_code):
