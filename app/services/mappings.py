@@ -195,18 +195,22 @@ async def ensure_methodology(
     seed_key, seed_payload = _match_seed(sanitized_code or code)
 
     async def _ensure_seed_defaults(methodology: models.Methodology) -> models.Methodology:
+        changed = False
         if seed_payload:
             title_full = seed_payload.get("title_full")
             if title_full and not (methodology.title or "").strip():
                 methodology.title = title_full
+                changed = True
 
             allowable = seed_payload.get("allowable_variation_pct")
             if allowable is not None and methodology.allowable_variation_pct is None:
                 methodology.allowable_variation_pct = allowable
+                changed = True
 
             if seed_payload.get("points") and not methodology.points:
                 points_payload = _seed_points_payload(seed_payload["points"])
                 await repo.replace_points(methodology, points_payload)
+                changed = True
 
             if (
                 seed_key
@@ -214,11 +218,20 @@ async def ensure_methodology(
                 != normalize_methodology_alias(methodology.code)
             ):
                 await repo.ensure_aliases(methodology, [(seed_key, 85)])
+                changed = True
 
         if code and normalize_methodology_alias(code) != normalize_methodology_alias(
             methodology.code
         ):
             await repo.ensure_aliases(methodology, [(code, 90)])
+            changed = True
+
+        if changed:
+            # Дефолты из seed должны сохраниться и подтянуться в этом же запросе.
+            await session.commit()
+            refreshed = await repo.get_by_code(methodology.code)
+            if refreshed is not None:
+                return refreshed
         return methodology
 
     for candidate in (code, sanitized_code):
@@ -291,11 +304,11 @@ async def ensure_methodology(
                 .limit(1)
             )
         ).scalar_one_or_none()
-        if has_points:
-            return await repo.get_by_code(store_code)
-        points_payload = _seed_points_payload(seed_payload["points"])
-        await repo.replace_points(methodology, points_payload)
+        if not has_points:
+            points_payload = _seed_points_payload(seed_payload["points"])
+            await repo.replace_points(methodology, points_payload)
 
+    await session.commit()
     return await repo.get_by_code(store_code)
 
 
