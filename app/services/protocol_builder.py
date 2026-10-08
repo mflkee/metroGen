@@ -1096,6 +1096,17 @@ async def build_context(
     tpl = TEMPLATES.get(template_id, {})
     context["template_id"] = template_id
 
+    # Датчики давления: класс точности/пределы погрешности из Excel («КТ»/«Другие
+    # параметры») или Аршина не приходят — берём дефолт из шаблона (0,075 %).
+    if template_id == "pressure_sensor" and _raw_allowable_value(excel_row) in (None, ""):
+        sensor_pct = float(tpl.get("allowable_variation_pct") or 0.075)
+        allowable_error = sensor_pct
+        allowable_variation = sensor_pct
+        allowable_fmt = _display_allowable_value(sensor_pct, sensor_pct)
+        context["allowable_error_fmt"] = allowable_fmt
+        context["allowable_variation_pct"] = sensor_pct
+        context["accuracy_class"] = allowable_fmt
+
     fsv_for_gen = _full_scale_value(range_min, range_max)
     if template_id == "pressure_common":
         if fsv_for_gen is None:

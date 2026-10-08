@@ -99,6 +99,8 @@ def _template_name_from_context(ctx: dict[str, Any]) -> str:
         return "controller_65685_16.html"
     if tpl_id == "pressure_common":
         return "pressure.html"
+    if tpl_id == "pressure_sensor":
+        return "pressure_sensor.html"
     if tpl_id == "rtd_platinum":
         return "rtd.html"
     if tpl_id == "level_meter":

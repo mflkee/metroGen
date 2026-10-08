@@ -32,6 +32,39 @@ TEMPLATES: dict[str, dict] = {
             "trainee_sign_style",
         ],
     },
+    "pressure_sensor": {
+        "title": "Датчики давления с токовым выходом 4–20 мА",
+        "points": 5,
+        "allowable_variation_pct": 0.075,
+        "path": "pressure_sensor.html",
+        "fields": [
+            "device_info",
+            "mitypeNumber",
+            "manufactureNum",
+            "manufactureYear",
+            "owner_name",
+            "methodology_full",
+            "methodology_points",
+            "methodology_point_items",
+            "temperature",
+            "humidity",
+            "pressure",
+            "etalon_entries",
+            "etalon_line_top",
+            "etalon_line_bottom",
+            "auxiliary_instruments",
+            "table_rows",
+            "unit",
+            "allowable_error_fmt",
+            "allowable_variation",
+            "verification_date",
+            "verifier_name",
+            "trainee_name",
+            "trainee_note",
+            "trainee_sign_src",
+            "trainee_sign_style",
+        ],
+    },
     "controller_43790_12": {
         "title": "Контроллеры 43790-12",
         "points": 5,
@@ -187,6 +220,10 @@ def resolve_template_id(method_code: str, mitype_number: str, mitype_title: str)
         "47981-11", "48164-11", "53857-13",
         "38679-08",
     }
+    # Датчики/преобразователи/измерители давления — токовый выход 4–20 мА,
+    # таблица без «показаний стрелки» (проверка через калибратор).
+    if "ДАВЛЕН" in mt and ("ДАТЧИК" in mt or "ПРЕОБРАЗОВАТЕЛ" in mt or "ИЗМЕРИТЕЛ" in mt):
+        return "pressure_sensor"
     if "МАНОМЕТР" in mt or mn == "13535-93":
         return "pressure_common"
     if "УРОВНЕМЕР" in mt or "УРОВН" in mt or "LEVEL" in mt or mn in _LEVEL_MITYPE_NUMBERS:

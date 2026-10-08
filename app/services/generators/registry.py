@@ -9,6 +9,8 @@ from .level_meter import GENERATOR as _LEVEL
 from .level_meter import TEMPLATE_ID as _LEVEL_ID
 from .pressure_common import GENERATOR as _PRESSURE
 from .pressure_common import TEMPLATE_ID as _PRESSURE_ID
+from .pressure_sensor import GENERATOR as _PRESSURE_SENSOR
+from .pressure_sensor import TEMPLATE_ID as _PRESSURE_SENSOR_ID
 from .rtd import GENERATOR as _RTD
 from .rtd import TEMPLATE_ID as _RTD_ID
 
@@ -41,6 +43,7 @@ def get_by_template(template_id: str | None) -> TableGenerator:
 
 # регистрация встроенных
 register_template(_PRESSURE_ID, _PRESSURE)
+register_template(_PRESSURE_SENSOR_ID, _PRESSURE_SENSOR)
 register_template(_LEVEL_ID, _LEVEL)
 register_template(_CTRL43790_ID, _CTRL43790)
 register_template(_CTRL65685_ID, _CTRL65685)
