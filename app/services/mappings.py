@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -72,6 +72,44 @@ def _org_seed() -> dict[str, Any]:
 def _core_code(text: str) -> str:
     m = re.search(r"(\d{3,5}-\d{2})", text.replace(" ", ""))
     return m.group(1) if m else text
+
+
+def _seed_points_payload(points: Mapping[str, Any]) -> list[MethodologyPointPayload]:
+    """Собрать пункты методики из JSON-seed.
+
+    Значение пункта — либо код («7»), либо словарь с ключами
+    code/text/type/default_text для расширенного описания.
+    """
+    payload: list[MethodologyPointPayload] = []
+    for index, (_, value) in enumerate(sorted(points.items()), start=1):
+        if not isinstance(value, Mapping):
+            payload.append(MethodologyPointPayload(position=index, label=str(value)))
+            continue
+
+        code = str(value.get("code") or "").strip()
+        text = str(value.get("text") or "").strip()
+        label = str(value.get("label") or "").strip()
+        if not label:
+            label = f"{code} - {text}" if code and text else (code or text)
+        default_text = str(value.get("default_text") or "").strip() or None
+
+        point_type = models.MethodologyPointType.BOOL
+        raw_type = str(value.get("type") or "").strip().lower()
+        if raw_type:
+            try:
+                point_type = models.MethodologyPointType(raw_type)
+            except ValueError:
+                point_type = models.MethodologyPointType.BOOL
+
+        payload.append(
+            MethodologyPointPayload(
+                position=index,
+                label=label,
+                point_type=point_type,
+                default_text=default_text,
+            )
+        )
+    return payload
 
 
 def _match_seed(code: str) -> tuple[str, dict[str, Any]] | tuple[None, None]:
@@ -167,12 +205,7 @@ async def ensure_methodology(
                 methodology.allowable_variation_pct = allowable
 
             if seed_payload.get("points") and not methodology.points:
-                points_payload = [
-                    MethodologyPointPayload(position=index, label=value)
-                    for index, (_, value) in enumerate(
-                        sorted(seed_payload["points"].items()), start=1
-                    )
-                ]
+                points_payload = _seed_points_payload(seed_payload["points"])
                 await repo.replace_points(methodology, points_payload)
 
             if (
@@ -260,10 +293,7 @@ async def ensure_methodology(
         ).scalar_one_or_none()
         if has_points:
             return await repo.get_by_code(store_code)
-        points_payload = [
-            MethodologyPointPayload(position=index, label=value)
-            for index, (_, value) in enumerate(sorted(seed_payload["points"].items()), start=1)
-        ]
+        points_payload = _seed_points_payload(seed_payload["points"])
         await repo.replace_points(methodology, points_payload)
 
     return await repo.get_by_code(store_code)
