@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.db.models import User, UserRole
 from app.db.repositories import UserRepository
 from app.schemas.user import UserCreateRequest, UserMentionRead, UserUpdateRequest
+from app.services import accounts_client
 from app.services.notification_service import NotificationService
 from app.utils.password_policy import validate_password_policy
 from app.utils.security import create_temporary_password, hash_password
@@ -72,7 +73,7 @@ class UserService:
         payload: UserCreateRequest,
         *,
         current_user: User,
-    ) -> tuple[User, str]:
+    ) -> tuple[User, str | None]:
         self._assert_user_management_target_access(
             current_user=current_user,
             target_user=None,
@@ -84,6 +85,30 @@ class UserService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A user with this email already exists.",
             )
+
+        if accounts_client.is_enabled():
+            # The registry owns the credentials and mails the invitation link.
+            await accounts_client.create_account(
+                email=email,
+                first_name=_normalize_required_name(payload.first_name, field_label="First name"),
+                last_name=_normalize_required_name(payload.last_name, field_label="Last name"),
+                patronymic=_normalize_optional_name(payload.patronymic),
+                role=payload.role.value,
+            )
+            user = User(
+                first_name=_normalize_required_name(payload.first_name, field_label="First name"),
+                last_name=_normalize_required_name(payload.last_name, field_label="Last name"),
+                patronymic=_normalize_optional_name(payload.patronymic),
+                email=email,
+                password_hash="!",
+                role=payload.role,
+                is_active=bool(payload.is_active),
+                must_change_password=False,
+            )
+            await self.users.add(user)
+            await self.session.commit()
+            await self.session.refresh(user)
+            return user, None
 
         temporary_password = (
             payload.temporary_password.strip()
@@ -155,7 +180,7 @@ class UserService:
             current_user=current_user,
         )
 
-    async def reset_password(self, *, user_id: int, current_user: User) -> tuple[User, str]:
+    async def reset_password(self, *, user_id: int, current_user: User) -> tuple[User, str | None]:
         user = await self.users.get_by_id_for_update(user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
@@ -165,6 +190,11 @@ class UserService:
             target_user=user,
             next_role=user.role,
         )
+
+        if accounts_client.is_enabled():
+            # No administrator-issued password: the registry mails a one-time link.
+            await accounts_client.send_invite(email=user.email)
+            return user, None
 
         temporary_password = create_temporary_password()
         user.password_hash = hash_password(temporary_password)
