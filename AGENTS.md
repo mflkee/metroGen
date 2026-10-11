@@ -15,6 +15,13 @@
 > Prod and staging both live on that host (`mkair-server-tmn`) in `~/apps/metroGen`;
 > runner is `[self-hosted, mkair-runner]`. Verify the result on the server
 > (`docker compose ps`, `/docs` health-check, container logs).
+>
+> ⚠️ **Виртуальное окружение живёт в named volume** (`api_venv` / `api_venv_stg`), который
+> маскирует `.venv` из образа. Поэтому смена зависимостей (`uv.lock`) не доезжает до
+> контейнера сама по себе. `docker-entrypoint.sh` теперь выполняет `uv sync --frozen --no-dev`
+> при старте, так что volume подтягивается автоматически. Если контейнер всё же падает с
+> `ModuleNotFoundError`, проверь `docker exec <api> sh -c "cd /app && uv sync --frozen --no-dev"`
+> или пересоздай volume (`docker compose -f docker-compose.staging.yml rm -sf api && docker volume rm metrogen-stg_api_venv_stg && ... up -d api`).
 
 ## Область покрытия
 Актуализация выполнена по всем исходным текстовым файлам репозитория:
