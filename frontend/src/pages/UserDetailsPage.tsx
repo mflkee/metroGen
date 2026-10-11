@@ -73,7 +73,11 @@ export function UserDetailsPage() {
     try {
       const response = await resetUserPassword(token, parsedUserId);
       setTemporaryPassword(response.temporaryPassword);
-      setMessage("Временный пароль обновлен.");
+      setMessage(
+        response.temporaryPassword
+          ? "Временный пароль обновлен."
+          : (response.message ?? "Ссылка для смены пароля отправлена на email."),
+      );
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Не удалось сбросить пароль.");
     }

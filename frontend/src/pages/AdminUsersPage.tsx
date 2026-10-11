@@ -25,7 +25,8 @@ const defaultRole: UserRole = "CUSTOMER";
 type CredentialPacket = {
   fullName: string;
   email: string;
-  temporaryPassword: string;
+  temporaryPassword: string | null;
+  message: string | null;
   reason: "create" | "reset";
 };
 
@@ -97,6 +98,7 @@ export function AdminUsersPage() {
         fullName,
         email,
         temporaryPassword: response.temporaryPassword,
+        message: response.message,
         reason: "reset",
       });
       void queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -160,6 +162,7 @@ export function AdminUsersPage() {
         fullName: response.user.fullName,
         email: response.user.email,
         temporaryPassword: response.temporaryPassword,
+        message: response.message,
         reason: "create",
       });
       setForm({
@@ -192,7 +195,7 @@ export function AdminUsersPage() {
     }
 
     try {
-      await navigator.clipboard.writeText(credentialPacket.temporaryPassword);
+      await navigator.clipboard.writeText(credentialPacket.temporaryPassword ?? "");
       setCopyMessage("Временный пароль скопирован.");
     } catch {
       setCopyMessage("Не удалось скопировать пароль автоматически.");
@@ -320,22 +323,37 @@ export function AdminUsersPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-ink">
-                {credentialPacket.reason === "create" ? "Учетная запись создана" : "Пароль сброшен"}
+                {credentialPacket.reason === "create" ? "Учетная запись создана" : "Пароль обновлён"}
               </h2>
               <p className="mt-1 text-sm text-steel">
                 {credentialPacket.fullName} · {credentialPacket.email}
               </p>
             </div>
-            <button className="btn-secondary btn-sm" type="button" onClick={() => void handleCopyTemporaryPassword()}>
-              Скопировать пароль
-            </button>
+            {credentialPacket.temporaryPassword ? (
+              <button
+                className="btn-secondary btn-sm"
+                type="button"
+                onClick={() => void handleCopyTemporaryPassword()}
+              >
+                Скопировать пароль
+              </button>
+            ) : null}
           </div>
 
-          <div className="mt-4 rounded-3xl border border-line px-4 py-4">
-            <div className="text-xs uppercase tracking-[0.16em] text-steel">Временный пароль</div>
-            <div className="mt-2 break-all text-2xl font-semibold text-ink">{credentialPacket.temporaryPassword}</div>
-            {copyMessage ? <div className="mt-3 text-sm text-steel">{copyMessage}</div> : null}
-          </div>
+          {credentialPacket.temporaryPassword ? (
+            <div className="mt-4 rounded-3xl border border-line px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-steel">Временный пароль</div>
+              <div className="mt-2 break-all text-2xl font-semibold text-ink">
+                {credentialPacket.temporaryPassword}
+              </div>
+              {copyMessage ? <div className="mt-3 text-sm text-steel">{copyMessage}</div> : null}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-3xl border border-line px-4 py-4 text-sm text-steel">
+              {credentialPacket.message ??
+                "Ссылка для задания пароля отправлена на email сотрудника."}
+            </div>
+          )}
         </section>
       ) : null}
 

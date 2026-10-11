@@ -3,7 +3,8 @@ import { mapUser, type AuthUser, type RawUser, type UserRole } from "@/api/auth"
 
 type RawTemporaryPasswordResponse = {
   user: RawUser;
-  temporary_password: string;
+  temporary_password: string | null;
+  message?: string | null;
 };
 
 type RawUserMention = {
@@ -15,7 +16,8 @@ type RawUserMention = {
 
 export type UserTemporaryPasswordResponse = {
   user: AuthUser;
-  temporaryPassword: string;
+  temporaryPassword: string | null;
+  message: string | null;
 };
 
 export type UserMention = {
@@ -90,6 +92,7 @@ export async function createUser(
   return {
     user: mapUser(response.user),
     temporaryPassword: response.temporary_password,
+    message: response.message ?? null,
   };
 }
 
@@ -136,6 +139,7 @@ export async function resetUserPassword(
   return {
     user: mapUser(response.user),
     temporaryPassword: response.temporary_password,
+    message: response.message ?? null,
   };
 }
 
