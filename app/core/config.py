@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     API_LOG_LEVEL: str = "info"
     SECRET_KEY: str = "change-me"
     ACCESS_TOKEN_TTL_HOURS: int = 12
+    # Single sign-on (Authentik OIDC). Disabled until explicitly enabled in the env.
+    OIDC_ENABLED: bool = False
+    OIDC_ISSUER: str = "https://auth.mkair-it.ru/application/o/metrogen/"
+    OIDC_CLIENT_ID: str = "metrogen"
+    OIDC_CLIENT_SECRET: str | None = None
+    OIDC_REDIRECT_URI: str = "https://metrogen.mkair-it.ru/api/v1/auth/oidc/callback"
+    OIDC_SCOPES: str = "openid email profile groups"
+    OIDC_AUTO_PROVISION: bool = False
+    OIDC_TRANSACTION_TTL_SECONDS: int = 600
+    OIDC_HTTP_TIMEOUT_SECONDS: float = 10.0
+    OIDC_COOKIE_SECURE: bool = True
     BOOTSTRAP_ADMIN_FIRST_NAME: str = "Bootstrap"
     BOOTSTRAP_ADMIN_LAST_NAME: str = "Administrator"
     BOOTSTRAP_ADMIN_PATRONYMIC: str = ""
