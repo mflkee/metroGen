@@ -35,10 +35,7 @@ services:
       ARSHIN_FAST_FAIL: "0"
       PROTOCOL_BUILD_CONCURRENCY: "2"
       UVICORN_RELOAD: "0"
-      # SSO on Stage goes through the Stage frontend origin (plain HTTP, IP:port).
-      OIDC_REDIRECT_URI: ${OIDC_STG_REDIRECT_URI:-http://100.89.18.223:9174/api/v1/auth/oidc/callback}
       FRONTEND_APP_URL: ${FRONTEND_STG_APP_URL:-http://100.89.18.223:9174}
-      OIDC_COOKIE_SECURE: "false"
     depends_on:
       db:
         condition: service_healthy
