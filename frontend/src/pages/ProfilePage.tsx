@@ -1,8 +1,8 @@
 import { FormEvent, useState } from "react";
 
 import { changePassword, getCurrentUser, updateProfile } from "@/api/auth";
-import { PasswordInput } from "@/components/PasswordInput";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PasswordInput } from "@/components/ui/password-input";
+import { PageHeader } from "@/components/ui/page-header";
 import { passwordPolicyMessage, isPasswordPolicyValid } from "@/lib/password";
 import { roleLabels } from "@/lib/roles";
 import { useAuthStore } from "@/store/auth";
@@ -156,7 +156,7 @@ export function ProfilePage() {
                   <input className="form-input" type="text" value={facility} onChange={(event) => setFacility(event.target.value)} />
                 </label>
 
-                {profileError ? <p className="text-sm text-[#b04c43]">{profileError}</p> : null}
+                {profileError ? <p className="text-sm text-[var(--danger-text)]">{profileError}</p> : null}
                 {profileMessage ? <p className="text-sm text-signal-ok">{profileMessage}</p> : null}
 
                 <button className="btn-primary" type="submit" disabled={isProfileSubmitting}>
@@ -179,7 +179,7 @@ export function ProfilePage() {
                 <PasswordInput autoComplete="new-password" label="Подтверждение нового пароля" minLength={6} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
 
                 <p className="text-xs text-steel">{passwordPolicyMessage}</p>
-                {error ? <p className="text-sm text-[#b04c43]">{error}</p> : null}
+                {error ? <p className="text-sm text-[var(--danger-text)]">{error}</p> : null}
                 {message ? <p className="text-sm text-signal-ok">{message}</p> : null}
 
                 <button className="btn-primary" type="submit" disabled={isSubmitting}>

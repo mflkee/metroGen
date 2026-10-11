@@ -8,7 +8,7 @@ import {
   updateOwner,
   type OwnerOut,
 } from "@/api/owners";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
 
 export function AdminOwnersPage() {

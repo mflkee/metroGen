@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { sendTestMentionEmail, updateProfile } from "@/api/auth";
 import { fetchSystemStatus } from "@/api/system";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
 import { defaultVisibleThemes, themeOptions, type ThemeName, useThemeStore } from "@/store/theme";
 
@@ -122,7 +122,6 @@ export function SettingsPage() {
                 />
                 <span>
                   <span className="block font-medium text-ink">{theme.label}</span>
-                  {theme.source ? <span className="mt-1 block text-xs text-steel">{theme.source}</span> : null}
                 </span>
               </label>
             ))}
@@ -137,7 +136,7 @@ export function SettingsPage() {
             Разрешить тестовое SMTP-уведомление на email пользователя
           </label>
 
-          {error ? <p className="mt-4 text-sm text-[#b04c43]">{error}</p> : null}
+          {error ? <p className="mt-4 text-sm text-[var(--danger-text)]">{error}</p> : null}
           {message ? <p className="mt-4 text-sm text-signal-ok">{message}</p> : null}
 
           <div className="mt-5 flex flex-wrap gap-3">

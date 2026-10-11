@@ -1,105 +1,46 @@
-import { create } from "zustand";
+import {
+  coerceThemePreference,
+  getStoredTheme,
+  setTheme as persistAndApplyTheme,
+  themeOptions,
+  useTheme as useFleetTheme,
+  type ThemeName,
+} from "@/lib/theme-store";
 
-export type ThemeName =
-  | "light"
-  | "dark"
-  | "gray"
-  | "tokyonight"
-  | "catppuccin"
-  | "kanagawa"
-  | "nord"
-  | "dracula"
-  | "gruvbox"
-  | "moonfly";
+/*
+ * metroGen's view of the fleet theme store (`@/lib/theme-store`, vendored from `metro-ui`).
+ *
+ * The store itself — the key, `data-theme`, the dark default, the migration of retired names — is
+ * the fleet's; this module keeps the app-facing API the screens already use (the theme catalogue,
+ * the profile-driven narrowing and the zustand-shaped hook) on top of it.
+ *
+ * The catalogue is the fleet's: dark only, seven themes. metroGen's light, gray and moonfly themes
+ * were retired with it.
+ */
+export {
+  DEFAULT_THEME,
+  THEME_STORAGE_KEY,
+  applyTheme,
+  coerceThemePreference,
+  getStoredTheme,
+  initializeTheme,
+  isThemeName,
+  themeNames,
+  themeOptions,
+} from "@/lib/theme-store";
+export type { ThemeName, ThemeOption } from "@/lib/theme-store";
 
-type ThemeOption = {
-  value: ThemeName;
-  label: string;
-  source?: string;
-};
+/**
+ * Every theme is offered out of the box: the catalogue *is* the default, so a user who has never
+ * trimmed the list sees a new theme as soon as it is added, and `null` (the stored value of
+ * "I never chose") keeps meaning "the default".
+ */
+export const defaultVisibleThemes: ThemeName[] = themeOptions.map((option) => option.value);
 
-type ThemeState = {
-  theme: ThemeName;
-  setTheme: (theme: ThemeName) => void;
-};
-
-const THEME_STORAGE_KEY = "metrogen.theme";
-const DEFAULT_THEME: ThemeName = "light";
-export const defaultVisibleThemes: ThemeName[] = ["light", "gray", "dark"];
-
-export const themeOptions: ThemeOption[] = [
-  { value: "light", label: "Светлая" },
-  { value: "dark", label: "Темная" },
-  { value: "gray", label: "Серая" },
-  { value: "tokyonight", label: "Tokyo Night", source: "folke/tokyonight.nvim" },
-  { value: "catppuccin", label: "Catppuccin", source: "catppuccin/catppuccin" },
-  { value: "kanagawa", label: "Kanagawa", source: "rebelot/kanagawa.nvim" },
-  { value: "nord", label: "Nord", source: "shaunsingh/nord.nvim" },
-  { value: "dracula", label: "Dracula", source: "Mofiqul/dracula.nvim" },
-  { value: "gruvbox", label: "Gruvbox", source: "ellisonleao/gruvbox.nvim" },
-  { value: "moonfly", label: "Moonfly", source: "bluz71/vim-moonfly-colors" },
-];
-
-function persistTheme(theme: ThemeName): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-}
-
-export function coerceThemePreference(value: string | null | undefined): ThemeName | null {
-  if (
-    value === "light"
-    || value === "dark"
-    || value === "gray"
-    || value === "tokyonight"
-    || value === "catppuccin"
-    || value === "kanagawa"
-    || value === "nord"
-    || value === "dracula"
-    || value === "gruvbox"
-    || value === "moonfly"
-  ) {
-    return value;
-  }
-  return null;
-}
-
-function getStoredTheme(): ThemeName {
-  if (typeof window === "undefined") {
-    return DEFAULT_THEME;
-  }
-  return coerceThemePreference(window.localStorage.getItem(THEME_STORAGE_KEY)) ?? DEFAULT_THEME;
-}
-
-export function applyTheme(theme: ThemeName): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = isDarkTheme(theme) ? "dark" : "light";
-}
-
-export const useThemeStore = create<ThemeState>((set) => ({
-  theme: getStoredTheme(),
-  setTheme: (theme) => {
-    persistTheme(theme);
-    applyTheme(theme);
-    set({ theme });
-  },
-}));
-
-export function initializeTheme(): void {
-  applyTheme(getStoredTheme());
-}
-
-export function syncThemeFromUser(themePreference: string | null | undefined): void {
-  const theme = coerceThemePreference(themePreference) ?? getStoredTheme();
-  persistTheme(theme);
-  applyTheme(theme);
-  useThemeStore.setState({ theme });
-}
-
+/**
+ * The themes the switcher may offer: what the profile enabled, or the whole catalogue, always with
+ * the theme in use kept in the list (so a user never loses the option they are looking at).
+ */
 export function getVisibleThemes(
   enabledThemes: Array<string | null | undefined> | null | undefined,
   currentTheme?: ThemeName,
@@ -115,21 +56,32 @@ export function getVisibleThemes(
       deduped.push(theme);
     }
   }
+
   if (currentTheme && !deduped.includes(currentTheme)) {
     deduped.unshift(currentTheme);
   }
+
   return deduped;
 }
 
-export function isDarkTheme(theme: ThemeName): boolean {
-  return [
-    "dark",
-    "tokyonight",
-    "catppuccin",
-    "kanagawa",
-    "nord",
-    "dracula",
-    "gruvbox",
-    "moonfly",
-  ].includes(theme);
+/**
+ * Applies the theme the profile carries, falling back to the local choice when the profile has
+ * nothing usable (or a retired name such as metroGen's `light`/`gray`/`moonfly`).
+ */
+export function syncThemeFromUser(themePreference: string | null | undefined): void {
+  persistAndApplyTheme(coerceThemePreference(themePreference) ?? getStoredTheme());
+}
+
+type ThemeState = {
+  theme: ThemeName;
+  setTheme: (theme: ThemeName) => void;
+};
+
+/**
+ * The hook the screens use. It reads the fleet store, so every tab, every service and the switcher
+ * share one value; `setTheme` persists and applies it at once.
+ */
+export function useThemeStore<T>(selector: (state: ThemeState) => T): T {
+  const { theme, setTheme } = useFleetTheme();
+  return selector({ theme, setTheme });
 }

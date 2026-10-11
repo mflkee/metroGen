@@ -3,7 +3,7 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EtalonOut, EtalonUpsertPayload, fetchEtalons, upsertEtalon } from "@/api/etalons";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
 
 type FormState = {

@@ -6,7 +6,7 @@ import {
   createAuxInstrument,
   fetchAuxInstruments,
 } from "@/api/auxiliary-instruments";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
 
 export function AdminAuxInstrumentsPage() {

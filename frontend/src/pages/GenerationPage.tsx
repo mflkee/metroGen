@@ -23,7 +23,7 @@ import {
   type ExportFolder,
 } from "@/api/system";
 import { ApiError } from "@/api/client";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
 
 type WorkspaceTab = "generation" | "database" | "exports";
@@ -328,7 +328,7 @@ export function GenerationPage() {
         ))}
       </div>
 
-      {error ? <p className="text-sm text-[#b04c43] mb-4">{error}</p> : null}
+      {error ? <p className="text-sm text-[var(--danger-text)] mb-4">{error}</p> : null}
 
       {activeTab === "generation" ? (
         <div className="space-y-6">
@@ -429,7 +429,7 @@ export function GenerationPage() {
                   {generationResult.errors.length ? (
                     <div className="rounded-2xl border border-line p-3 text-sm">
                       {generationResult.errors.map((item, i) => (
-                        <div key={i} className="text-[#b04c43]">Строка {item.row ?? "?"}: {item.reason ?? "ошибка"}</div>
+                        <div key={i} className="text-[var(--danger-text)]">Строка {item.row ?? "?"}: {item.reason ?? "ошибка"}</div>
                       ))}
                     </div>
                   ) : null}
@@ -466,7 +466,7 @@ export function GenerationPage() {
                   ))}
                 </ul>
               ) : null}
-              {registryError ? <p className="text-sm text-[#b04c43]">{registryError}</p> : null}
+              {registryError ? <p className="text-sm text-[var(--danger-text)]">{registryError}</p> : null}
               {registryResult ? (
                 <div className="rounded-2xl border border-line p-3 text-sm text-steel">
                   <div className="text-ink font-medium">Импорт завершён</div>

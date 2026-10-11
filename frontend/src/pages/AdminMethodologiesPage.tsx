@@ -8,7 +8,7 @@ import {
   type MethodologyOut,
   type MethodologyPointOut,
 } from "@/api/methodologies";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
 
 type EditablePoint = {

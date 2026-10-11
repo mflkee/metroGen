@@ -13,7 +13,7 @@ export function BrandMark({
     <div
       aria-hidden="true"
       className={[
-        "brand-mark inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-white text-[1.8rem] font-bold text-[#2563eb] shadow-panel",
+        "brand-mark inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-[var(--panel-bg)] text-[1.8rem] font-bold text-signal-info shadow-panel",
         className,
       ].join(" ")}
       title={title}

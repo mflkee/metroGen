@@ -36,7 +36,7 @@ export function DeleteConfirmModal({
   return (
     <Modal description={description} open={isOpen} size="sm" title={title} onClose={onClose}>
       <form className="space-y-3" onSubmit={handleSubmit}>
-        {errorMessage ? <p className="text-sm text-[#b04c43]">{errorMessage}</p> : null}
+        {errorMessage ? <p className="text-sm text-[var(--danger-text)]">{errorMessage}</p> : null}
         <div className="flex justify-end">
           <button
             aria-label={confirmLabel}

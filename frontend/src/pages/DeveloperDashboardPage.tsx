@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { AuthUser, UserRole } from "@/api/auth";
 import { fetchSystemStatus } from "@/api/system";
 import { fetchUsers } from "@/api/users";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { roleLabels } from "@/lib/roles";
 import { matchesUserSearch, userSearchPlaceholder } from "@/lib/userSearch";
 import { useAuthStore } from "@/store/auth";
@@ -62,14 +62,14 @@ export function DeveloperDashboardPage() {
         <p className="text-sm text-steel">Собираем служебную статистику...</p>
       ) : null}
       {usersQuery.error ? (
-        <p className="text-sm text-[#b04c43]">
+        <p className="text-sm text-[var(--danger-text)]">
           {usersQuery.error instanceof Error
             ? usersQuery.error.message
             : "Не удалось загрузить статистику пользователей."}
         </p>
       ) : null}
       {statusQuery.error ? (
-        <p className="text-sm text-[#b04c43]">
+        <p className="text-sm text-[var(--danger-text)]">
           {statusQuery.error instanceof Error
             ? statusQuery.error.message
             : "Не удалось загрузить системную сводку."}

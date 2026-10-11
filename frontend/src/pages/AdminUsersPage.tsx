@@ -14,7 +14,7 @@ import {
   type CreateUserPayload,
 } from "@/api/users";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { isDeveloperRole, roleLabels } from "@/lib/roles";
 import { buildUserExtraInfo, matchesUserSearch, userSearchPlaceholder } from "@/lib/userSearch";
 import { useAuthStore } from "@/store/auth";
@@ -302,7 +302,7 @@ export function AdminUsersPage() {
 
           <div className="lg:col-span-2 xl:col-span-6">
             {createUserMutation.isError ? (
-              <p className="text-sm text-[#b04c43]">
+              <p className="text-sm text-[var(--danger-text)]">
                 {createUserMutation.error instanceof Error
                   ? createUserMutation.error.message
                   : "Не удалось создать пользователя."}
@@ -385,7 +385,7 @@ export function AdminUsersPage() {
 
         {usersQuery.isLoading ? <p className="px-5 py-6 text-sm text-steel">Загружаем пользователей...</p> : null}
         {usersQuery.isError ? (
-          <p className="px-5 py-6 text-sm text-[#b04c43]">
+          <p className="px-5 py-6 text-sm text-[var(--danger-text)]">
             {usersQuery.error instanceof Error
               ? usersQuery.error.message
               : "Не удалось загрузить список пользователей."}

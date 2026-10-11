@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 
 import { fetchVriDetails, resolveVriId } from "@/api/arshin";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 
 export function ArshinPage() {
   const [certificate, setCertificate] = useState("");
@@ -99,7 +99,7 @@ export function ArshinPage() {
         </form>
       </div>
 
-      {error ? <p className="mt-5 text-sm text-[#b04c43]">{error}</p> : null}
+      {error ? <p className="mt-5 text-sm text-[var(--danger-text)]">{error}</p> : null}
 
       {details ? (
         <section className="section-card mt-6">

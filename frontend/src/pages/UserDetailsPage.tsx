@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeleteMutation } from "@/hooks/useDeleteMutation";
 
 import { deleteUser, fetchUserById, resetUserPassword, updateUser } from "@/api/users";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { PageHeader } from "@/components/ui/page-header";
 import { roleLabels } from "@/lib/roles";
 import { useAuthStore } from "@/store/auth";
 
@@ -145,7 +145,7 @@ export function UserDetailsPage() {
           </label>
 
           {message ? <p className="text-sm text-signal-ok">{message}</p> : null}
-          {error ? <p className="text-sm text-[#b04c43]">{error}</p> : null}
+          {error ? <p className="text-sm text-[var(--danger-text)]">{error}</p> : null}
 
           <div className="flex flex-wrap gap-3">
             <button className="btn-primary" type="submit">Сохранить</button>
