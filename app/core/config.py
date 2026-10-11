@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     OIDC_TRANSACTION_TTL_SECONDS: int = 600
     OIDC_HTTP_TIMEOUT_SECONDS: float = 10.0
     OIDC_COOKIE_SECURE: bool = True
+    # Unified account registry (metroAccounts). When enabled, credentials are checked there.
+    ACCOUNTS_ENABLED: bool = False
+    ACCOUNTS_URL: str = ""
+    ACCOUNTS_SERVICE_NAME: str = "metrogen"
+    ACCOUNTS_SERVICE_TOKEN: str | None = None
+    ACCOUNTS_TIMEOUT_SECONDS: float = 10.0
     BOOTSTRAP_ADMIN_FIRST_NAME: str = "Bootstrap"
     BOOTSTRAP_ADMIN_LAST_NAME: str = "Administrator"
     BOOTSTRAP_ADMIN_PATRONYMIC: str = ""
@@ -75,9 +81,7 @@ class Settings(BaseSettings):
     @cached_property
     def backend_cors_origins(self) -> list[str]:
         return [
-            origin.strip()
-            for origin in self.BACKEND_CORS_ORIGINS_RAW.split(",")
-            if origin.strip()
+            origin.strip() for origin in self.BACKEND_CORS_ORIGINS_RAW.split(",") if origin.strip()
         ]
 
     @cached_property

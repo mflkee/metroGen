@@ -46,6 +46,9 @@ async def create_user(
     return UserTemporaryPasswordResponse(
         user=UserRead.model_validate(user),
         temporary_password=temporary_password,
+        message=None
+        if temporary_password
+        else "Сотрудник создан, приглашение отправлено на email.",
     )
 
 
@@ -92,6 +95,7 @@ async def reset_password(
     return UserTemporaryPasswordResponse(
         user=UserRead.model_validate(user),
         temporary_password=temporary_password,
+        message=None if temporary_password else "Ссылка для смены пароля отправлена на email.",
     )
 
 
