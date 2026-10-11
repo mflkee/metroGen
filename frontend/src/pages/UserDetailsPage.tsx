@@ -5,9 +5,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeleteMutation } from "@/hooks/useDeleteMutation";
 
 import { deleteUser, fetchUserById, resetUserPassword, updateUser } from "@/api/users";
+import type { UserRole } from "@/api/auth";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { roleLabels } from "@/lib/roles";
 import { useAuthStore } from "@/store/auth";
+
+/** The roles in the order the form offers them. */
+const roleOrder: UserRole[] = ["CUSTOMER", "MKAIR", "ADMINISTRATOR", "DEVELOPER"];
 
 export function UserDetailsPage() {
   const { userId } = useParams();
@@ -132,12 +137,11 @@ export function UserDetailsPage() {
           </label>
           <label className="block text-sm text-steel">
             Роль
-            <select className="form-input" value={role} onChange={(event) => setRole(event.target.value as typeof role)}>
-              <option value="CUSTOMER">Заказчик</option>
-              <option value="MKAIR">МКАИР</option>
-              <option value="ADMINISTRATOR">Администратор</option>
-              <option value="DEVELOPER">Разработчик</option>
-            </select>
+            <Select<UserRole>
+              onChange={(next) => setRole(next)}
+              options={roleOrder.map((value) => ({ value, label: roleLabels[value] }))}
+              value={role}
+            />
           </label>
           <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
             <input checked={isActive} type="checkbox" onChange={(event) => setIsActive(event.target.checked)} />

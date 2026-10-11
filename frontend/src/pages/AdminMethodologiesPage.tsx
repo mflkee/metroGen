@@ -9,6 +9,8 @@ import {
   type MethodologyPointOut,
 } from "@/api/methodologies";
 import { PageHeader } from "@/components/ui/page-header";
+import { NumberInput } from "@/components/number-input";
+import { Select } from "@/components/ui/select";
 import { useAuthStore } from "@/store/auth";
 
 type EditablePoint = {
@@ -138,7 +140,12 @@ export function AdminMethodologiesPage() {
               </label>
               <label className="block text-sm text-steel">
                 Допустимая вариация, %
-                <input className="form-input mt-1" type="number" step="0.01" value={editAllowable} onChange={(e) => setEditAllowable(e.target.value)} />
+                <NumberInput
+                  allowDecimal
+                  className="form-input mt-1"
+                  value={editAllowable}
+                  onValueChange={setEditAllowable}
+                />
               </label>
             </div>
 
@@ -165,11 +172,16 @@ export function AdminMethodologiesPage() {
                           <input className="form-input text-sm py-1" type="text" value={p.label} onChange={(e) => updatePoint(p.position, "label", e.target.value)} />
                         </td>
                         <td className="px-3 py-2">
-                          <select className="form-input text-sm py-1" value={p.point_type} onChange={(e) => updatePoint(p.position, "point_type", e.target.value)}>
-                            <option value="clause">clause</option>
-                            <option value="bool">bool</option>
-                            <option value="custom">custom</option>
-                          </select>
+                          <Select
+                            compact
+                            onChange={(next) => updatePoint(p.position, "point_type", next)}
+                            options={[
+                              { value: "clause", label: "clause" },
+                              { value: "bool", label: "bool" },
+                              { value: "custom", label: "custom" },
+                            ]}
+                            value={p.point_type}
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <input className="form-input text-sm py-1" placeholder="Напр. Внешний осмотр" type="text" value={p.default_text} onChange={(e) => updatePoint(p.position, "default_text", e.target.value)} />

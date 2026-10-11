@@ -15,6 +15,7 @@ import {
 } from "@/api/users";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { isDeveloperRole, roleLabels } from "@/lib/roles";
 import { buildUserExtraInfo, matchesUserSearch, userSearchPlaceholder } from "@/lib/userSearch";
 import { useAuthStore } from "@/store/auth";
@@ -276,19 +277,11 @@ export function AdminUsersPage() {
 
           <label className="block text-sm text-steel">
             Роль
-            <select
-              className="form-input"
+            <Select<UserRole>
+              onChange={(next) => setForm((current) => ({ ...current, role: next }))}
+              options={assignableRoles.map((role) => ({ value: role, label: roleLabels[role] }))}
               value={form.role}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, role: event.target.value as CreateUserPayload["role"] }))
-              }
-            >
-              {assignableRoles.map((role) => (
-                <option key={role} value={role}>
-                  {roleLabels[role]}
-                </option>
-              ))}
-            </select>
+            />
           </label>
 
           <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
@@ -447,18 +440,12 @@ export function AdminUsersPage() {
                           <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
                             <label className="block text-sm text-steel">
                               Роль
-                              <select
-                                className="form-input"
+                              <Select<UserRole>
                                 disabled={!canManageUser || updateUserMutation.isPending}
+                                onChange={(next) => setDraftRole(next)}
+                                options={assignableRoles.map((role) => ({ value: role, label: roleLabels[role] }))}
                                 value={draftRole}
-                                onChange={(event) => setDraftRole(event.target.value as UserRole)}
-                              >
-                                {assignableRoles.map((role) => (
-                                  <option key={role} value={role}>
-                                    {roleLabels[role]}
-                                  </option>
-                                ))}
-                              </select>
+                              />
                             </label>
 
                             <div className="flex flex-wrap items-center gap-3">

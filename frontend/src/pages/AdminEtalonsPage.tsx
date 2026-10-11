@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { EtalonOut, EtalonUpsertPayload, fetchEtalons, upsertEtalon } from "@/api/etalons";
 import { PageHeader } from "@/components/ui/page-header";
+import { DateInput } from "@/components/date-input";
+import { NumberInput } from "@/components/number-input";
 import { useAuthStore } from "@/store/auth";
 
 type FormState = {
@@ -189,7 +191,12 @@ export function AdminEtalonsPage() {
               </label>
               <label className="block text-sm text-steel">
                 Год выпуска
-                <input className="form-input mt-1" type="number" value={form.manufacture_year} onChange={(e) => updateField("manufacture_year", e.target.value)} />
+                <NumberInput
+                  className="form-input mt-1"
+                  maxLength={4}
+                  value={form.manufacture_year}
+                  onValueChange={(value) => updateField("manufacture_year", value)}
+                />
               </label>
               <label className="block text-sm text-steel">
                 Разряд
@@ -209,11 +216,11 @@ export function AdminEtalonsPage() {
               </label>
               <label className="block text-sm text-steel">
                 Дата поверки
-                <input className="form-input mt-1" type="date" value={form.verification_date} onChange={(e) => updateField("verification_date", e.target.value)} />
+                <DateInput className="form-input mt-1" value={form.verification_date} onChange={(value) => updateField("verification_date", value)} />
               </label>
               <label className="block text-sm text-steel">
                 Действительно до
-                <input className="form-input mt-1" type="date" value={form.valid_to} onChange={(e) => updateField("valid_to", e.target.value)} />
+                <DateInput className="form-input mt-1" value={form.valid_to} onChange={(value) => updateField("valid_to", value)} />
               </label>
             </div>
             <div className="flex items-center gap-2">

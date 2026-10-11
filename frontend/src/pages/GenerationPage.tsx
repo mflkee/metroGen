@@ -23,7 +23,11 @@ import {
   type ExportFolder,
 } from "@/api/system";
 import { ApiError } from "@/api/client";
+import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
+import { DateInput } from "@/components/date-input";
+import { NumberInput } from "@/components/number-input";
 import { PageHeader } from "@/components/ui/page-header";
+import { Select } from "@/components/ui/select";
 import { useAuthStore } from "@/store/auth";
 
 type WorkspaceTab = "generation" | "database" | "exports";
@@ -64,6 +68,8 @@ export function GenerationPage() {
   const [registryResult, setRegistryResult] = useState<RegistryImportResponse | null>(null);
   const [isImportingRegistry, setIsImportingRegistry] = useState(false);
   const [isDeletingFolder, setIsDeletingFolder] = useState<string | null>(null);
+  const [pendingFolderDelete, setPendingFolderDelete] = useState<{ path: string; name: string } | null>(null);
+  const [deleteFolderError, setDeleteFolderError] = useState<string | null>(null);
 
   const [registrySearch, setRegistrySearch] = useState("");
   const [registryFilterKind, setRegistryFilterKind] = useState<InstrumentKind | "all">("all");
@@ -284,17 +290,24 @@ export function GenerationPage() {
     }
   }
 
-  async function handleDeleteFolder(folderPath: string, folderName: string) {
-    if (!token) return;
-    const confirmed = window.confirm(`Удалить папку «${folderName}» со всеми файлами?`);
-    if (!confirmed) return;
-    setIsDeletingFolder(folderPath);
-    setError(null);
+  /** The dialog asks; nothing is deleted until the owner confirms in it. */
+  function handleDeleteFolder(folderPath: string, folderName: string) {
+    setDeleteFolderError(null);
+    setPendingFolderDelete({ path: folderPath, name: folderName });
+  }
+
+  async function confirmDeleteFolder() {
+    const target = pendingFolderDelete;
+    if (!token || !target) return;
+    setIsDeletingFolder(target.path);
+    setDeleteFolderError(null);
     try {
-      await deleteExportFolder(token, folderPath);
+      await deleteExportFolder(token, target.path);
       await queryClient.invalidateQueries({ queryKey: ["system-status"] });
-    } catch {
-      setError("Не удалось удалить папку.");
+      setPendingFolderDelete(null);
+    } catch (caught) {
+      // The refusal stays inside the dialog: the page's own banner would be behind it.
+      setDeleteFolderError(caught instanceof ApiError ? caught.message : "Не удалось удалить папку.");
     } finally {
       setIsDeletingFolder(null);
     }
@@ -336,20 +349,24 @@ export function GenerationPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm text-steel">
                 Тип прибора
-                <select className="form-input mt-1" value={kind} onChange={(e) => setKind(e.target.value as InstrumentKind)}>
-                  <option value="manometers">Манометры</option>
-                  <option value="pressure_sensors">Датчики давления</option>
-                  <option value="controllers">Контроллеры</option>
-                  <option value="thermometers">Термопреобразователи</option>
-                  <option value="level_meters">Уровнемеры</option>
-                </select>
+                <Select<InstrumentKind>
+                  className="mt-1"
+                  onChange={(next) => setKind(next)}
+                  options={INSTRUMENT_KIND_OPTIONS}
+                  value={kind}
+                />
               </label>
               <label className="block text-sm text-steel">
                 Режим
-                <select className="form-input mt-1" value={mode} onChange={(e) => setMode(e.target.value as "pdf" | "html")}>
-                  <option value="pdf">PDF-пакет</option>
-                  <option value="html">HTML-превью</option>
-                </select>
+                <Select<"pdf" | "html">
+                  className="mt-1"
+                  onChange={(next) => setMode(next)}
+                  options={[
+                    { value: "pdf", label: "PDF-пакет" },
+                    { value: "html", label: "HTML-превью" },
+                  ]}
+                  value={mode}
+                />
               </label>
               <label className="block text-sm text-steel">
                 Файл приборов
@@ -363,7 +380,11 @@ export function GenerationPage() {
               ) : (
                 <label className="block text-sm text-steel">
                   Строка для превью
-                  <input className="form-input mt-1" min={1} type="number" value={previewRow} onChange={(e) => setPreviewRow(Number(e.target.value) || 1)} />
+                  <NumberInput
+                    className="form-input mt-1"
+                    value={String(previewRow)}
+                    onValueChange={(value) => setPreviewRow(Number(value) || 1)}
+                  />
                 </label>
               )}
             </div>
@@ -371,7 +392,12 @@ export function GenerationPage() {
             {kind === "controllers" && mode === "pdf" ? (
               <label className="block text-sm text-steel">
                 Количество каналов
-                <input className="form-input mt-1" min={1} max={99} type="number" value={channelsCountStr} onChange={(e) => setChannelsCountStr(e.target.value)} />
+                <NumberInput
+                  className="form-input mt-1"
+                  maxLength={2}
+                  value={channelsCountStr}
+                  onValueChange={setChannelsCountStr}
+                />
               </label>
             ) : null}
 
@@ -485,22 +511,21 @@ export function GenerationPage() {
                 <h3 className="font-semibold text-ink">Реестр</h3>
                 <div className="flex flex-wrap items-center gap-2">
                   <input className="form-input max-w-[200px]" placeholder="Поиск..." type="text" value={registrySearch} onChange={(e) => setRegistrySearch(e.target.value)} />
-                  <select className="form-input max-w-[160px]" value={registryFilterKind} onChange={(e) => setRegistryFilterKind(e.target.value as InstrumentKind | "all")}>
-                    <option value="all">Все типы</option>
-                  <option value="manometers">Манометры</option>
-                  <option value="pressure_sensors">Датчики давления</option>
-                  <option value="controllers">Контроллеры</option>
-                  <option value="thermometers">Термопреобразователи</option>
-                  <option value="level_meters">Уровнемеры</option>
-                  </select>
+                  <Select<InstrumentKind | "all">
+                    className="max-w-[200px]"
+                    compact
+                    onChange={(next) => setRegistryFilterKind(next)}
+                    options={[{ value: "all", label: "Все типы" }, ...INSTRUMENT_KIND_OPTIONS]}
+                    value={registryFilterKind}
+                  />
                   <input className="form-input max-w-[180px]" placeholder="Источник файла..." type="text" value={registrySource} onChange={(e) => setRegistrySource(e.target.value)} />
                   <label className="flex items-center gap-1 text-sm text-steel">
                     от
-                    <input className="form-input w-[130px]" type="date" value={registryLoadedAtFrom} onChange={(e) => setRegistryLoadedAtFrom(e.target.value)} />
+                    <DateInput className="form-input w-[130px]" value={registryLoadedAtFrom} onChange={(value) => setRegistryLoadedAtFrom(value)} />
                   </label>
                   <label className="flex items-center gap-1 text-sm text-steel">
                     до
-                    <input className="form-input w-[130px]" type="date" value={registryLoadedAtTo} onChange={(e) => setRegistryLoadedAtTo(e.target.value)} />
+                    <DateInput className="form-input w-[130px]" value={registryLoadedAtTo} onChange={(value) => setRegistryLoadedAtTo(value)} />
                   </label>
                   <label className="flex items-center gap-2 text-sm text-steel">
                     <input checked={registryActiveOnly} type="checkbox" onChange={(e) => setRegistryActiveOnly(e.target.checked)} />
@@ -583,9 +608,36 @@ export function GenerationPage() {
           )}
         </div>
       ) : null}
+
+      <DeleteConfirmModal
+        confirmLabel="Удалить папку"
+        description={
+          pendingFolderDelete
+            ? `Папка «${pendingFolderDelete.name}» будет удалена со всеми файлами. Это необратимо.`
+            : undefined
+        }
+        errorMessage={deleteFolderError}
+        isOpen={pendingFolderDelete !== null}
+        isPending={isDeletingFolder !== null}
+        title="Удалить папку экспорта?"
+        onClose={() => {
+          setPendingFolderDelete(null);
+          setDeleteFolderError(null);
+        }}
+        onConfirm={() => void confirmDeleteFolder()}
+      />
     </section>
   );
 }
+
+/** The instrument kinds the generator accepts, in the order the forms offer them. */
+const INSTRUMENT_KIND_OPTIONS: Array<{ value: InstrumentKind; label: string }> = [
+  { value: "manometers", label: "Манометры" },
+  { value: "pressure_sensors", label: "Датчики давления" },
+  { value: "controllers", label: "Контроллеры" },
+  { value: "thermometers", label: "Термопреобразователи" },
+  { value: "level_meters", label: "Уровнемеры" },
+];
 
 function computeProgress(job: GenerationJob | null, status: RunStatus, stageIndex: number): number {
   if (status === "success") return 100;
