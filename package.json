@@ -1,7 +1,7 @@
 {
   "name": "metro-gen",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
     "setup:local": "bash ./scripts/local/setup.sh",
     "start:backend": "bash ./scripts/local/backend.sh",
