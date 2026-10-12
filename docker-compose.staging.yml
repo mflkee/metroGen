@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "${POSTGRES_STG_PORT:-5437}:5432"
+      - "172.17.0.1:${POSTGRES_STG_PORT:-5437}:5432"
 
   api:
     image: ghcr.io/mflkee/metrogen-api:${IMAGE_TAG:-latest}
