@@ -2018,6 +2018,29 @@ textarea.form-input {
   color: var(--success) !important;
 }
 
+/* The rest of the legacy `signal.*` names: they used to resolve from the app's Tailwind
+   config (the light palette) and were never re-pointed, so `hover:text-signal-info` — ten
+   of those in metroLog alone — hovered into a dark blue in a dark theme. */
+.bg-signal-info {
+  background-color: var(--accent) !important;
+}
+
+.hover\:text-signal-info:hover {
+  color: var(--accent) !important;
+}
+
+.text-signal-warn {
+  color: var(--warning) !important;
+}
+
+.text-signal-danger {
+  color: var(--danger-text) !important;
+}
+
+.border-signal-danger {
+  border-color: var(--danger) !important;
+}
+
 .hover\:text-ink:hover {
   color: var(--text-primary) !important;
 }
@@ -2377,6 +2400,10 @@ textarea.form-input {
 :root {
   /* A document preview is paper: white in every theme. */
   --preview-surface: oklch(1 0 0);
+  /* A scrim over a photo (an attachment preview, a lightbox) is dark in every theme:
+     it sits on the image, not on the panel. Sites write `rgb(var(--scrim-rgb)/0.72)`
+     so the shade stays one value and only the alpha varies. */
+  --scrim-rgb: 11 20 27;
 }
 
 .metric-card {
