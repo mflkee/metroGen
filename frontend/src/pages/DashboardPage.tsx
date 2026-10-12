@@ -48,12 +48,14 @@ export function DashboardPage() {
         </article>
         <article className="metric-card">
           <div className="metric-card__label">Активных записей</div>
-          <div className="metric-card__value">{status?.database.activeRegistryEntriesCount ?? "..."}</div>
+          <div className="metric-card__value">{status?.database?.activeRegistryEntriesCount ?? "..."}</div>
         </article>
         <article className="metric-card">
           <div className="metric-card__label">Владельцы / Методики</div>
           <div className="metric-card__value">
-            {status ? `${status.database.ownersCount} / ${status.database.methodologiesCount}` : "..."}
+            {status
+              ? `${status.database?.ownersCount ?? "—"} / ${status.database?.methodologiesCount ?? "—"}`
+              : "..."}
           </div>
         </article>
       </div>
