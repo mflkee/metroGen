@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { sendTestMentionEmail, updateProfile } from "@/api/auth";
 import { fetchSystemStatus } from "@/api/system";
 import { PageHeader } from "@/components/ui/page-header";
+import { SettingsSection } from "@/components/ui/settings-section";
 import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/store/auth";
 import { defaultVisibleThemes, themeOptions, type ThemeName, useThemeStore } from "@/store/theme";
@@ -21,7 +22,16 @@ export function SettingsPage() {
   const [mentionEmailNotificationsEnabled, setMentionEmailNotificationsEnabled] = useState(
     user?.mentionEmailNotificationsEnabled ?? true,
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);  const [expandedSections, setExpandedSections] = useState<Record<"themes" | "notifications", boolean>>({
+    themes: false,
+    notifications: false,
+  });
+
+  function toggleSection(section: "themes" | "notifications") {
+    setExpandedSections((current) => ({ ...current, [section]: !current[section] }));
+  }
+
+
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
@@ -107,55 +117,62 @@ export function SettingsPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="section-card">
-          <h3 className="text-lg font-semibold text-ink">Темы и уведомления</h3>
-          <p className="mt-1 text-sm text-steel">
-            Доступные темы пользователя хранятся в профиле и синхронизируются между устройствами.
-          </p>
+        <div className="space-y-4">
+          <SettingsSection
+            description="Список тем, которые будут доступны тебе в верхней панели."
+            expanded={expandedSections.themes}
+            title="Темы интерфейса"
+            onToggle={() => toggleSection("themes")}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {themeOptions.map((theme) => (
+                <label
+                  key={theme.value}
+                  className="flex items-center gap-3 rounded-2xl border border-line px-4 py-4 text-sm"
+                  htmlFor={`theme-${theme.value}`}
+                >
+                  <Switch
+                    checked={enabledThemes.includes(theme.value)}
+                    id={`theme-${theme.value}`}
+                    onCheckedChange={() => toggleTheme(theme.value)}
+                  />
+                  <span className="block font-medium text-ink">{theme.label}</span>
+                </label>
+              ))}
+            </div>
+          </SettingsSection>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {themeOptions.map((theme) => (
-              <label
-                key={theme.value}
-                className="flex items-center gap-3 rounded-2xl border border-line px-4 py-4 text-sm"
-                htmlFor={`theme-${theme.value}`}
+          <SettingsSection
+            description="Письмо на твой адрес, когда тебя упомянут в обсуждении."
+            expanded={expandedSections.notifications}
+            title="Уведомления"
+            onToggle={() => toggleSection("notifications")}
+          >
+            <label className="flex items-center gap-3 text-sm text-ink" htmlFor="mention-email">
+              <Switch
+                checked={mentionEmailNotificationsEnabled}
+                id="mention-email"
+                onCheckedChange={setMentionEmailNotificationsEnabled}
+              />
+              Разрешить тестовое SMTP-уведомление на email пользователя
+            </label>
+            <div className="flex flex-wrap gap-3">
+              <button className="btn-primary" disabled={isSubmitting} type="button" onClick={() => void handleSave()}>
+                {isSubmitting ? "Сохраняем..." : "Сохранить"}
+              </button>
+              <button
+                className="btn-secondary"
+                disabled={!statusQuery.data?.smtpConfigured || isSendingTestEmail}
+                type="button"
+                onClick={() => void handleSendTestEmail()}
               >
-                <Switch
-                  checked={enabledThemes.includes(theme.value)}
-                  id={`theme-${theme.value}`}
-                  onCheckedChange={() => toggleTheme(theme.value)}
-                />
-                <span className="block font-medium text-ink">{theme.label}</span>
-              </label>
-            ))}
-          </div>
-
-          <label className="mt-5 flex items-center gap-3 rounded-2xl border border-line px-4 py-4 text-sm text-ink" htmlFor="mention-email">
-            <Switch
-              checked={mentionEmailNotificationsEnabled}
-              id="mention-email"
-              onCheckedChange={setMentionEmailNotificationsEnabled}
-            />
-            Разрешить тестовое SMTP-уведомление на email пользователя
-          </label>
-
-          {error ? <p className="mt-4 text-sm text-[var(--danger-text)]">{error}</p> : null}
-          {message ? <p className="mt-4 text-sm text-signal-ok">{message}</p> : null}
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button className="btn-primary" disabled={isSubmitting} type="button" onClick={() => void handleSave()}>
-              {isSubmitting ? "Сохраняем..." : "Сохранить"}
-            </button>
-            <button
-              className="btn-secondary"
-              disabled={!statusQuery.data?.smtpConfigured || isSendingTestEmail}
-              type="button"
-              onClick={() => void handleSendTestEmail()}
-            >
-              {isSendingTestEmail ? "Отправляем..." : "Тестовое письмо"}
-            </button>
-          </div>
-        </section>
+                {isSendingTestEmail ? "Отправляем..." : "Тестовое письмо"}
+              </button>
+            </div>
+            {error ? <p className="text-sm text-[var(--danger-text)]">{error}</p> : null}
+            {message ? <p className="text-sm text-signal-ok">{message}</p> : null}
+          </SettingsSection>
+        </div>
 
         <aside className="section-card">
           <h3 className="text-lg font-semibold text-ink">Статус окружения</h3>
