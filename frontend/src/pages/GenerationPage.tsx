@@ -25,9 +25,11 @@ import {
 import { ApiError } from "@/api/client";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { DateInput } from "@/components/date-input";
+import { FileInput } from "@/components/ui/file-input";
 import { NumberInput } from "@/components/number-input";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/store/auth";
 
 type WorkspaceTab = "generation" | "database" | "exports";
@@ -370,12 +372,22 @@ export function GenerationPage() {
               </label>
               <label className="block text-sm text-steel">
                 Файл приборов
-                <input className="form-input mt-1" accept=".xlsx,.xlsm,.xls" type="file" onChange={(e) => setInstrumentFile(e.target.files?.[0] ?? null)} />
+                <FileInput
+                  accept=".xlsx,.xlsm,.xls"
+                  className="mt-1"
+                  fileName={instrumentFile?.name ?? null}
+                  onChange={(e) => setInstrumentFile(e.target.files?.[0] ?? null)}
+                />
               </label>
               {mode === "pdf" ? (
                 <label className="block text-sm text-steel">
                   Файл реестра (опционально)
-                  <input className="form-input mt-1" accept=".xlsx,.xlsm,.xls" type="file" onChange={(e) => setDbFile(e.target.files?.[0] ?? null)} />
+                  <FileInput
+                    accept=".xlsx,.xlsm,.xls"
+                    className="mt-1"
+                    fileName={dbFile?.name ?? null}
+                    onChange={(e) => setDbFile(e.target.files?.[0] ?? null)}
+                  />
                 </label>
               ) : (
                 <label className="block text-sm text-steel">
@@ -402,8 +414,8 @@ export function GenerationPage() {
             ) : null}
 
             {(kind === "manometers" || kind === "pressure_sensors") && mode === "pdf" ? (
-              <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
-                <input checked={failedMode} type="checkbox" onChange={(e) => setFailedMode(e.target.checked)} />
+              <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink" htmlFor="generation-failed-mode">
+                <Switch checked={failedMode} id="generation-failed-mode" onCheckedChange={setFailedMode} />
                 Браковочный протокол
               </label>
             ) : null}
@@ -477,10 +489,14 @@ export function GenerationPage() {
               <h3 className="font-semibold text-ink">Импорт реестра</h3>
               <label className="block text-sm text-steel">
                 Excel-файл(ы)
-                <input
-                  className="form-input mt-1"
+                <FileInput
                   accept=".xlsx,.xlsm,.xls"
-                  type="file"
+                  className="mt-1"
+                  fileName={
+                    registryFiles.length
+                      ? `${registryFiles.length} файл(ов): ${registryFiles.map((f) => f.name).join(", ")}`
+                      : null
+                  }
                   multiple
                   onChange={(e) => setRegistryFiles(Array.from(e.target.files ?? []))}
                 />
@@ -527,45 +543,45 @@ export function GenerationPage() {
                     до
                     <DateInput className="form-input w-[130px]" value={registryLoadedAtTo} onChange={(value) => setRegistryLoadedAtTo(value)} />
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-steel">
-                    <input checked={registryActiveOnly} type="checkbox" onChange={(e) => setRegistryActiveOnly(e.target.checked)} />
+                  <label className="flex items-center gap-2 text-sm text-steel" htmlFor="registry-active-only">
+                    <Switch checked={registryActiveOnly} id="registry-active-only" onCheckedChange={setRegistryActiveOnly} />
                     Активные
                   </label>
                 </div>
               </div>
 
               <div className="overflow-x-auto rounded-2xl border border-line">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[var(--surface-2)] text-left text-steel">
+                <table className="data-table">
+                  <thead>
                     <tr>
-                      <th className="px-3 py-2 font-medium">Дата поверки</th>
-                      <th className="px-3 py-2 font-medium">Серийник</th>
-                      <th className="px-3 py-2 font-medium">Документ</th>
-                      <th className="px-3 py-2 font-medium">Владелец</th>
-                      <th className="px-3 py-2 font-medium">Методика</th>
-                      <th className="px-3 py-2 font-medium">Источник</th>
-                      <th className="px-3 py-2 font-medium">Загружено</th>
-                      <th className="px-3 py-2 font-medium">Статус</th>
+                      <th>Дата поверки</th>
+                      <th>Серийник</th>
+                      <th>Документ</th>
+                      <th>Владелец</th>
+                      <th>Методика</th>
+                      <th>Источник</th>
+                      <th>Загружено</th>
+                      <th>Статус</th>
                     </tr>
                   </thead>
                   <tbody>
                     {registryEntriesQuery.isLoading ? (
-                      <tr><td className="px-3 py-4 text-steel" colSpan={8}>Загрузка...</td></tr>
+                      <tr><td className="text-center text-steel" colSpan={8}>Загрузка...</td></tr>
                     ) : registryEntriesQuery.data?.items.length ? (
                       registryEntriesQuery.data.items.map((entry) => (
-                        <tr key={entry.id} className="border-t border-line">
+                        <tr key={entry.id} >
                           <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.verificationDate ? new Date(entry.verificationDate).toLocaleDateString("ru-RU") : "—"}</td>
-                          <td className="px-3 py-2 text-ink">{entry.serial ?? "—"}</td>
-                          <td className="px-3 py-2 text-ink">{entry.documentNo ?? "—"}</td>
-                          <td className="px-3 py-2 text-ink">{entry.ownerName ?? "—"}</td>
-                          <td className="px-3 py-2 text-ink">{entry.methodology ?? "—"}</td>
-                          <td className="px-3 py-2 text-ink text-xs">{entry.sourceFile ?? "—"}</td>
+                          <td className="text-ink">{entry.serial ?? "—"}</td>
+                          <td className="text-ink">{entry.documentNo ?? "—"}</td>
+                          <td className="text-ink">{entry.ownerName ?? "—"}</td>
+                          <td className="text-ink">{entry.methodology ?? "—"}</td>
+                          <td className="text-ink text-xs">{entry.sourceFile ?? "—"}</td>
                           <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.loadedAt ? new Date(entry.loadedAt).toLocaleDateString("ru-RU") : "—"}</td>
-                          <td className="px-3 py-2"><span className={["status-chip", entry.isActive ? "status-chip--ok" : ""].join(" ")}>{entry.isActive ? "Активна" : "Архив"}</span></td>
+                          <td ><span className={["status-chip", entry.isActive ? "status-chip--ok" : ""].join(" ")}>{entry.isActive ? "Активна" : "Архив"}</span></td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td className="px-3 py-4 text-steel" colSpan={8}>Нет записей.</td></tr>
+                      <tr><td className="text-center text-steel" colSpan={8}>Нет записей.</td></tr>
                     )}
                   </tbody>
                 </table>

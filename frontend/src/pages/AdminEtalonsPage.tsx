@@ -235,42 +235,42 @@ export function AdminEtalonsPage() {
         ) : null}
 
         <div className="overflow-x-auto rounded-2xl border border-line">
-          <table className="min-w-full text-sm">
-            <thead className="bg-[var(--surface-2)] text-left text-steel">
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 font-medium">Код (ФИФ)</th>
-                <th className="px-4 py-3 font-medium">Название</th>
-                <th className="px-4 py-3 font-medium">Обозначение</th>
-                <th className="px-4 py-3 font-medium">Зав. номер</th>
-                <th className="px-4 py-3 font-medium">Разряд</th>
-                <th className="px-4 py-3 font-medium">Свидетельство</th>
-                <th className="px-4 py-3 font-medium">Действ. до</th>
-                <th className="px-4 py-3 font-medium" />
+                <th>Код (ФИФ)</th>
+                <th>Название</th>
+                <th>Обозначение</th>
+                <th>Зав. номер</th>
+                <th>Разряд</th>
+                <th>Свидетельство</th>
+                <th>Действ. до</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {etalonsQuery.isLoading ? (
                 <tr>
-                  <td className="px-4 py-6 text-steel" colSpan={8}>
+                  <td className="text-center text-steel" colSpan={8}>
                     Загрузка...
                   </td>
                 </tr>
               ) : etalonsQuery.data?.length ? (
                 etalonsQuery.data.map((etalon) => (
-                  <tr key={etalon.id} className="border-t border-line">
-                    <td className="px-4 py-3 font-mono text-xs text-ink">{etalon.reg_number}</td>
-                    <td className="px-4 py-3 text-ink">{etalon.title ?? "—"}</td>
-                    <td className="px-4 py-3 text-steel">{etalon.notation ?? "—"}</td>
-                    <td className="px-4 py-3 text-steel">{etalon.manufacture_num ?? "—"}</td>
-                    <td className="px-4 py-3 text-steel">{etalon.rank_code ?? "—"}</td>
-                    <td className="px-4 py-3 text-steel">{etalon.certificate_no ?? "—"}</td>
-                    <td className="px-4 py-3">
+                  <tr key={etalon.id} >
+                    <td className="font-mono text-xs text-ink">{etalon.reg_number}</td>
+                    <td className="text-ink">{etalon.title ?? "—"}</td>
+                    <td className="text-center text-steel">{etalon.notation ?? "—"}</td>
+                    <td className="text-center text-steel">{etalon.manufacture_num ?? "—"}</td>
+                    <td className="text-center text-steel">{etalon.rank_code ?? "—"}</td>
+                    <td className="text-center text-steel">{etalon.certificate_no ?? "—"}</td>
+                    <td >
                       <span className={isExpired(etalon.valid_to) ? "text-signal-danger" : "text-steel"}>
                         {formatDate(etalon.valid_to)}
                         {isExpired(etalon.valid_to) ? " (просрочено)" : ""}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="text-right">
                       <button className="btn-secondary btn-sm" type="button" onClick={() => startEdit(etalon)}>
                         Изменить
                       </button>
@@ -279,7 +279,7 @@ export function AdminEtalonsPage() {
                 ))
               ) : (
                 <tr>
-                  <td className="px-4 py-6 text-steel" colSpan={8}>
+                  <td className="text-center text-steel" colSpan={8}>
                     Нет записей.
                   </td>
                 </tr>

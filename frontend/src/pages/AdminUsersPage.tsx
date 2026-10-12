@@ -16,6 +16,7 @@ import {
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { isDeveloperRole, roleLabels } from "@/lib/roles";
 import { buildUserExtraInfo, matchesUserSearch, userSearchPlaceholder } from "@/lib/userSearch";
 import { useAuthStore } from "@/store/auth";
@@ -284,11 +285,11 @@ export function AdminUsersPage() {
             />
           </label>
 
-          <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
-            <input
+          <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink" htmlFor="create-user-active">
+            <Switch
               checked={form.isActive}
-              type="checkbox"
-              onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
+              id="create-user-active"
+              onCheckedChange={(checked) => setForm((current) => ({ ...current, isActive: checked }))}
             />
             Активная учетная запись
           </label>
@@ -449,12 +450,12 @@ export function AdminUsersPage() {
                             </label>
 
                             <div className="flex flex-wrap items-center gap-3">
-                              <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
-                                <input
+                              <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink" htmlFor={`row-active-${user.id}`}>
+                                <Switch
                                   checked={draftIsActive}
                                   disabled={!canManageUser || updateUserMutation.isPending}
-                                  type="checkbox"
-                                  onChange={(event) => setDraftIsActive(event.target.checked)}
+                                  id={`row-active-${user.id}`}
+                                  onCheckedChange={setDraftIsActive}
                                 />
                                 Активный пользователь
                               </label>

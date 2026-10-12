@@ -8,6 +8,7 @@ import { deleteUser, fetchUserById, resetUserPassword, updateUser } from "@/api/
 import type { UserRole } from "@/api/auth";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { roleLabels } from "@/lib/roles";
 import { useAuthStore } from "@/store/auth";
 
@@ -143,8 +144,8 @@ export function UserDetailsPage() {
               value={role}
             />
           </label>
-          <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink">
-            <input checked={isActive} type="checkbox" onChange={(event) => setIsActive(event.target.checked)} />
+          <label className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-sm text-ink" htmlFor="user-details-active">
+            <Switch checked={isActive} id="user-details-active" onCheckedChange={setIsActive} />
             Активная учетная запись
           </label>
 

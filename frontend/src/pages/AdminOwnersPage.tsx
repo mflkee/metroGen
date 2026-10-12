@@ -116,31 +116,31 @@ export function AdminOwnersPage() {
         ) : null}
 
         <div className="overflow-x-auto rounded-2xl border border-line">
-          <table className="min-w-full text-sm">
-            <thead className="bg-[var(--surface-2)] text-left text-steel">
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 font-medium">ID</th>
-                <th className="px-4 py-3 font-medium">Название</th>
-                <th className="px-4 py-3 font-medium">ИНН</th>
-                <th className="px-4 py-3 font-medium" />
+                <th>ID</th>
+                <th>Название</th>
+                <th>ИНН</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {ownersQuery.isLoading ? (
-                <tr><td className="px-4 py-6 text-steel" colSpan={4}>Загрузка...</td></tr>
+                <tr><td className="text-center text-steel" colSpan={4}>Загрузка...</td></tr>
               ) : ownersQuery.data?.length ? (
                 ownersQuery.data.map((owner) => (
-                  <tr key={owner.id} className="border-t border-line">
-                    <td className="px-4 py-3 text-steel">{owner.id}</td>
-                    <td className="px-4 py-3 text-ink">{owner.name}</td>
-                    <td className="px-4 py-3 text-steel">{owner.inn ?? "—"}</td>
-                    <td className="px-4 py-3">
+                  <tr key={owner.id} >
+                    <td className="text-center text-steel">{owner.id}</td>
+                    <td className="text-ink">{owner.name}</td>
+                    <td className="text-center text-steel">{owner.inn ?? "—"}</td>
+                    <td >
                       <button className="btn-secondary btn-sm" type="button" onClick={() => startEdit(owner)}>Редактировать</button>
                     </td>
                   </tr>
                 ))
               ) : (
-                <tr><td className="px-4 py-6 text-steel" colSpan={4}>Нет записей.</td></tr>
+                <tr><td className="text-center text-steel" colSpan={4}>Нет записей.</td></tr>
               )}
             </tbody>
           </table>

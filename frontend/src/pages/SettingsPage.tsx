@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { sendTestMentionEmail, updateProfile } from "@/api/auth";
 import { fetchSystemStatus } from "@/api/system";
 import { PageHeader } from "@/components/ui/page-header";
+import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/store/auth";
 import { defaultVisibleThemes, themeOptions, type ThemeName, useThemeStore } from "@/store/theme";
 
@@ -114,24 +115,26 @@ export function SettingsPage() {
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {themeOptions.map((theme) => (
-              <label key={theme.value} className="flex items-start gap-3 rounded-2xl border border-line px-4 py-4 text-sm">
-                <input
+              <label
+                key={theme.value}
+                className="flex items-center gap-3 rounded-2xl border border-line px-4 py-4 text-sm"
+                htmlFor={`theme-${theme.value}`}
+              >
+                <Switch
                   checked={enabledThemes.includes(theme.value)}
-                  type="checkbox"
-                  onChange={() => toggleTheme(theme.value)}
+                  id={`theme-${theme.value}`}
+                  onCheckedChange={() => toggleTheme(theme.value)}
                 />
-                <span>
-                  <span className="block font-medium text-ink">{theme.label}</span>
-                </span>
+                <span className="block font-medium text-ink">{theme.label}</span>
               </label>
             ))}
           </div>
 
-          <label className="mt-5 flex items-center gap-3 rounded-2xl border border-line px-4 py-4 text-sm text-ink">
-            <input
+          <label className="mt-5 flex items-center gap-3 rounded-2xl border border-line px-4 py-4 text-sm text-ink" htmlFor="mention-email">
+            <Switch
               checked={mentionEmailNotificationsEnabled}
-              type="checkbox"
-              onChange={(event) => setMentionEmailNotificationsEnabled(event.target.checked)}
+              id="mention-email"
+              onCheckedChange={setMentionEmailNotificationsEnabled}
             />
             Разрешить тестовое SMTP-уведомление на email пользователя
           </label>

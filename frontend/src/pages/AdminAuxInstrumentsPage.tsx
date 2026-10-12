@@ -111,33 +111,33 @@ export function AdminAuxInstrumentsPage() {
         ) : null}
 
         <div className="overflow-x-auto rounded-2xl border border-line">
-          <table className="min-w-full text-sm">
-            <thead className="bg-[var(--surface-2)] text-left text-steel">
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-4 py-3 font-medium">Название</th>
-                <th className="px-4 py-3 font-medium">Рег. номер</th>
-                <th className="px-4 py-3 font-medium">Модификация</th>
-                <th className="px-4 py-3 font-medium">Зав. номер</th>
-                <th className="px-4 py-3 font-medium">Свидетельство</th>
-                <th className="px-4 py-3 font-medium">Действ. до</th>
+                <th>Название</th>
+                <th>Рег. номер</th>
+                <th>Модификация</th>
+                <th>Зав. номер</th>
+                <th>Свидетельство</th>
+                <th>Действ. до</th>
               </tr>
             </thead>
             <tbody>
               {instrumentsQuery.isLoading ? (
-                <tr><td className="px-4 py-6 text-steel" colSpan={6}>Загрузка...</td></tr>
+                <tr><td className="text-center text-steel" colSpan={6}>Загрузка...</td></tr>
               ) : instrumentsQuery.data?.length ? (
                 instrumentsQuery.data.map((inst) => (
-                  <tr key={inst.id} className="border-t border-line">
-                    <td className="px-4 py-3 text-ink">{inst.title}</td>
-                    <td className="px-4 py-3 text-steel">{inst.reg_number}</td>
-                    <td className="px-4 py-3 text-steel">{inst.modification ?? "—"}</td>
-                    <td className="px-4 py-3 text-steel">{inst.manufacture_num}</td>
-                    <td className="px-4 py-3 text-steel">{inst.certificate_no ?? "—"}</td>
-                    <td className="px-4 py-3 text-steel">{formatDate(inst.valid_to)}</td>
+                  <tr key={inst.id} >
+                    <td className="text-ink">{inst.title}</td>
+                    <td className="text-center text-steel">{inst.reg_number}</td>
+                    <td className="text-center text-steel">{inst.modification ?? "—"}</td>
+                    <td className="text-center text-steel">{inst.manufacture_num}</td>
+                    <td className="text-center text-steel">{inst.certificate_no ?? "—"}</td>
+                    <td className="text-center text-steel">{formatDate(inst.valid_to)}</td>
                   </tr>
                 ))
               ) : (
-                <tr><td className="px-4 py-6 text-steel" colSpan={6}>Нет записей.</td></tr>
+                <tr><td className="text-center text-steel" colSpan={6}>Нет записей.</td></tr>
               )}
             </tbody>
           </table>

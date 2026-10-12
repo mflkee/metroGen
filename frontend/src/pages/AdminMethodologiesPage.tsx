@@ -154,24 +154,24 @@ export function AdminMethodologiesPage() {
                 <span className="text-sm font-medium text-steel">Пункты методики</span>
               </div>
               <div className="overflow-x-auto rounded-xl border border-line">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-[var(--surface-2)] text-left text-steel">
+                <table className="data-table">
+                  <thead>
                     <tr>
-                      <th className="px-3 py-2 font-medium">№</th>
-                      <th className="px-3 py-2 font-medium">Пункт</th>
-                      <th className="px-3 py-2 font-medium">Тип</th>
-                      <th className="px-3 py-2 font-medium">Название</th>
-                      <th className="px-3 py-2 font-medium" />
+                      <th>№</th>
+                      <th>Пункт</th>
+                      <th>Тип</th>
+                      <th>Название</th>
+                      <th />
                     </tr>
                   </thead>
                   <tbody>
                     {editPoints.map((p, idx) => (
-                      <tr key={`${p.position}-${idx}`} className="border-t border-line">
-                        <td className="px-3 py-2 text-steel">{idx + 1}</td>
-                        <td className="px-3 py-2">
+                      <tr key={`${p.position}-${idx}`} >
+                        <td className="text-center text-steel">{idx + 1}</td>
+                        <td >
                           <input className="form-input text-sm py-1" type="text" value={p.label} onChange={(e) => updatePoint(p.position, "label", e.target.value)} />
                         </td>
-                        <td className="px-3 py-2">
+                        <td >
                           <Select
                             compact
                             onChange={(next) => updatePoint(p.position, "point_type", next)}
@@ -183,10 +183,10 @@ export function AdminMethodologiesPage() {
                             value={p.point_type}
                           />
                         </td>
-                        <td className="px-3 py-2">
+                        <td >
                           <input className="form-input text-sm py-1" placeholder="Напр. Внешний осмотр" type="text" value={p.default_text} onChange={(e) => updatePoint(p.position, "default_text", e.target.value)} />
                         </td>
-                        <td className="px-3 py-2">
+                        <td >
                           <button className="btn-secondary btn-sm" type="button" onClick={() => removePoint(p.position)}>×</button>
                         </td>
                       </tr>
@@ -227,22 +227,22 @@ export function AdminMethodologiesPage() {
                 </div>
 
                 <div className="mt-3 overflow-x-auto rounded-xl border border-line">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-[var(--surface-2)] text-left text-steel">
+                  <table className="data-table">
+                    <thead>
                       <tr>
-                        <th className="px-3 py-2 font-medium">№</th>
-                        <th className="px-3 py-2 font-medium">Пункт</th>
-                        <th className="px-3 py-2 font-medium">Тип</th>
-                        <th className="px-3 py-2 font-medium">Название</th>
+                        <th>№</th>
+                        <th>Пункт</th>
+                        <th>Тип</th>
+                        <th>Название</th>
                       </tr>
                     </thead>
                     <tbody>
                       {m.points.map((p, idx) => (
-                        <tr key={`${p.position ?? "p"}-${idx}`} className="border-t border-line">
-                          <td className="px-3 py-2 text-steel">{idx + 1}</td>
-                          <td className="px-3 py-2 text-ink">{p.label}</td>
-                          <td className="px-3 py-2 text-steel">{p.point_type}</td>
-                          <td className="px-3 py-2 text-steel">{p.default_text ?? "—"}</td>
+                        <tr key={`${p.position ?? "p"}-${idx}`} >
+                          <td className="text-center text-steel">{idx + 1}</td>
+                          <td className="text-ink">{p.label}</td>
+                          <td className="text-center text-steel">{p.point_type}</td>
+                          <td className="text-center text-steel">{p.default_text ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>

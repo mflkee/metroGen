@@ -218,29 +218,29 @@ export function DeveloperDashboardPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-black/5 text-xs uppercase tracking-[0.12em] text-steel">
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <th className="px-5 py-3">Пользователь</th>
-                    <th className="px-5 py-3">Роль</th>
-                    <th className="px-5 py-3">Статус</th>
-                    <th className="px-5 py-3">Последний вход</th>
-                    <th className="px-5 py-3">Последняя активность</th>
-                    <th className="px-5 py-3">Действие</th>
+                    <th>Пользователь</th>
+                    <th>Роль</th>
+                    <th>Статус</th>
+                    <th>Последний вход</th>
+                    <th>Последняя активность</th>
+                    <th>Действие</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleUsersByLastLogin.length ? (
                     visibleUsersByLastLogin.map((user) => (
                       <tr key={user.id} className="border-t border-line align-top text-ink">
-                        <td className="px-5 py-4">
+                        <td >
                           <div>
                             <p className="font-semibold">{user.fullName || user.email}</p>
                             <p className="text-steel">{user.email}</p>
                           </div>
                         </td>
-                        <td className="px-5 py-4">{roleLabels[user.role]}</td>
-                        <td className="px-5 py-4">
+                        <td >{roleLabels[user.role]}</td>
+                        <td >
                           <span
                             className={[
                               "monitor-status-badge rounded-full px-3 py-1 text-xs font-semibold",
@@ -252,9 +252,9 @@ export function DeveloperDashboardPage() {
                             {isOnline(user.lastSeenAt) ? "Онлайн" : user.isActive ? "Оффлайн" : "Отключен"}
                           </span>
                         </td>
-                        <td className="px-5 py-4">{formatDateTime(user.lastLoginAt)}</td>
-                        <td className="px-5 py-4">{formatDateTime(user.lastSeenAt)}</td>
-                        <td className="px-5 py-4">
+                        <td >{formatDateTime(user.lastLoginAt)}</td>
+                        <td >{formatDateTime(user.lastSeenAt)}</td>
+                        <td >
                           <Link className="btn-secondary btn-sm" to={`/admin/users/${user.id}`}>
                             Открыть
                           </Link>
@@ -262,8 +262,8 @@ export function DeveloperDashboardPage() {
                       </tr>
                     ))
                   ) : (
-                    <tr className="border-t border-line">
-                      <td className="px-5 py-6 text-sm text-steel" colSpan={6}>
+                    <tr>
+                      <td className="text-sm text-steel" colSpan={6}>
                         По этому запросу пользователи не найдены.
                       </td>
                     </tr>
