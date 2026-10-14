@@ -353,7 +353,9 @@ async def test_role_update_is_written_into_the_registry(monkeypatch: pytest.Monk
     async def fake_set(**kwargs) -> accounts_client.Grant:
         written.append(kwargs)
         return accounts_client.Grant(
-            role=kwargs["role"], role_updated_at="2026-10-14T06:00:00.000000Z"
+            role=kwargs["role"],
+            is_active=kwargs["is_active"],
+            role_updated_at="2026-10-14T06:00:00.000000Z",
         )
 
     monkeypatch.setattr(accounts_client, "set_service", fake_set)
@@ -366,6 +368,8 @@ async def test_role_update_is_written_into_the_registry(monkeypatch: pytest.Monk
 
     assert written and written[0]["email"] == "target@mkair.ru"
     assert written[0]["role"] == "ADMINISTRATOR"
+    # ...and says nothing about access: moving a role must not turn a revoked grant back on.
+    assert written[0]["is_active"] is None
     assert updated.role is UserRole.ADMINISTRATOR
 
 
@@ -446,7 +450,9 @@ async def test_role_write_sends_the_stamp_it_read(monkeypatch: pytest.MonkeyPatc
     async def fake_set(**kwargs) -> accounts_client.Grant:
         written.append(kwargs)
         return accounts_client.Grant(
-            role=kwargs["role"], role_updated_at="2026-10-14T06:00:00.000000Z"
+            role=kwargs["role"],
+            is_active=kwargs["is_active"],
+            role_updated_at="2026-10-14T06:00:00.000000Z",
         )
 
     monkeypatch.setattr(accounts_client, "set_service", fake_set)
@@ -481,3 +487,80 @@ async def test_a_second_page_load_writes_nothing(monkeypatch: pytest.MonkeyPatch
     assert session.commits == 1
     await service.list_users()
     assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_user_list_takes_the_access_flag_from_the_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A revoked grant shows up as an inactive row here too, without waiting for a sign-in."""
+
+    _enable_registry(monkeypatch)
+    user = _local_user(role=UserRole.MKAIR)
+    _stub_user_repository(monkeypatch, [user])
+
+    async def fake_list() -> list[dict]:
+        return _registry_listing(role="MKAIR", service_active=False)
+
+    monkeypatch.setattr(accounts_client, "list_accounts", fake_list)
+
+    session = _CountingSession()
+    await UserService(session).list_users()
+
+    assert user.is_active is False
+    assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_an_access_change_is_written_into_the_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The switch in the user list is the registry's flag, so flipping it writes there."""
+
+    _enable_registry(monkeypatch)
+    user = _local_user(role=UserRole.MKAIR)
+    _stub_user_repository(monkeypatch, [user])
+
+    written: list[dict] = []
+
+    async def fake_set(**kwargs) -> accounts_client.Grant:
+        written.append(kwargs)
+        return accounts_client.Grant(
+            role=kwargs["role"],
+            is_active=kwargs["is_active"],
+            role_updated_at="2026-10-14T06:00:00.000000Z",
+        )
+
+    monkeypatch.setattr(accounts_client, "set_service", fake_set)
+
+    updated = await UserService(_CountingSession()).update_user(
+        user_id=1,
+        payload=UserUpdateRequest(is_active=False),
+        current_user=_local_user(role=UserRole.DEVELOPER),
+    )
+
+    assert written[0]["is_active"] is False
+    assert written[0]["role"] == "MKAIR"  # the role is carried along, unchanged
+    assert updated.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_login_does_not_switch_the_local_row_back_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The flag mirrors the registry; a sign-in is not a reason to raise it."""
+
+    _enable_registry(monkeypatch)
+    existing = _local_user(role=UserRole.MKAIR, is_active=False)
+    _patch_repository(monkeypatch, existing)
+
+    async def fake_verify(**_kwargs) -> dict:
+        return {"email": "target@mkair.ru", "is_active": True, "role": "MKAIR"}
+
+    monkeypatch.setattr(accounts_client, "verify", fake_verify)
+
+    user, _token = await AuthService(_DummySession()).login(
+        LoginRequest(email="target@mkair.ru", password="Whatever-1")
+    )
+
+    assert user.is_active is False

@@ -21,6 +21,7 @@ class Grant:
     """One service's grant in the registry, as the registry stamps it."""
 
     role: str | None
+    is_active: bool | None
     role_updated_at: str | None
 
 
@@ -128,7 +129,7 @@ async def set_service(
     *,
     email: str,
     role: str | None,
-    is_active: bool = True,
+    is_active: bool | None = None,
     if_unmodified_since: datetime | None = None,
 ) -> Grant:
     """Write the role into the registry and return the grant it put in force.
@@ -137,6 +138,9 @@ async def set_service(
     follows this answer. `if_unmodified_since` is the stamp the local copy was built from: when
     the registry has moved on since, it answers 409 and the caller must leave the local row (and
     its stamp) alone — that is the whole point of sending it rather than writing blind.
+
+    `is_active=None` says nothing about the flag: a write that only moves the role must not turn
+    access back on.
 
     A 409 (someone changed the role while this page was open) and a 503 (registry down) both come
     back as HTTPException.
@@ -155,9 +159,10 @@ async def set_service(
         if entry.get("service") == settings.ACCOUNTS_SERVICE_NAME:
             return Grant(
                 role=entry.get("role"),
+                is_active=entry.get("is_active"),
                 role_updated_at=entry.get("role_updated_at"),
             )
-    return Grant(role=role, role_updated_at=None)
+    return Grant(role=role, is_active=is_active, role_updated_at=None)
 
 
 def _stamp_for_wire(value: datetime | None) -> str | None:

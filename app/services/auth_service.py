@@ -71,12 +71,9 @@ class AuthService:
         elif role is not None and user.role != role:
             user.role = role
 
-        user.is_active = bool(account.get("is_active", True))
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is inactive.",
-            )
+        # The access flag belongs to the registry and is enforced there: a revoked grant never
+        # reaches this point (`verify` answers 403), and a local row mirrors the registry on the
+        # next read instead of being raised here by a sign-in.
         return user
 
     async def change_password(self, *, user: User, payload: ChangePasswordRequest) -> None:
