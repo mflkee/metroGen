@@ -15,6 +15,7 @@ from app.api.routes.owners import router as owners_router
 from app.api.routes.protocols import router as protocols_router
 from app.api.routes.registry import router as registry_router
 from app.api.routes.system import router as system_router
+from app.api.routes.templates import router as templates_router
 from app.api.routes.users import router as users_router
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(owners_router)
     app.include_router(registry_router)
     app.include_router(system_router)
+    app.include_router(templates_router)
     app.include_router(users_router)
 
     frontend_dist_path = settings.frontend_dist_path

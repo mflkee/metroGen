@@ -36,6 +36,16 @@ class LevelMeter(TableGenerator):
 
         ctx = gi.ctx or {}
         mitype_number = str(ctx.get("mitype_number") or "").strip()
+        template_id = str(ctx.get("template_id") or "").strip().lower()
+
+        # Под-форма выбирается формой (`template_id` из правила или override). Номер типа —
+        # только фоллбэк, когда форма задана базовой (`level_meter`) или не задана вовсе.
+        if template_id in ("", "level_meter"):
+            wants_two_tables = mitype_number == "86065-22"
+            wants_current_output = mitype_number == "47249-16"
+        else:
+            wants_two_tables = template_id == "level_meter_two_tables"
+            wants_current_output = template_id == "level_meter_current_output"
 
         n = max(int(gi.points or 5), 2)
 
@@ -80,7 +90,7 @@ class LevelMeter(TableGenerator):
         }
 
         # === Insol 86065-22 — вторая таблица (раздела сред) ===
-        if mitype_number == "86065-22":
+        if wants_two_tables:
             rows_b: list[dict[str, object]] = []
             for ref_val in steps:
                 err_mm = uniform(-err_limit_mm * 0.6, err_limit_mm * 0.6)
@@ -101,7 +111,8 @@ class LevelMeter(TableGenerator):
             result["insol_two_tables"] = True
 
         # === Levelflex FMP51 47249-16 — токовый выход мА ===
-        if mitype_number == "47249-16":
+        if wants_current_output:
+
             def _current_row(ref: float, err_max: float) -> dict[str, str]:
                 err = uniform(-err_max, err_max)
                 err = max(-err_max, min(err_max, err))

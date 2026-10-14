@@ -15,7 +15,8 @@ from app.services.arshin_client import resolve_etalon_certs_from_details
 from app.services.generators.base import FixedPctTol, GenInput
 from app.services.generators.registry import get_by_template
 from app.services.mappings import resolve_methodology, resolve_owner_and_inn
-from app.services.templates import TEMPLATES, resolve_template_id
+from app.services.template_rules import resolve_form
+from app.services.templates import TEMPLATES
 from app.utils.normalization import normalize_serial
 from app.utils.paths import sanitize_filename
 from app.utils.signatures import get_signature_render
@@ -779,6 +780,7 @@ async def build_context(
     protocol_number: str | None = None,
     methodology_code: str | None = None,
     http_client: httpx.AsyncClient | None = None,
+    session: AsyncSession | None = None,
 ) -> dict[str, Any]:
     # ИНН не обязателен — если нет, просто не показываем в протоколе
     if not (owner_inn or "").strip():
@@ -904,9 +906,7 @@ async def build_context(
     requested_etalon_reg_numbers = extract_requested_etalon_reg_numbers(excel_row)
     resolved_devices = excel_row.get("_resolved_etalon_devices")
     if isinstance(resolved_devices, list) and resolved_devices:
-        raw_etalon_sources = [
-            entry for entry in resolved_devices if isinstance(entry, Mapping)
-        ]
+        raw_etalon_sources = [entry for entry in resolved_devices if isinstance(entry, Mapping)]
     else:
         raw_etalon_sources = list(_etalon_sources(details))
         if requested_etalon_reg_numbers:
@@ -1028,9 +1028,7 @@ async def build_context(
         "device_info": device_info,
         "device_type_name": device_type_name,
         "device_modification": device_modification,
-        "show_vibration_line": _instrument_has_pointer(
-            device_type_name, device_modification
-        ),
+        "show_vibration_line": _instrument_has_pointer(device_type_name, device_modification),
         "mitypeNumber": excel_row.get("Обозначение СИ") or mi_single.get("mitypeNumber") or "",
         "manufactureNum": excel_row.get("Заводской номер") or mi_single.get("manufactureNum") or "",
         "manufactureYear": str(
@@ -1092,9 +1090,18 @@ async def build_context(
     mitype_number = context["mitypeNumber"]
     mitype_title = (details.get("miInfo", {}) or {}).get("singleMI", {}).get("mitypeTitle") or ""
 
-    template_id = resolve_template_id(method_code, mitype_number, mitype_title) or "pressure_common"
-    tpl = TEMPLATES.get(template_id, {})
+    resolution = await resolve_form(
+        session,
+        method_code=method_code,
+        mitype_number=mitype_number,
+        mitype_title=mitype_title,
+    )
+    template_id = resolution.template_id or "pressure_common"
     context["template_id"] = template_id
+    context["template_source"] = resolution.source
+    if resolution.rule_id is not None:
+        context["template_rule_id"] = resolution.rule_id
+    tpl = TEMPLATES.get(template_id, {})
 
     # Датчики давления: класс точности/пределы погрешности из Excel («КТ»/«Другие
     # параметры») или Аршина не приходят — берём дефолт из шаблона (0,075 %).
@@ -1237,7 +1244,7 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
     session: AsyncSession | None = kwargs.pop("session", None)
 
     if "excel_row" in kwargs:
-        return await build_context(**kwargs)
+        return await build_context(session=session, **kwargs)
 
     if len(args) >= 2 and not kwargs:
         excel_row: dict[str, Any] = dict(args[0] or {})
@@ -1382,6 +1389,7 @@ async def build_protocol_context(*args, **kwargs) -> dict[str, Any]:
             protocol_number=protocol_number or None,
             methodology_code=method_code_value,
             http_client=http_client,
+            session=session,
         )
 
     raise TypeError(

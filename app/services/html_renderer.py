@@ -1,6 +1,7 @@
 from __future__ import annotations
 # isort: skip_file
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,9 @@ from typing import Any
 from jinja2 import StrictUndefined
 from starlette.templating import Jinja2Templates
 
-from app.services.templates import resolve_template_id
+from app.services.templates import TEMPLATES, resolve_template_id
+
+logger = logging.getLogger(__name__)
 
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -87,24 +90,25 @@ def _display_or_fallback(value: Any, fallback: str = "") -> Any:
 
 
 def _template_name_from_context(ctx: dict[str, Any]) -> str:
-    method_code = (ctx.get("methodology_full") or ctx.get("method_code") or "").strip()
-    mitype_number = (ctx.get("mitypeNumber") or "").strip()
-    mitype_title = (ctx.get("device_info") or "").strip()
-    tpl_id = resolve_template_id(method_code, mitype_number, mitype_title)
+    """Pick the HTML file for the form the builder resolved.
 
-    # simple mapping id -> file
-    if tpl_id == "controller_43790_12":
-        return "controller_43790_12.html"
-    if tpl_id == "controller_65685_16":
-        return "controller_65685_16.html"
-    if tpl_id == "pressure_common":
-        return "pressure.html"
-    if tpl_id == "pressure_sensor":
-        return "pressure_sensor.html"
-    if tpl_id == "rtd_platinum":
-        return "rtd.html"
-    if tpl_id == "level_meter":
-        return "level_meter.html"
+    The resolved form arrives as ``context["template_id"]``; only when it is missing (an old
+    caller, a hand-made context) is the form derived again from the context fields, and that
+    fallback is logged so such callers can be fixed.
+    """
+    tpl_id = str(ctx.get("template_id") or "").strip()
+    if not tpl_id:
+        method_code = (ctx.get("methodology_full") or ctx.get("method_code") or "").strip()
+        mitype_number = (ctx.get("mitypeNumber") or "").strip()
+        mitype_title = (ctx.get("device_info") or "").strip()
+        tpl_id = resolve_template_id(method_code, mitype_number, mitype_title)
+        logger.warning(
+            "protocol render: context has no template_id; derived %r from its fields", tpl_id
+        )
+
+    path = (TEMPLATES.get(tpl_id) or {}).get("path")
+    if isinstance(path, str) and path:
+        return path
     return "pressure.html"
 
 

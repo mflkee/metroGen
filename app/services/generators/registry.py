@@ -45,6 +45,8 @@ def get_by_template(template_id: str | None) -> TableGenerator:
 register_template(_PRESSURE_ID, _PRESSURE)
 register_template(_PRESSURE_SENSOR_ID, _PRESSURE_SENSOR)
 register_template(_LEVEL_ID, _LEVEL)
+register_template("level_meter_two_tables", _LEVEL)
+register_template("level_meter_current_output", _LEVEL)
 register_template(_CTRL43790_ID, _CTRL43790)
 register_template(_CTRL65685_ID, _CTRL65685)
 register_template(_RTD_ID, _RTD)

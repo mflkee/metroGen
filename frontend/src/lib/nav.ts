@@ -61,6 +61,13 @@ const adminEtalonsNavigationItem: NavigationItem = {
   to: "/admin/etalons",
 };
 
+const adminTemplatesNavigationItem: NavigationItem = {
+  icon: "verification",
+  label: "Формы протоколов",
+  description: "Правила выбора формы протокола по типу прибора",
+  to: "/admin/templates",
+};
+
 export function getNavigationItems(role: UserRole | null | undefined): NavigationItem[] {
   const items = [...baseNavigationItems];
   if (hasAdminAccess(role)) {
@@ -71,6 +78,7 @@ export function getNavigationItems(role: UserRole | null | undefined): Navigatio
       adminMethodologiesNavigationItem,
       adminAuxInstrumentsNavigationItem,
       adminEtalonsNavigationItem,
+      adminTemplatesNavigationItem,
     );
   }
   return items;

@@ -34,6 +34,35 @@ class Template(Base):
     protocols: Mapped[list[Protocol]] = relationship(back_populates="template")
 
 
+class TemplateBindingRule(Base):
+    """Правило привязки формы протокола: тип прибора + условие → шаблон.
+
+    ``match_field``:
+      * ``mitype_number``      — точное совпадение с номером типа (``mitypeNumber``);
+      * ``title_keyword``      — все ключевые слова (через запятую) входят в название типа;
+      * ``methodology_code``   — код методики входит в строку методики.
+
+    Правила применяются по возрастанию ``priority``; первое совпавшее выигрывает.
+    При отсутствии совпадения используется форма методики, затем встроенные эвристики.
+    """
+
+    __tablename__ = "template_binding_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    instrument_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    match_field: Mapped[str] = mapped_column(String(32), nullable=False)
+    match_value: Mapped[str] = mapped_column(String(255), nullable=False)
+    template_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=text("now()")
+    )
+
+
 class Owner(Base):
     __tablename__ = "owners"
 
@@ -95,6 +124,7 @@ class Methodology(Base):
     document: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     allowable_variation_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    template_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     aliases: Mapped[list[MethodologyAlias]] = relationship(
         back_populates="methodology", cascade="all, delete-orphan"
@@ -355,6 +385,7 @@ class User(Base):
         server_default=text("now()"),
         nullable=False,
     )
+
 
 class Protocol(Base):
     __tablename__ = "protocols"
