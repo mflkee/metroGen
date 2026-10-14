@@ -54,6 +54,10 @@ class OwnerRepository(BaseRepository):
             select(models.Owner)
             .options(selectinload(models.Owner.aliases))
             .where(models.Owner.id == owner_id)
+            # `expire_on_commit=False`: без этого уже загруженная коллекция алиасов
+            # осталась бы устаревшей после commit, и ответ на PUT/PATCH показывал бы
+            # алиасы до правки.
+            .execution_options(populate_existing=True)
         )
         result = await self.session.execute(stmt)
         return result.unique().scalar_one_or_none()
@@ -198,6 +202,9 @@ class MethodologyRepository(BaseRepository):
                 selectinload(models.Methodology.points), selectinload(models.Methodology.aliases)
             )
             .where(models.Methodology.id == methodology_id)
+            # См. OwnerRepository.get_by_id: `expire_on_commit=False` требует явного
+            # обновления уже загруженных коллекций после commit.
+            .execution_options(populate_existing=True)
         )
         result = await self.session.execute(stmt)
         return result.unique().scalar_one_or_none()
