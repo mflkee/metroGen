@@ -92,15 +92,16 @@ number resolves to.
 - **WHEN** the previewed input matches no rule
 - **THEN** the UI shows that the result comes from the built-in fallback and names the form
 
-### Requirement: The generation workspace shows the resolved form
+### Requirement: The form is resolved without asking the operator
 
-The generation workspace SHALL show which forms the current input resolves to and SHALL allow an
-explicit form override for a run.
+The generation workspace SHALL keep a single instrument-kind choice per run and SHALL NOT ask the
+operator to pick a protocol form. The form SHALL be resolved per row from the mapping rules (by
+registration number, type description or methodology code) and the built-in fallback.
 
-#### Scenario: Show resolved forms
-- **WHEN** the user selects an instrument kind and provides an input
-- **THEN** the workspace shows the form(s) the input resolves to
+#### Scenario: A single level-meter option
+- **WHEN** the operator selects «Уровнемеры» and starts a run with mixed modifications
+- **THEN** the run uses one instrument kind and each row is rendered with the form its own data resolves to
 
-#### Scenario: Override a run
-- **WHEN** the user chooses an explicit form for a run
-- **THEN** the run uses that form regardless of matching rules
+#### Scenario: No form picker in the workspace
+- **WHEN** the operator starts a run
+- **THEN** the workspace offers no form picker; the resolution stays automatic

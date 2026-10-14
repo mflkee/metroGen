@@ -7,6 +7,8 @@ export type IconName =
   | "monitor"
   | "details"
   | "etalon"
+  | "aux"
+  | "form"
   | "delete";
 
 type IconProps = {
@@ -75,6 +77,22 @@ export function Icon({ name, className }: IconProps) {
         <svg className={baseClassName} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 3 5.25 5.25v6c0 4.2 2.85 7.35 6.75 9 3.9-1.65 6.75-4.8 6.75-9v-6L12 3Z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 11.25 1.75 1.75 3.25-3.5" />
+        </svg>
+      );
+    case "aux":
+      return (
+        <svg className={baseClassName} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 17.25a7.5 7.5 0 0 1 15 0" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 17.25l3.75-5.25" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 17.25h15" />
+        </svg>
+      );
+    case "form":
+      return (
+        <svg className={baseClassName} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 3.75h8.25L18 7.5v12.75H6z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 3.75V7.5H18" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6M9 15.75h6" />
         </svg>
       );
     case "delete":

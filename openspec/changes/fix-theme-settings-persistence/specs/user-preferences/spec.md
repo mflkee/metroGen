@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Определяет, как metroGen хранит и восстанавливает пользовательский выбор темы (в том числе сделанный
-в верхней панели) и как экран настроек держит черновик предпочтений относительно сохранённого
-профиля, чтобы выбор пользователя не терялся после перезагрузки и не откатывался самопроизвольно.
+Определяет, как metroGen хранит и восстанавливает пользовательский выбор темы (в том числе
+сделанный в верхней панели), как список доступных тем управляется из настроек и как черновик
+остальных предпочтений сосуществует с профилем.
 
 ## ADDED Requirements
 
@@ -26,6 +26,32 @@ immediately, even if saving the choice fails.
 - **WHEN** persisting the theme choice fails
 - **THEN** the theme stays applied locally and the interface does not revert while the session lasts
 
+### Requirement: Theme visibility is saved on toggle
+
+Toggling a theme in «Темы интерфейса» SHALL persist the enabled-theme list on the profile at once,
+so the choice survives a reload and appears in the top-bar picker without pressing a separate save
+button (which lives in another section and was easy to miss).
+
+#### Scenario: Enable a theme
+- **WHEN** a signed-in user enables a theme
+- **THEN** the profile's enabled-theme list is updated immediately and the theme appears in the top-bar picker
+
+#### Scenario: Disable a theme
+- **WHEN** a signed-in user disables a theme
+- **THEN** the profile's enabled-theme list is updated immediately
+
+#### Scenario: State survives a reload
+- **WHEN** the user reloads after toggling a theme
+- **THEN** the switch keeps the value the user chose
+
+#### Scenario: The last theme cannot be disabled
+- **WHEN** only one theme is enabled and the user tries to disable it
+- **THEN** the toggle does not change (at least one theme stays available)
+
+#### Scenario: Save failure
+- **WHEN** persisting a toggle fails
+- **THEN** an error is reported and the next profile load shows the persisted state
+
 ### Requirement: The topbar picker offers the enabled themes
 
 The top-bar theme picker SHALL offer the themes enabled on the profile, always including the theme
@@ -39,33 +65,16 @@ currently in use.
 - **WHEN** the theme in use is not in the enabled subset
 - **THEN** the picker still offers the theme in use
 
-### Requirement: Settings are edited as a local draft
+### Requirement: Notification settings are edited as a local draft
 
-The settings screen SHALL keep the enabled-theme list and the notification flag as a local draft
-seeded from the profile, and user edits SHALL remain until the user saves or signs in as another user.
-
-#### Scenario: Toggle a theme before saving
-- **WHEN** a signed-in user disables or enables a theme in «Темы интерфейса»
-- **THEN** the toggle reflects the user's choice immediately
-
-#### Scenario: Saving keeps the chosen values
-- **WHEN** the user saves the settings
-- **THEN** the toggles keep the values the user chose and a success message is shown
+The notification flag SHALL be a local draft applied by «Сохранить», seeded once per signed-in user,
+and SHALL NOT be reseeded when the profile object is updated for the same user.
 
 #### Scenario: Draft survives a profile update for the same user
-- **WHEN** the profile object in the client store is updated for the same user id (for example after saving)
-- **THEN** the settings draft is not reseeded from the profile and the user's edits remain
+- **WHEN** the profile object in the client store is updated for the same user id
+- **THEN** the notification draft is not reseeded from the profile and the user's edit remains
 
-### Requirement: Draft is reseeded per user
-
-The draft SHALL be seeded from the profile when the settings screen first becomes usable for a
-signed-in user, and re-seeded when a different user signs in.
-
-#### Scenario: First usable render
-- **WHEN** the settings screen renders with an available profile
-- **THEN** the toggles reflect the values persisted in the profile
-
-#### Scenario: Another user signs in
+#### Scenario: Draft is reseeded per user
 - **WHEN** a different user signs in and opens the settings screen
 - **THEN** the draft is seeded from that user's profile
 
@@ -78,9 +87,9 @@ when it is missing; it SHALL NOT remove or overwrite the user's other choices.
 - **WHEN** the user disables the theme that is currently applied
 - **THEN** the applied theme stays available and the rest of the draft is preserved
 
-#### Scenario: Switching theme updates the draft additively
+#### Scenario: Switching theme updates the list additively
 - **WHEN** the top-bar theme changes
-- **THEN** the enabled-theme list gains the new active theme without losing the user's other toggles
+- **THEN** the enabled-theme list gains the new active theme without losing the user's other choices
 
 ### Requirement: Saving reports its outcome in place
 

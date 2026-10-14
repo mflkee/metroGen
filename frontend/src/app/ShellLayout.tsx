@@ -1,11 +1,12 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
+import type { UserRole } from "@/api/auth";
 import { AppShell, type NavItem, type NavSection } from "@/components/app-shell";
 import { Icon, type IconName } from "@/components/Icon";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { AppVersionBadge } from "@/components/layout/AppVersionBadge";
 import { ArshinStatusIndicator } from "@/components/layout/ArshinStatusIndicator";
-import { getNavigationItems, type NavigationItem } from "@/lib/nav";
+import { getBottomNavigationItems, getNavigationItems, type NavigationItem } from "@/lib/nav";
 import { useAuthStore } from "@/store/auth";
 
 /**
@@ -21,17 +22,24 @@ function toShellNavItem(item: NavigationItem): NavItem {
   };
 }
 
-const HELP_SECTION: NavSection = {
-  label: "Справка",
-  items: [
-    {
-      to: "/help",
-      label: "Документация",
-      description: "Сценарии работы и подсказки",
-      icon: <Icon name="help" />,
-    },
-  ],
-};
+/**
+ * The block pinned to the bottom of the sidebar: administration (for admins) and the user's own
+ * settings, plus the documentation link.
+ */
+function buildBottomSection(role: UserRole | null | undefined): NavSection {
+  return {
+    label: "Управление",
+    items: [
+      ...getBottomNavigationItems(role).map(toShellNavItem),
+      {
+        to: "/help",
+        label: "Документация",
+        description: "Сценарии работы и подсказки",
+        icon: <Icon name="help" />,
+      },
+    ],
+  };
+}
 
 const TEMPORARY_PASSWORD_BANNER =
   "Временный пароль еще активен. Продолжение работы доступно только после смены пароля в профиле.";
@@ -52,7 +60,7 @@ export function ShellLayout() {
       banner={mustChangePassword ? TEMPORARY_PASSWORD_BANNER : undefined}
       brand="metroGen"
       brandTo="/dashboard"
-      help={HELP_SECTION}
+      help={buildBottomSection(user?.role)}
       mobileNavTitle="metroGen"
       nav={nav}
       statusIndicator={<ArshinStatusIndicator />}

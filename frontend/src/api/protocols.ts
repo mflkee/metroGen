@@ -2,7 +2,7 @@ import { apiRequest } from "@/api/client";
 
 export type InstrumentKind = "manometers" | "pressure_sensors" | "controllers" | "thermometers" | "level_meters";
 
-export function mapKindToApi(
+function mapKindToApi(
   kind: InstrumentKind,
 ): "manometers" | "controllers" | "thermometers" | "level_meters" {
   return kind === "pressure_sensors" ? "manometers" : kind;
@@ -90,15 +90,11 @@ export async function startGenerationJob(
   payload: FilePayload,
   failedMode = false,
   channelsCount = 0,
-  templateId: string | null = null,
 ): Promise<GenerationJobAccepted> {
   const formData = new FormData();
   formData.append("instrument_kind", mapKindToApi(kind));
   formData.append("failed_mode", String(failedMode));
   formData.append("channels_count", String(channelsCount));
-  if (templateId) {
-    formData.append("template_id", templateId);
-  }
   formData.append("instrument_file", payload.instrumentFile);
   if (payload.dbFile) {
     formData.append("db_file", payload.dbFile);

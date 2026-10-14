@@ -25,7 +25,7 @@
 - [x] 4.1 `GET /api/v1/templates` — каталог форм + допустимые типы приборов и условия; роутер зарегистрирован в `app/main.py`.
 - [x] 4.2 CRUD правил: `GET/POST /template-rules`, `PATCH/DELETE /template-rules/{id}` с валидацией `template_id`/`match_field`/`instrument_kind`; после каждой правки `template_rules.invalidate()`.
 - [x] 4.3 `POST /template-rules/preview` → форма + источник.
-- [x] 4.4 Override формы на запуск: `POST /protocols/jobs` принимает `template_id` (валидируется по каталогу), значение кладётся в строки как `_template_override` и доходит до `resolve_form` через `_run_generation_job`/`_generate_pdf_files`.
+- [x] 4.4 Override формы на запуск остаётся API-возможностью: `POST /protocols/jobs` принимает `template_id` (валидируется по каталогу) и доводит его до `resolve_form`. UI им не пользуется — задел под будущий редактор форм.
 - [x] 4.5 Тесты роутеров правил добавлены (`tests/test_reference_crud_routes.py`): каталог, CRUD, предпросмотр (правило и fallback), `400` на неизвестный `template_id`. *(прогон `pytest` — на сервере)*
 
 ## 5. Frontend
@@ -33,7 +33,7 @@
 - [x] 5.1 `src/api/templates.ts`: каталог, правила, предпросмотр.
 - [x] 5.2 `src/pages/AdminTemplatesPage.tsx`: раскрывающиеся правила, диалог создания/правки, включение/выключение, удаление с подтверждением, блок предпросмотра.
 - [x] 5.3 Роут `/admin/templates` и пункт «Формы протоколов» в навигации (ADMINISTRATOR/DEVELOPER).
-- [x] 5.4 `GenerationPage.tsx`: блок «Форма протокола» показывает активные правила для выбранного типа и даёт выбрать форму на запуск (`template_id` уходит в `/protocols/jobs`).
+- [x] 5.4 UI-блок «Форма протокола» в рабочей зоне генерации убран по фидбеку: там остаётся один выбор типа прибора, а форма решается под капотом по правилам (в т.ч. под-форма уровнемера — по номеру типа/модификации).
 
 ## 6. Проверка
 

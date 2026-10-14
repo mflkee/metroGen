@@ -8,6 +8,7 @@ export type NavigationItem = {
   to: string;
 };
 
+/** The everyday screens: always visible. */
 const baseNavigationItems: NavigationItem[] = [
   { icon: "home", label: "Главная", description: "Статус, экспорты и запуск сценариев", to: "/dashboard" },
   {
@@ -16,70 +17,80 @@ const baseNavigationItems: NavigationItem[] = [
     description: "PDF, БД, готовые run-пакеты и превью",
     to: "/generation",
   },
-  { icon: "settings", label: "Настройки", description: "Темы, SMTP и параметры интерфейса", to: "/settings" },
 ];
 
-const developerNavigationItem: NavigationItem = {
-  icon: "monitor",
-  label: "Мониторинг",
-  description: "Состояние сервиса, БД и активность пользователей",
-  to: "/developer",
-};
+/** The reference books: administrators only, but part of the main list. */
+const referenceNavigationItems: NavigationItem[] = [
+  {
+    icon: "details",
+    label: "Владельцы",
+    description: "Справочник организаций-владельцев СИ",
+    to: "/admin/owners",
+  },
+  {
+    icon: "verification",
+    label: "Методики",
+    description: "Справочник методик поверки СИ",
+    to: "/admin/methodologies",
+  },
+  {
+    icon: "aux",
+    label: "Вспом. СИ",
+    description: "Вспомогательные средства измерений",
+    to: "/admin/aux-instruments",
+  },
+  {
+    icon: "etalon",
+    label: "Эталоны",
+    description: "Справочник эталонов (ФИФ) с обновлением из Аршина",
+    to: "/admin/etalons",
+  },
+  {
+    icon: "form",
+    label: "Формы протоколов",
+    description: "Правила выбора формы протокола по типу прибора",
+    to: "/admin/templates",
+  },
+];
 
-const adminUsersNavigationItem: NavigationItem = {
-  icon: "users",
-  label: "Пользователи",
-  description: "Роли, временные пароли и быстрые действия",
-  to: "/admin/users",
-};
+/** Pinned to the bottom of the sidebar (with «Документация», added by the shell). */
+const adminBottomItems: NavigationItem[] = [
+  {
+    icon: "monitor",
+    label: "Мониторинг",
+    description: "Состояние сервиса, БД и активность пользователей",
+    to: "/developer",
+  },
+  {
+    icon: "users",
+    label: "Пользователи",
+    description: "Роли, временные пароли и быстрые действия",
+    to: "/admin/users",
+  },
+];
 
-const adminOwnersNavigationItem: NavigationItem = {
-  icon: "details",
-  label: "Владельцы",
-  description: "Справочник организаций-владельцев СИ",
-  to: "/admin/owners",
-};
-
-const adminMethodologiesNavigationItem: NavigationItem = {
-  icon: "verification",
-  label: "Методики",
-  description: "Справочник методик поверки СИ",
-  to: "/admin/methodologies",
-};
-
-const adminAuxInstrumentsNavigationItem: NavigationItem = {
+const settingsNavigationItem: NavigationItem = {
   icon: "settings",
-  label: "Вспом. СИ",
-  description: "Вспомогательные средства измерений",
-  to: "/admin/aux-instruments",
+  label: "Настройки",
+  description: "Темы, SMTP и параметры интерфейса",
+  to: "/settings",
 };
 
-const adminEtalonsNavigationItem: NavigationItem = {
-  icon: "etalon",
-  label: "Эталоны",
-  description: "Справочник эталонов (ФИФ) с обновлением из Аршина",
-  to: "/admin/etalons",
-};
-
-const adminTemplatesNavigationItem: NavigationItem = {
-  icon: "verification",
-  label: "Формы протоколов",
-  description: "Правила выбора формы протокола по типу прибора",
-  to: "/admin/templates",
-};
-
+/** The main sidebar list. */
 export function getNavigationItems(role: UserRole | null | undefined): NavigationItem[] {
   const items = [...baseNavigationItems];
   if (hasAdminAccess(role)) {
-    items.push(
-      developerNavigationItem,
-      adminUsersNavigationItem,
-      adminOwnersNavigationItem,
-      adminMethodologiesNavigationItem,
-      adminAuxInstrumentsNavigationItem,
-      adminEtalonsNavigationItem,
-      adminTemplatesNavigationItem,
-    );
+    items.push(...referenceNavigationItems);
   }
+  return items;
+}
+
+/** The block pinned to the bottom: administration and the user's own settings. */
+export function getBottomNavigationItems(role: UserRole | null | undefined): NavigationItem[] {
+  const items: NavigationItem[] = [];
+  if (hasAdminAccess(role)) {
+    items.push(...adminBottomItems);
+  }
+  items.push(settingsNavigationItem);
   return items;
 }

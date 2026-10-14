@@ -23,8 +23,8 @@ export function SettingsPage() {
     user?.mentionEmailNotificationsEnabled ?? true,
   );
   const [error, setError] = useState<string | null>(null);  const [expandedSections, setExpandedSections] = useState<Record<"themes" | "notifications", boolean>>({
-    themes: false,
-    notifications: false,
+    themes: true,
+    notifications: true,
   });
 
   function toggleSection(section: "themes" | "notifications") {
@@ -65,16 +65,45 @@ export function SettingsPage() {
     setEnabledThemes((current) => getVisibleThemes(current, currentTheme));
   }, [currentTheme]);
 
+  /**
+   * The theme switches save right away: a theme is a preference, not a draft, and the «Сохранить»
+   * button lives in the notifications section — leaving the choice unsaved made it look lost.
+   */
   function toggleTheme(theme: ThemeName) {
-    setEnabledThemes((current) => {
-      if (current.includes(theme)) {
-        if (current.length === 1) {
-          return current;
-        }
-        return current.filter((value) => value !== theme);
+    if (enabledThemes.includes(theme) && enabledThemes.length === 1) {
+      return;
+    }
+    const next = enabledThemes.includes(theme)
+      ? enabledThemes.filter((value) => value !== theme)
+      : [...enabledThemes, theme];
+    setEnabledThemes(next);
+    void persistThemeSelection(next);
+  }
+
+  async function persistThemeSelection(themes: ThemeName[]) {
+    if (!token) {
+      setError("Сессия неактивна. Войди заново.");
+      return;
+    }
+    setError(null);
+    try {
+      const nextTheme = themes.includes(currentTheme)
+        ? currentTheme
+        : themes[0] ?? defaultVisibleThemes[0];
+      if (nextTheme !== currentTheme) {
+        setTheme(nextTheme);
       }
-      return [...current, theme];
-    });
+      const updatedUser = await updateProfile(token, {
+        enabledThemes: themes,
+        themePreference: nextTheme,
+      });
+      setUser(updatedUser);
+      setMessage("Список тем сохранён.");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Не удалось сохранить список тем.",
+      );
+    }
   }
 
   async function handleSave() {
@@ -134,10 +163,13 @@ export function SettingsPage() {
         description="Панель тем и рабочих параметров пользователя. SMTP-часть вынесена сюда же, чтобы metroGen ощущался как полноценное приложение, а не только backend-утилита."
       />
 
+      {error ? <p className="text-sm text-[var(--danger-text)]">{error}</p> : null}
+      {message ? <p className="text-sm text-signal-ok">{message}</p> : null}
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <SettingsSection
-            description="Список тем, которые будут доступны тебе в верхней панели."
+            description="Темы, доступные в верхней панели. Переключатель сохраняется сразу."
             expanded={expandedSections.themes}
             title="Темы интерфейса"
             onToggle={() => toggleSection("themes")}
@@ -187,8 +219,6 @@ export function SettingsPage() {
                 {isSendingTestEmail ? "Отправляем..." : "Тестовое письмо"}
               </button>
             </div>
-            {error ? <p className="text-sm text-[var(--danger-text)]">{error}</p> : null}
-            {message ? <p className="text-sm text-signal-ok">{message}</p> : null}
           </SettingsSection>
         </div>
 
