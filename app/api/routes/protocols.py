@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import re
-import secrets
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +17,8 @@ from starlette.responses import HTMLResponse
 from app.api.deps import get_db, get_http_client, get_semaphore
 from app.api.routes._protocol_jobs import (
     _create_generation_job,
-    _get_generation_job,
     _snapshot_generation_job,
     _update_generation_job,
-    _utcnow,
 )
 from app.core.config import settings
 from app.db.repositories import RegistryRepository
@@ -49,6 +46,7 @@ from app.services.protocol_builder import (
     suggest_filename,
 )
 from app.services.registry_ingest import ingest_registry_rows
+from app.services.templates import TEMPLATES
 from app.utils.excel import (
     extract_certificate_number,
     read_rows_as_dicts,
@@ -782,9 +780,7 @@ async def _build_context_from_db(
                     sem=sem,
                 )
             except Exception as exc:
-                logger.warning(
-                    "Auxiliary registry resolution failed, using db values: {}", exc
-                )
+                logger.warning("Auxiliary registry resolution failed, using db values: {}", exc)
                 try:
                     await worker_session.rollback()
                 except Exception:
@@ -925,9 +921,7 @@ async def _build_context_from_excel_row(
                     sem=sem,
                 )
             except Exception as exc:
-                logger.warning(
-                    "Auxiliary registry resolution failed, using db values: {}", exc
-                )
+                logger.warning("Auxiliary registry resolution failed, using db values: {}", exc)
                 try:
                     await worker_session.rollback()
                 except Exception:
@@ -999,6 +993,7 @@ async def _generate_pdf_files(
     instrument_month_fallback: bool = False,
     job_id: str | None = None,
     channels_count: int = 0,
+    template_override: str | None = None,
 ) -> GenerationResultRead:
     await _ensure_pdf_generation_available()
     _update_generation_job(job_id, status="running", stage="preparation")
@@ -1013,6 +1008,9 @@ async def _generate_pdf_files(
     if channels_count > 0:
         for row in rows:
             row["channels_count"] = str(channels_count)
+    if template_override:
+        for row in rows:
+            row["_template_override"] = template_override
     if not rows:
         result = GenerationResultRead()
         _update_generation_job(
@@ -1050,8 +1048,7 @@ async def _generate_pdf_files(
             raise HTTPException(status_code=400, detail="db file has no serial entries")
 
         logger.info(
-            f"{label}: ingesting {len(db_rows)} registry rows "
-            f"from {db_filename or 'registry.xlsx'}"
+            f"{label}: ingesting {len(db_rows)} registry rows from {db_filename or 'registry.xlsx'}"
         )
         ingest_started = time.perf_counter()
         await ingest_registry_rows(
@@ -1061,8 +1058,7 @@ async def _generate_pdf_files(
             source_sheet=source_sheet,
         )
         logger.info(
-            f"{label}: registry ingest finished "
-            f"({time.perf_counter() - ingest_started:.2f}s)"
+            f"{label}: registry ingest finished ({time.perf_counter() - ingest_started:.2f}s)"
         )
 
     registry_repo = RegistryRepository(session)
@@ -1393,6 +1389,7 @@ async def _run_generation_job(
     db_data: bytes | None,
     db_filename: str | None,
     channels_count: int = 0,
+    template_override: str | None = None,
 ) -> None:
     try:
         session_factory = get_sessionmaker()
@@ -1415,6 +1412,7 @@ async def _run_generation_job(
                         default_equipment="Контроллеры",
                         instrument_month_fallback=True,
                         job_id=job_id,
+                        template_override=template_override,
                         channels_count=channels_count,
                     )
                 elif instrument_kind == "thermometers":
@@ -1434,6 +1432,7 @@ async def _run_generation_job(
                         label_override="rtd",
                         retry_contexts=True,
                         job_id=job_id,
+                        template_override=template_override,
                     )
                 elif instrument_kind == "level_meters":
                     await _generate_pdf_files(
@@ -1452,6 +1451,7 @@ async def _run_generation_job(
                         label_override="level_meters",
                         retry_contexts=True,
                         job_id=job_id,
+                        template_override=template_override,
                     )
                 elif failed_mode:
                     await _generate_pdf_files(
@@ -1471,6 +1471,7 @@ async def _run_generation_job(
                         retry_contexts=True,
                         mark_failed=True,
                         job_id=job_id,
+                        template_override=template_override,
                     )
                 else:
                     await _generate_pdf_files(
@@ -1489,6 +1490,7 @@ async def _run_generation_job(
                         label_override="pressure",
                         retry_contexts=True,
                         job_id=job_id,
+                        template_override=template_override,
                     )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
@@ -1505,6 +1507,7 @@ async def start_generation_job(
     instrument_kind: str = Form(...),
     failed_mode: bool = Form(False),
     channels_count: int = Form(0, ge=0),
+    template_id: str | None = Form(None),
     instrument_file: UploadFile = File(...),
     db_file: UploadFile | None = File(default=None),
 ) -> GenerationJobAcceptedRead:
@@ -1514,6 +1517,9 @@ async def start_generation_job(
             status_code=400,
             detail="failed mode is supported only for manometers",
         )
+    template_override = (template_id or "").strip() or None
+    if template_override and template_override not in TEMPLATES:
+        raise HTTPException(status_code=400, detail=f"unknown template '{template_override}'")
 
     instrument_data = await instrument_file.read()
     db_data = await db_file.read() if db_file is not None else None
@@ -1534,6 +1540,7 @@ async def start_generation_job(
             instrument_filename=instrument_file.filename,
             db_data=db_data,
             db_filename=db_file.filename if db_file is not None else None,
+            template_override=template_override,
         )
     )
     return job

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   fetchGenerationJob,
   fetchHtmlPreview,
+  mapKindToApi,
   startGenerationJob,
   type GenerationJob,
   type GenerationResponse,
@@ -21,6 +22,7 @@ import {
   fetchExportFolderArchive,
   fetchSystemStatus,
 } from "@/api/system";
+import { fetchTemplateCatalog, fetchTemplateRules } from "@/api/templates";
 import { ApiError } from "@/api/client";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
 import { DateInput } from "@/components/date-input";
@@ -47,6 +49,7 @@ export function GenerationPage() {
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("generation");
   const [kind, setKind] = useState<InstrumentKind>("manometers");
+  const [templateOverride, setTemplateOverride] = useState("");
   const [mode, setMode] = useState<"pdf" | "html">("pdf");
   const [failedMode, setFailedMode] = useState(false);
   const [channelsCountStr, setChannelsCountStr] = useState("4");
@@ -85,6 +88,20 @@ export function GenerationPage() {
     queryFn: () => fetchSystemStatus(token ?? ""),
     enabled: Boolean(token),
     refetchInterval: 60_000,
+  });
+
+  const templateCatalogQuery = useQuery({
+    queryKey: ["template-catalog"],
+    queryFn: () => fetchTemplateCatalog(token ?? ""),
+    enabled: Boolean(token),
+    staleTime: 60_000,
+  });
+
+  const templateRulesQuery = useQuery({
+    queryKey: ["template-rules"],
+    queryFn: () => fetchTemplateRules(token ?? ""),
+    enabled: Boolean(token),
+    staleTime: 60_000,
   });
 
   const registryEntriesQuery = useQuery({
@@ -194,7 +211,7 @@ export function GenerationPage() {
         setRunStatus("success");
       } else {
         const channelsCount = Math.max(1, parseInt(channelsCountStr, 10) || 1);
-        const job = await startGenerationJob(kind, { instrumentFile, dbFile }, (kind === "manometers" || kind === "pressure_sensors") && failedMode, kind === "controllers" ? channelsCount : 0);
+        const job = await startGenerationJob(kind, { instrumentFile, dbFile }, (kind === "manometers" || kind === "pressure_sensors") && failedMode, kind === "controllers" ? channelsCount : 0, templateOverride || null);
         const startedAtMs = Date.parse(job.startedAt);
         if (Number.isFinite(startedAtMs)) setRunStartedAt(startedAtMs);
         setCurrentStageIndex(resolvePdfStageIndex(job.stage));
@@ -319,6 +336,14 @@ export function GenerationPage() {
   const currentExportFolderName = generationResult?.exportFolderName ?? (currentExportFolderPath?.split(/[\\/]/).pop() ?? null);
   const isRunLocked = isSubmitting || Boolean(activeJobId);
 
+  const apiKind = mapKindToApi(kind);
+  const templateTitles = new Map(
+    (templateCatalogQuery.data?.templates ?? []).map((item) => [item.id, item.title]),
+  );
+  const kindRules = (templateRulesQuery.data ?? [])
+    .filter((rule) => rule.is_active && rule.instrument_kind === apiKind)
+    .sort((left, right) => left.priority - right.priority);
+
   return (
     <section className="space-y-6">
       <PageHeader title="Генерация" description="Пакетный запуск PDF, HTML-превью, импорт реестра и архив готовых run-папок." />
@@ -399,6 +424,40 @@ export function GenerationPage() {
                   />
                 </label>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-line p-3 text-sm">
+              <div className="text-xs uppercase tracking-[0.16em] text-steel">Форма протокола</div>
+              {kindRules.length ? (
+                <ul className="mt-2 space-y-1 text-steel">
+                  {kindRules.slice(0, 6).map((rule) => (
+                    <li key={rule.id}>
+                      #{rule.priority} · {rule.match_field} «{rule.match_value}» →{" "}
+                      {templateTitles.get(rule.template_id) ?? rule.template_id}
+                    </li>
+                  ))}
+                  {kindRules.length > 6 ? <li>… и ещё {kindRules.length - 6}</li> : null}
+                </ul>
+              ) : (
+                <p className="mt-2 text-steel">
+                  Правил для этого типа нет — форма выбирается встроенной эвристикой.
+                </p>
+              )}
+              <label className="mt-3 block text-steel">
+                Форма на этот запуск
+                <Select
+                  className="mt-1"
+                  onChange={(next) => setTemplateOverride(next)}
+                  options={[
+                    { value: "", label: "Автоматически (по правилам)" },
+                    ...(templateCatalogQuery.data?.templates ?? []).map((item) => ({
+                      value: item.id,
+                      label: item.title,
+                    })),
+                  ]}
+                  value={templateOverride}
+                />
+              </label>
             </div>
 
             {kind === "controllers" && mode === "pdf" ? (

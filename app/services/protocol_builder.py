@@ -1090,11 +1090,13 @@ async def build_context(
     mitype_number = context["mitypeNumber"]
     mitype_title = (details.get("miInfo", {}) or {}).get("singleMI", {}).get("mitypeTitle") or ""
 
+    override = str(excel_row.get("_template_override") or "").strip() or None
     resolution = await resolve_form(
         session,
         method_code=method_code,
         mitype_number=mitype_number,
         mitype_title=mitype_title,
+        override=override,
     )
     template_id = resolution.template_id or "pressure_common"
     context["template_id"] = template_id
