@@ -564,3 +564,43 @@ async def test_login_does_not_switch_the_local_row_back_on(
     )
 
     assert user.is_active is False
+
+
+def test_set_service_keeps_a_local_role_when_the_registry_has_no_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Сервисные строки и «дореестровые» живут только здесь: 404 — не отказ."""
+
+    _enable_registry(monkeypatch)
+    captured: dict = {}
+
+    class _Response:
+        status_code = 404
+
+        def json(self) -> dict:
+            return {"detail": "Account not found"}
+
+    class _Client:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        async def __aenter__(self) -> _Client:
+            return self
+
+        async def __aexit__(self, *_exc) -> None:
+            return None
+
+        async def request(self, method: str, url: str, **kwargs):
+            captured["method"] = method
+            captured["url"] = url
+            return _Response()
+
+    monkeypatch.setattr(accounts_client.httpx, "AsyncClient", _Client)
+
+    import asyncio
+
+    grant = asyncio.run(accounts_client.set_service(email="test@mail.ru", role="MKAIR"))
+
+    assert captured["url"].endswith("/api/v1/internal/accounts/test@mail.ru/services/metrogen")
+    assert grant.role == "MKAIR"
+    assert grant.role_updated_at is None

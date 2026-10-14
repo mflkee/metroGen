@@ -6,6 +6,7 @@ and roles; metroGen only keeps its own role and profile.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +15,8 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -143,18 +146,27 @@ async def set_service(
     access back on.
 
     A 409 (someone changed the role while this page was open) and a 503 (registry down) both come
-    back as HTTPException.
+    back as HTTPException. A 404 does not: the registry does not know every local row — service
+    accounts and rows that predate it live only here, and for those the local copy is the only
+    one there is, so the write goes through and the role is kept here.
     """
 
-    payload = await _request(
-        "PATCH",
-        f"/internal/accounts/{email}/services/{settings.ACCOUNTS_SERVICE_NAME}",
-        json={
-            "is_active": is_active,
-            "role": role,
-            "if_unmodified_since": _stamp_for_wire(if_unmodified_since),
-        },
-    )
+    try:
+        payload = await _request(
+            "PATCH",
+            f"/internal/accounts/{email}/services/{settings.ACCOUNTS_SERVICE_NAME}",
+            json={
+                "is_active": is_active,
+                "role": role,
+                "if_unmodified_since": _stamp_for_wire(if_unmodified_since),
+            },
+        )
+    except HTTPException as error:
+        if error.status_code == status.HTTP_404_NOT_FOUND:
+            logger.info("Registry has no account for %s: the grant stays local.", email)
+            return Grant(role=role, is_active=is_active, role_updated_at=None)
+        raise
+
     for entry in payload.get("services") or []:
         if entry.get("service") == settings.ACCOUNTS_SERVICE_NAME:
             return Grant(
