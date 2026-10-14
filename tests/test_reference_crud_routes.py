@@ -108,7 +108,8 @@ async def test_auxiliary_instrument_update_and_delete(async_client):
 @pytest.mark.anyio
 async def test_etalon_update_certificates_and_delete(async_client):
     suffix = _suffix()
-    reg_number = f"77090.19.2Р.{suffix}"
+    # TEST-префикс, чтобы тестовая запись не сталкивалась с реальными ФИФ-номерами.
+    reg_number = f"TEST.{suffix}"
 
     created = await async_client.post(
         "/api/v1/etalons",
