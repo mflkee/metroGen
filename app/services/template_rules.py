@@ -150,7 +150,9 @@ async def resolve_form(
 
     rules, methodology_forms = await _data(session)
     kind = (instrument_kind or "").strip().lower()
-    for rule in rules:
+    # The loader already orders by priority; sorting here keeps the contract explicit for any
+    # caller (and for tests) that hands over an unsorted set.
+    for rule in sorted(rules, key=lambda item: (item.priority, item.id)):
         if kind and rule.instrument_kind.strip().lower() != kind:
             continue
         if _matches(

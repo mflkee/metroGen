@@ -66,7 +66,8 @@ async def test_methodology_aliases_and_delete(async_client):
     )
     assert created.status_code == 201
     methodology_id = created.json()["id"]
-    assert created.json()["aliases"] == []
+    # Создание добавляет название методики алиасом (вес 90); сам код в список алиасов не попадает.
+    assert created.json()["aliases"] == [f"Методика {suffix}"]
 
     replaced = await async_client.put(
         f"/api/v1/methodologies/{methodology_id}/aliases",
