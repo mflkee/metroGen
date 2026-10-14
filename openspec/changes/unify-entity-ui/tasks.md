@@ -12,7 +12,7 @@
 - [x] 2.2 `app/api/routes/methodologies.py`: `DELETE /{id}` с `409`, `PUT /{id}/aliases`; `MethodologyOut` отдаёт `aliases` (`replace_aliases`, `count_references`).
 - [x] 2.3 `app/api/routes/etalons.py`: `PATCH /{id}`, `DELETE /{id}` (со свидетельствами), `GET/POST /{id}/certifications`, `DELETE /{id}/certifications/{cid}`; схемы `EtalonUpdate`, `EtalonCertificationIn/Out`.
 - [x] 2.4 `app/api/routes/auxiliary_instruments.py`: `PATCH /{id}` (перенормализует серийник), `DELETE /{id}`.
-- [ ] 2.5 Тесты роутеров на новые операции и `409`. *(не сделано: локально нет зависимостей — `pytest` недоступен; добавить в следующем проходе на сервере)*
+- [x] 2.5 Тесты роутеров добавлены (`tests/test_reference_crud_routes.py`): алиасы и удаление владельца, алиасы и удаление методики, `PATCH`/`DELETE` вспом. СИ, `PATCH`/`DELETE` эталона со свидетельствами. *(прогон `pytest` — на сервере; отказ `409` требует ссылающейся записи и проверяется вручную)*
 
 ## 3. Frontend: справочники
 

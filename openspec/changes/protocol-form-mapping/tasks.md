@@ -26,7 +26,7 @@
 - [x] 4.2 CRUD правил: `GET/POST /template-rules`, `PATCH/DELETE /template-rules/{id}` с валидацией `template_id`/`match_field`/`instrument_kind`; после каждой правки `template_rules.invalidate()`.
 - [x] 4.3 `POST /template-rules/preview` → форма + источник.
 - [x] 4.4 Override формы на запуск: `POST /protocols/jobs` принимает `template_id` (валидируется по каталогу), значение кладётся в строки как `_template_override` и доходит до `resolve_form` через `_run_generation_job`/`_generate_pdf_files`.
-- [ ] 4.5 Тесты роутеров правил (`/templates`, CRUD, preview, 400 на неизвестный `template_id`). *(отложено)*
+- [x] 4.5 Тесты роутеров правил добавлены (`tests/test_reference_crud_routes.py`): каталог, CRUD, предпросмотр (правило и fallback), `400` на неизвестный `template_id`. *(прогон `pytest` — на сервере)*
 
 ## 5. Frontend
 
