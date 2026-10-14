@@ -1,6 +1,6 @@
 const fallbackBaseUrl = "/api/v1";
 
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? fallbackBaseUrl;
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? fallbackBaseUrl;
 
 type ApiRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;

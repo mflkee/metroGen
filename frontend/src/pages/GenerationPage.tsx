@@ -20,7 +20,6 @@ import {
   fetchExportFile,
   fetchExportFolderArchive,
   fetchSystemStatus,
-  type ExportFolder,
 } from "@/api/system";
 import { ApiError } from "@/api/client";
 import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";

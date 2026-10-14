@@ -29,7 +29,7 @@ type RawRegistryEntryList = {
   items: RawRegistryEntry[];
 };
 
-export type RegistryImportPayload = {
+type RegistryImportPayload = {
   file: File;
   sourceSheet?: string;
   instrumentKind?: string;

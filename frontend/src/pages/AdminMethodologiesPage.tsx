@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -6,7 +6,6 @@ import {
   fetchMethodologies,
   updateMethodology,
   type MethodologyOut,
-  type MethodologyPointOut,
 } from "@/api/methodologies";
 import { PageHeader } from "@/components/ui/page-header";
 import { NumberInput } from "@/components/number-input";

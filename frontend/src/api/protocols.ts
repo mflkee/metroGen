@@ -83,41 +83,6 @@ type FilePayload = {
   dbFile?: File | null;
 };
 
-function buildPdfPayload(kind: InstrumentKind, payload: FilePayload): FormData {
-  const formData = new FormData();
-  const apiKind = mapKindToApi(kind);
-  if (apiKind === "manometers") {
-    formData.append("manometers_file", payload.instrumentFile);
-  } else if (apiKind === "controllers") {
-    formData.append("controllers_file", payload.instrumentFile);
-  } else {
-    formData.append("thermometers_file", payload.instrumentFile);
-  }
-
-  if (payload.dbFile) {
-    formData.append("db_file", payload.dbFile);
-  }
-  return formData;
-}
-
-export async function generateProtocolPdf(
-  kind: InstrumentKind,
-  payload: FilePayload,
-): Promise<GenerationResponse> {
-  const response = await apiRequest<RawGenerationResponse>(resolvePdfPath(kind, false), {
-    method: "POST",
-    body: buildPdfPayload(kind, payload),
-  });
-  return {
-    files: response.files,
-    count: response.count,
-    runId: response.run_id ?? null,
-    exportFolder: response.export_folder ?? null,
-    exportFolderName: response.export_folder_name ?? null,
-    errors: response.errors ?? [],
-  };
-}
-
 export async function startGenerationJob(
   kind: InstrumentKind,
   payload: FilePayload,
@@ -174,21 +139,6 @@ export async function fetchGenerationJob(jobId: string): Promise<GenerationJob> 
   };
 }
 
-export async function generateFailedManometerPdf(payload: FilePayload): Promise<GenerationResponse> {
-  const response = await apiRequest<RawGenerationResponse>(resolvePdfPath("manometers", true), {
-    method: "POST",
-    body: buildPdfPayload("manometers", payload),
-  });
-  return {
-    files: response.files,
-    count: response.count,
-    runId: response.run_id ?? null,
-    exportFolder: response.export_folder ?? null,
-    exportFolderName: response.export_folder_name ?? null,
-    errors: response.errors ?? [],
-  };
-}
-
 export async function fetchHtmlPreview(
   kind: InstrumentKind,
   payload: FilePayload & { row: number },
@@ -203,23 +153,6 @@ export async function fetchHtmlPreview(
     throw new Error(text || `Preview request failed (HTTP ${response.status}).`);
   }
   return response.text();
-}
-
-function resolvePdfPath(kind: InstrumentKind, failed: boolean): string {
-  const apiKind = mapKindToApi(kind);
-  if (apiKind === "manometers" && failed) {
-    return "/protocols/manometers/failed/pdf-files";
-  }
-  if (apiKind === "controllers") {
-    return "/protocols/controllers/pdf-files";
-  }
-  if (apiKind === "thermometers") {
-    return "/protocols/thermometers/pdf-files";
-  }
-  if (apiKind === "level_meters") {
-    return "/protocols/level-meters/pdf-files";
-  }
-  return "/protocols/manometers/pdf-files";
 }
 
 function buildPreviewPayload(kind: InstrumentKind, payload: FilePayload): FormData {

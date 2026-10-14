@@ -7,24 +7,10 @@ type RawTemporaryPasswordResponse = {
   message?: string | null;
 };
 
-type RawUserMention = {
-  id: number;
-  display_name: string;
-  email: string;
-  mention_key: string;
-};
-
 export type UserTemporaryPasswordResponse = {
   user: AuthUser;
   temporaryPassword: string | null;
   message: string | null;
-};
-
-export type UserMention = {
-  id: number;
-  displayName: string;
-  email: string;
-  mentionKey: string;
 };
 
 export type CreateUserPayload = {
@@ -58,19 +44,6 @@ export async function fetchUserById(token: string, userId: number): Promise<Auth
     token,
   });
   return mapUser(response);
-}
-
-export async function fetchMentionUsers(token: string): Promise<UserMention[]> {
-  const response = await apiRequest<RawUserMention[]>("/users/mentions", {
-    method: "GET",
-    token,
-  });
-  return response.map((item) => ({
-    id: item.id,
-    displayName: item.display_name,
-    email: item.email,
-    mentionKey: item.mention_key,
-  }));
 }
 
 export async function createUser(
@@ -111,19 +84,6 @@ export async function updateUser(
       role: payload.role,
       is_active: payload.isActive,
     },
-  });
-  return mapUser(response);
-}
-
-export async function updateUserRole(
-  token: string,
-  userId: number,
-  role: UserRole,
-): Promise<AuthUser> {
-  const response = await apiRequest<RawUser>(`/users/${userId}/role`, {
-    method: "PATCH",
-    token,
-    body: { role },
   });
   return mapUser(response);
 }
