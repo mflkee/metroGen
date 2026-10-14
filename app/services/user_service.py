@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +15,8 @@ from app.services import accounts_client
 from app.services.notification_service import NotificationService
 from app.utils.password_policy import validate_password_policy
 from app.utils.security import create_temporary_password, hash_password
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -56,7 +62,9 @@ class UserService:
         return user
 
     async def list_users(self) -> list[User]:
-        return await self.users.list_all()
+        users = await self.users.list_all()
+        await self._mirror_roles(users)
+        return users
 
     async def list_mention_users(self) -> list[UserMentionRead]:
         users = await self.users.list_active()
@@ -66,7 +74,61 @@ class UserService:
         user = await self.users.get_by_id(user_id=user_id)
         if user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        await self._mirror_roles([user])
         return user
+
+    async def _mirror_roles(self, users: list[User]) -> None:
+        """Take the role from the registry for every local row the registry knows.
+
+        This is the pull half of the arrangement: the registry owns the role, the local row
+        is a copy, and a copy refreshed only at sign-in is how a role changed in the console
+        used to stay invisible until that person happened to log in.
+
+        The registry's stamp is remembered alongside the role, so the next write from this
+        side can say what it read and be told when the registry has moved on since.
+
+        Deliberately forgiving, because it runs while rendering a page: a registry that is
+        down leaves the local copy in place instead of failing the user list.
+        """
+
+        if not users or not accounts_client.is_enabled():
+            return
+        try:
+            accounts = await accounts_client.list_accounts()
+        except accounts_client.AccountsUnavailable:
+            logger.warning("Registry is unavailable: the user list is served from the local copy.")
+            return
+        except HTTPException as error:
+            # A registry older than this service has no account list yet, and a wrong service
+            # token answers 401: neither is a reason to fail an administrator's page.
+            logger.warning(
+                "Registry refused the account list (%s): the local copy is served instead.",
+                getattr(error, "detail", error),
+            )
+            return
+
+        by_email = {str(account.get("email", "")).lower(): account for account in accounts}
+        changed = False
+        for user in users:
+            account = by_email.get(user.email.lower())
+            if account is None:
+                # Not everyone local lives in the registry (service accounts, test rows):
+                # those keep the role they have; the registry is not asked about them.
+                continue
+            grant = _registry_grant(account)
+            if grant is None or grant.role is None:
+                continue
+            stamp = _parse_stamp(grant.role_updated_at)
+            if grant.role == user.role and _as_utc(stamp) == _as_utc(user.role_synced_at):
+                continue
+            if grant.role != user.role:
+                logger.info("Role of %s taken from the registry: %s.", user.email, grant.role)
+            user.role = grant.role
+            user.role_synced_at = stamp
+            changed = True
+
+        if changed:
+            await self.session.commit()
 
     async def create_user(
         self,
@@ -157,6 +219,27 @@ class UserService:
             target_user=user,
             next_role=next_role,
         )
+
+        if payload.role is not None and accounts_client.is_enabled():
+            # The registry owns the role, so the change goes there first and the local copy
+            # follows its answer. The stamp this copy was built from goes with it: the registry
+            # refuses a write that grew out of a role it has already moved past, and that
+            # refusal leaves this row exactly as it was.
+            grant = await accounts_client.set_service(
+                email=user.email,
+                role=payload.role.value,
+                if_unmodified_since=user.role_synced_at,
+            )
+            user.role_synced_at = _parse_stamp(grant.role_updated_at)
+            if grant.role is not None and grant.role != payload.role.value:
+                # The registry only accepts the roles the service knows, so this would mean
+                # the two sides disagree about the role set — worth a line in the log.
+                logger.warning(
+                    "Registry put %s in force for %s while %s was requested.",
+                    grant.role,
+                    user.email,
+                    payload.role.value,
+                )
 
         if payload.first_name is not None:
             user.first_name = _normalize_required_name(payload.first_name, field_label="First name")
@@ -266,6 +349,59 @@ def has_admin_access(role: UserRole | str | None) -> bool:
 
 def has_operator_access(role: UserRole | str | None) -> bool:
     return has_admin_access(role) or role in {UserRole.MKAIR, "MKAIR"}
+
+
+def coerce_role(value: object) -> UserRole | None:
+    """A role from the wire, or None when this service does not know it."""
+
+    if not value:
+        return None
+    try:
+        return UserRole(str(value))
+    except ValueError:
+        return None
+
+
+def _registry_grant(account: dict[str, Any]) -> accounts_client.Grant | None:
+    """This service's grant inside one registry account.
+
+    A flag that is off means sign-in is refused at the registry, so the role carries no
+    meaning and the local copy is left alone. Mirroring `is_active` is a separate question:
+    the registry's flag for a service is not the same thing as the local "active employee"
+    flag, and the two are not kept in step.
+    """
+
+    for entry in account.get("services") or []:
+        if entry.get("service") != settings.ACCOUNTS_SERVICE_NAME:
+            continue
+        if not entry.get("is_active"):
+            return None
+        return accounts_client.Grant(
+            role=coerce_role(entry.get("role")),
+            role_updated_at=entry.get("role_updated_at"),
+        )
+    return None
+
+
+def _parse_stamp(value: str | None) -> datetime | None:
+    """The registry's stamp as a datetime; unreadable or missing means "no idea"."""
+
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Compare stamps across backends: SQLite hands them back without a timezone."""
+
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def build_user_mention_reads(users: list[User]) -> list[UserMentionRead]:

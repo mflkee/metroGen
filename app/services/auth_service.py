@@ -12,6 +12,7 @@ from app.schemas.auth import ChangePasswordRequest, LoginRequest
 from app.schemas.user import UserProfileUpdateRequest
 from app.services import accounts_client
 from app.services.notification_service import NotificationService
+from app.services.user_service import coerce_role
 from app.utils.password_policy import validate_password_policy
 from app.utils.security import create_access_token, hash_password, verify_password
 
@@ -52,7 +53,7 @@ class AuthService:
 
     async def _login_via_registry(self, email: str, password: str) -> User:
         account = await accounts_client.verify(email=email, password=password)
-        role = _coerce_role(account.get("role"))
+        role = coerce_role(account.get("role"))
 
         user = await self.users.get_by_email(email)
         if user is None:
@@ -155,15 +156,6 @@ class AuthService:
             secret_key=settings.SECRET_KEY,
             ttl_hours=settings.ACCESS_TOKEN_TTL_HOURS,
         )
-
-
-def _coerce_role(value: object) -> UserRole | None:
-    if not value:
-        return None
-    try:
-        return UserRole(str(value))
-    except ValueError:
-        return None
 
 
 def _normalize_email(email: str) -> str:
