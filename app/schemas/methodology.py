@@ -32,6 +32,12 @@ class MethodologyUpdate(BaseModel):
     points: list[MethodologyPointIn] | None = None
 
 
+class MethodologyAliasesUpdate(BaseModel):
+    """Полная замена списка алиасов методики."""
+
+    aliases: list[str] = Field(default_factory=list)
+
+
 class MethodologyPointOut(BaseModel):
     position: int
     label: str
@@ -46,6 +52,7 @@ class MethodologyOut(BaseModel):
     document: str | None
     notes: str | None
     allowable_variation_pct: float | None
+    aliases: list[str] = Field(default_factory=list)
     points: list[MethodologyPointOut]
 
     @classmethod
@@ -59,6 +66,13 @@ class MethodologyOut(BaseModel):
             )
             for point in sorted(obj.points, key=lambda p: (p.position, p.id or 0))
         ]
+        aliases = sorted(
+            {
+                alias.alias
+                for alias in getattr(obj, "aliases", None) or []
+                if alias.alias and alias.alias != obj.code
+            }
+        )
         return cls(
             id=obj.id,
             code=obj.code,
@@ -66,5 +80,6 @@ class MethodologyOut(BaseModel):
             document=obj.document,
             notes=obj.notes,
             allowable_variation_pct=obj.allowable_variation_pct,
+            aliases=aliases,
             points=points,
         )

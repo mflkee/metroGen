@@ -50,16 +50,24 @@ class BaseRepository:
 
 class OwnerRepository(BaseRepository):
     async def get_by_id(self, owner_id: int) -> models.Owner | None:
-        stmt = select(models.Owner).where(models.Owner.id == owner_id)
+        stmt = (
+            select(models.Owner)
+            .options(selectinload(models.Owner.aliases))
+            .where(models.Owner.id == owner_id)
+        )
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.unique().scalar_one_or_none()
 
     async def list_all(self, search: str | None = None) -> list[models.Owner]:
-        stmt = select(models.Owner).order_by(models.Owner.name)
+        stmt = (
+            select(models.Owner)
+            .options(selectinload(models.Owner.aliases))
+            .order_by(models.Owner.name)
+        )
         if search:
             stmt = stmt.where(models.Owner.name.ilike(f"%{search}%"))
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        return list(result.unique().scalars().all())
 
     async def get_by_name(self, name: str) -> models.Owner | None:
         if not name:
@@ -137,6 +145,28 @@ class OwnerRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def replace_aliases(
+        self, owner: models.Owner, aliases: Iterable[str]
+    ) -> list[models.OwnerAlias]:
+        """Полная замена алиасов владельца (используется ручкой управления алиасами)."""
+        await self.session.execute(
+            delete(models.OwnerAlias).where(models.OwnerAlias.owner_id == owner.id)
+        )
+        await self.session.flush()
+        return await self.ensure_aliases(owner, aliases)
+
+    async def count_references(self, owner_id: int) -> int:
+        """Сколько записей ссылается на владельца (удаление запрещено, если больше нуля)."""
+        instruments = await self.session.execute(
+            select(func.count(models.MeasuringInstrument.id)).where(
+                models.MeasuringInstrument.owner_id == owner_id
+            )
+        )
+        protocols = await self.session.execute(
+            select(func.count(models.Protocol.id)).where(models.Protocol.owner_id == owner_id)
+        )
+        return int(instruments.scalar() or 0) + int(protocols.scalar() or 0)
+
 
 @dataclass(slots=True)
 class MethodologyPointPayload:
@@ -150,7 +180,10 @@ class MethodologyRepository(BaseRepository):
     async def list_all(self, search: str | None = None) -> list[models.Methodology]:
         stmt = (
             select(models.Methodology)
-            .options(selectinload(models.Methodology.points))
+            .options(
+                selectinload(models.Methodology.points),
+                selectinload(models.Methodology.aliases),
+            )
             .order_by(models.Methodology.code)
         )
         if search:
@@ -327,6 +360,28 @@ class MethodologyRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def replace_aliases(
+        self,
+        methodology: models.Methodology,
+        aliases: Iterable[tuple[str, int] | str],
+    ) -> list[models.MethodologyAlias]:
+        """Полная замена алиасов методики (используется ручкой управления алиасами)."""
+        await self.session.execute(
+            delete(models.MethodologyAlias).where(
+                models.MethodologyAlias.methodology_id == methodology.id
+            )
+        )
+        await self.session.flush()
+        return await self.ensure_aliases(methodology, aliases)
+
+    async def count_references(self, methodology_id: int) -> int:
+        result = await self.session.execute(
+            select(func.count(models.MeasuringInstrument.id)).where(
+                models.MeasuringInstrument.methodology_id == methodology_id
+            )
+        )
+        return int(result.scalar() or 0)
+
 
 class RegistryRepository(BaseRepository):
     async def upsert_entry(
@@ -491,6 +546,7 @@ class UserRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+
 class InstrumentRepository(BaseRepository):
     async def find_by_serial(self, normalized_serial: str) -> list[models.MeasuringInstrument]:
         stmt = select(models.MeasuringInstrument).where(
@@ -553,6 +609,21 @@ class EtalonRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_device_by_id(self, device_id: int) -> models.EtalonDevice | None:
+        stmt = select(models.EtalonDevice).where(models.EtalonDevice.id == device_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_certification(
+        self, device_id: int, certification_id: int
+    ) -> models.EtalonCertification | None:
+        stmt = select(models.EtalonCertification).where(
+            models.EtalonCertification.id == certification_id,
+            models.EtalonCertification.etalon_device_id == device_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def upsert_device_by_code(
         self,
         *,
@@ -599,9 +670,7 @@ class EtalonRepository(BaseRepository):
             setattr(device, key, value)
         return device
 
-    async def list_certifications(
-        self, device_id: int
-    ) -> list[models.EtalonCertification]:
+    async def list_certifications(self, device_id: int) -> list[models.EtalonCertification]:
         stmt = (
             select(models.EtalonCertification)
             .where(models.EtalonCertification.etalon_device_id == device_id)
@@ -611,15 +680,11 @@ class EtalonRepository(BaseRepository):
         return list(result.scalars().all())
 
     async def list_devices(self) -> list[models.EtalonDevice]:
-        stmt = select(models.EtalonDevice).order_by(
-            models.EtalonDevice.reg_number.asc()
-        )
+        stmt = select(models.EtalonDevice).order_by(models.EtalonDevice.reg_number.asc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def latest_certification(
-        self, device_id: int
-    ) -> models.EtalonCertification | None:
+    async def latest_certification(self, device_id: int) -> models.EtalonCertification | None:
         certs = await self.list_certifications(device_id)
         return certs[0] if certs else None
 
@@ -672,6 +737,13 @@ class EtalonRepository(BaseRepository):
 
 
 class AuxiliaryInstrumentRepository(BaseRepository):
+    async def get_by_id(self, instrument_id: int) -> models.AuxiliaryVerificationInstrument | None:
+        stmt = select(models.AuxiliaryVerificationInstrument).where(
+            models.AuxiliaryVerificationInstrument.id == instrument_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def upsert_instrument(
         self,
         *,
@@ -727,7 +799,8 @@ class AuxiliaryInstrumentRepository(BaseRepository):
         pairs = [
             (str(item["reg_number"]).strip(), normalize_serial(str(item["manufacture_num"])))
             for item in items
-            if str(item.get("reg_number") or "").strip() and str(item.get("manufacture_num") or "").strip()
+            if str(item.get("reg_number") or "").strip()
+            and str(item.get("manufacture_num") or "").strip()
         ]
         existing = await self.find_by_pairs(pairs)
 
@@ -741,7 +814,11 @@ class AuxiliaryInstrumentRepository(BaseRepository):
             if not reg or not serial:
                 continue
 
-            values = {k: v for k, v in item.items() if k not in ("reg_number", "manufacture_num", "normalized_serial")}
+            values = {
+                k: v
+                for k, v in item.items()
+                if k not in ("reg_number", "manufacture_num", "normalized_serial")
+            }
             key = (reg, serial)
 
             if key in existing:
@@ -768,12 +845,9 @@ class AuxiliaryInstrumentRepository(BaseRepository):
         return updated, created
 
     async def list_all(self) -> list[models.AuxiliaryVerificationInstrument]:
-        stmt = (
-            select(models.AuxiliaryVerificationInstrument)
-            .order_by(
-                models.AuxiliaryVerificationInstrument.reg_number.asc(),
-                models.AuxiliaryVerificationInstrument.normalized_serial.asc(),
-            )
+        stmt = select(models.AuxiliaryVerificationInstrument).order_by(
+            models.AuxiliaryVerificationInstrument.reg_number.asc(),
+            models.AuxiliaryVerificationInstrument.normalized_serial.asc(),
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

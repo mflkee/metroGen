@@ -51,11 +51,21 @@ class OwnerUpdate(BaseModel):
         return text or None
 
 
+class OwnerAliasesUpdate(BaseModel):
+    """Полная замена списка алиасов владельца."""
+
+    aliases: list[str] = Field(default_factory=list)
+
+
 class OwnerOut(BaseModel):
     id: int
     name: str
     inn: str | None = None
+    aliases: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_model(cls, owner: Any) -> OwnerOut:
-        return cls(id=owner.id, name=owner.name, inn=owner.inn)
+        aliases = sorted(
+            {alias.alias for alias in getattr(owner, "aliases", None) or [] if alias.alias}
+        )
+        return cls(id=owner.id, name=owner.name, inn=owner.inn, aliases=aliases)

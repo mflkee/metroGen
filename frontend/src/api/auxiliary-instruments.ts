@@ -21,6 +21,8 @@ export type AuxInstrumentCreatePayload = {
   valid_to?: string | null;
 };
 
+export type AuxInstrumentUpdatePayload = Partial<AuxInstrumentCreatePayload>;
+
 export async function fetchAuxInstruments(token: string): Promise<AuxInstrumentOut[]> {
   return apiRequest<AuxInstrumentOut[]>("/auxiliary-instruments", { method: "GET", token });
 }
@@ -42,4 +44,20 @@ export async function createAuxInstrument(
       valid_to: payload.valid_to ?? null,
     },
   });
+}
+
+export async function updateAuxInstrument(
+  token: string,
+  instrumentId: number,
+  payload: AuxInstrumentUpdatePayload,
+): Promise<AuxInstrumentOut> {
+  return apiRequest<AuxInstrumentOut>(`/auxiliary-instruments/${instrumentId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function deleteAuxInstrument(token: string, instrumentId: number): Promise<void> {
+  await apiRequest(`/auxiliary-instruments/${instrumentId}`, { method: "DELETE", token });
 }

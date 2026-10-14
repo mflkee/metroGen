@@ -3,13 +3,14 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.db.models import MethodologyPointType
 from app.db.repositories import MethodologyPointPayload, MethodologyRepository
 from app.schemas.methodology import (
+    MethodologyAliasesUpdate,
     MethodologyCreate,
     MethodologyOut,
     MethodologyPointIn,
@@ -97,7 +98,9 @@ async def create_methodology(
 
     payload_points = _payload_points(body.points)
     if not payload_points:
-        raise HTTPException(status_code=400, detail="at least one point must have a label or description")
+        raise HTTPException(
+            status_code=400, detail="at least one point must have a label or description"
+        )
 
     await repo.replace_points(methodology, payload_points)
     await session.commit()
@@ -148,3 +151,50 @@ async def update_methodology(
     if refreshed is None:
         raise HTTPException(status_code=500, detail="failed to load methodology after update")
     return MethodologyOut.from_orm_obj(refreshed)
+
+
+@router.put("/{methodology_id}/aliases", response_model=MethodologyOut)
+async def replace_methodology_aliases(
+    methodology_id: int,
+    body: MethodologyAliasesUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> MethodologyOut:
+    repo = MethodologyRepository(session)
+    methodology = await repo.get_by_id(methodology_id)
+    if methodology is None:
+        raise HTTPException(status_code=404, detail="methodology not found")
+
+    alias_payload: list[tuple[str, int]] = [(methodology.code, 100)]
+    if methodology.title and methodology.title != methodology.code:
+        alias_payload.append((methodology.title, 90))
+    for alias in body.aliases:
+        alias_payload.append((alias, 80))
+
+    await repo.replace_aliases(methodology, alias_payload)
+    await session.commit()
+    refreshed = await repo.get_by_id(methodology_id)
+    if refreshed is None:
+        raise HTTPException(status_code=500, detail="failed to load methodology after update")
+    return MethodologyOut.from_orm_obj(refreshed)
+
+
+@router.delete("/{methodology_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_methodology(
+    methodology_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    repo = MethodologyRepository(session)
+    methodology = await repo.get_by_id(methodology_id)
+    if methodology is None:
+        raise HTTPException(status_code=404, detail="methodology not found")
+
+    references = await repo.count_references(methodology_id)
+    if references:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Methodology is used by {references} record(s) and cannot be deleted.",
+        )
+
+    await repo.delete(methodology)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

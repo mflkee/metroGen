@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { Fragment, FormEvent, useEffect, useState } from "react";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -73,6 +73,7 @@ export function GenerationPage() {
   const [deleteFolderError, setDeleteFolderError] = useState<string | null>(null);
 
   const [registrySearch, setRegistrySearch] = useState("");
+  const [expandedRegistryId, setExpandedRegistryId] = useState<number | null>(null);
   const [registryFilterKind, setRegistryFilterKind] = useState<InstrumentKind | "all">("all");
   const [registryActiveOnly, setRegistryActiveOnly] = useState(true);
   const [registrySource, setRegistrySource] = useState("");
@@ -553,6 +554,7 @@ export function GenerationPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
+                      <th />
                       <th>Дата поверки</th>
                       <th>Серийник</th>
                       <th>Документ</th>
@@ -565,22 +567,76 @@ export function GenerationPage() {
                   </thead>
                   <tbody>
                     {registryEntriesQuery.isLoading ? (
-                      <tr><td className="text-center text-steel" colSpan={8}>Загрузка...</td></tr>
+                      <tr><td className="text-center text-steel" colSpan={9}>Загрузка...</td></tr>
                     ) : registryEntriesQuery.data?.items.length ? (
-                      registryEntriesQuery.data.items.map((entry) => (
-                        <tr key={entry.id} >
-                          <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.verificationDate ? new Date(entry.verificationDate).toLocaleDateString("ru-RU") : "—"}</td>
-                          <td className="text-ink">{entry.serial ?? "—"}</td>
-                          <td className="text-ink">{entry.documentNo ?? "—"}</td>
-                          <td className="text-ink">{entry.ownerName ?? "—"}</td>
-                          <td className="text-ink">{entry.methodology ?? "—"}</td>
-                          <td className="text-ink text-xs">{entry.sourceFile ?? "—"}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.loadedAt ? new Date(entry.loadedAt).toLocaleDateString("ru-RU") : "—"}</td>
-                          <td ><span className={["status-chip", entry.isActive ? "status-chip--ok" : ""].join(" ")}>{entry.isActive ? "Активна" : "Архив"}</span></td>
-                        </tr>
-                      ))
+                      registryEntriesQuery.data.items.map((entry) => {
+                        const isOpen = expandedRegistryId === entry.id;
+                        return (
+                          <Fragment key={entry.id}>
+                            <tr>
+                              <td className="w-8">
+                                <button
+                                  aria-expanded={isOpen}
+                                  aria-label={isOpen ? "Свернуть строку реестра" : "Раскрыть строку реестра"}
+                                  className="btn-secondary btn-sm"
+                                  type="button"
+                                  onClick={() => setExpandedRegistryId((current) => (current === entry.id ? null : entry.id))}
+                                >
+                                  <span aria-hidden="true" className={["inline-block transition-transform", isOpen ? "rotate-180" : ""].join(" ")}>
+                                    ▾
+                                  </span>
+                                </button>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.verificationDate ? new Date(entry.verificationDate).toLocaleDateString("ru-RU") : "—"}</td>
+                              <td className="text-ink">{entry.serial ?? "—"}</td>
+                              <td className="text-ink">{entry.documentNo ?? "—"}</td>
+                              <td className="text-ink">{entry.ownerName ?? "—"}</td>
+                              <td className="text-ink">{entry.methodology ?? "—"}</td>
+                              <td className="text-ink text-xs">{entry.sourceFile ?? "—"}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-ink">{entry.loadedAt ? new Date(entry.loadedAt).toLocaleDateString("ru-RU") : "—"}</td>
+                              <td ><span className={["status-chip", entry.isActive ? "status-chip--ok" : ""].join(" ")}>{entry.isActive ? "Активна" : "Архив"}</span></td>
+                            </tr>
+                            {isOpen ? (
+                              <tr className="tone-child">
+                                <td colSpan={9}>
+                                  <dl className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                                    <div>
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Тип прибора</dt>
+                                      <dd className="text-ink">{entry.instrumentKind ?? "—"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Лист выгрузки</dt>
+                                      <dd className="text-ink">{entry.sourceSheet ?? "—"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Номер протокола</dt>
+                                      <dd className="text-ink">{entry.protocolNo ?? "—"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Действительно до</dt>
+                                      <dd className="text-ink">{entry.validTo ? new Date(entry.validTo).toLocaleDateString("ru-RU") : "—"}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Строка в файле</dt>
+                                      <dd className="text-ink">{entry.rowIndex}</dd>
+                                    </div>
+                                    <div>
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Загружено</dt>
+                                      <dd className="text-ink">{entry.loadedAt ? new Date(entry.loadedAt).toLocaleString("ru-RU") : "—"}</dd>
+                                    </div>
+                                    <div className="sm:col-span-2 lg:col-span-3">
+                                      <dt className="text-xs uppercase tracking-[0.16em] text-steel">Источник</dt>
+                                      <dd className="break-all text-ink">{entry.sourceFile ?? "—"}</dd>
+                                    </div>
+                                  </dl>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })
                     ) : (
-                      <tr><td className="text-center text-steel" colSpan={8}>Нет записей.</td></tr>
+                      <tr><td className="text-center text-steel" colSpan={9}>Нет записей.</td></tr>
                     )}
                   </tbody>
                 </table>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -10,7 +10,9 @@ from app.schemas.auxiliary_instrument import (
     AuxiliaryInstrumentBulkUpsert,
     AuxiliaryInstrumentCreate,
     AuxiliaryInstrumentOut,
+    AuxiliaryInstrumentUpdate,
 )
+from app.utils.normalization import normalize_serial
 
 router = APIRouter(prefix="/api/v1/auxiliary-instruments", tags=["auxiliary-instruments"])
 
@@ -88,3 +90,51 @@ async def bulk_upsert_auxiliary_instruments(
 
     await session.commit()
     return AuxiliaryInstrumentBulkResult(upserted=updated + created, deleted=deleted)
+
+
+@router.patch(
+    "/{instrument_id}",
+    response_model=AuxiliaryInstrumentOut,
+    summary="Update an auxiliary verification instrument",
+)
+async def update_auxiliary_instrument(
+    instrument_id: int,
+    payload: AuxiliaryInstrumentUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> AuxiliaryInstrumentOut:
+    repo = AuxiliaryInstrumentRepository(session)
+    instrument = await repo.get_by_id(instrument_id)
+    if instrument is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="instrument not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("reg_number"):
+        instrument.reg_number = data.pop("reg_number")
+    if data.get("manufacture_num"):
+        instrument.manufacture_num = data.pop("manufacture_num")
+        instrument.normalized_serial = normalize_serial(instrument.manufacture_num)
+    for key, value in data.items():
+        setattr(instrument, key, value)
+
+    await session.commit()
+    await session.refresh(instrument)
+    return AuxiliaryInstrumentOut.from_model(instrument)
+
+
+@router.delete(
+    "/{instrument_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an auxiliary verification instrument",
+)
+async def delete_auxiliary_instrument(
+    instrument_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    repo = AuxiliaryInstrumentRepository(session)
+    instrument = await repo.get_by_id(instrument_id)
+    if instrument is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="instrument not found")
+
+    await repo.delete(instrument)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

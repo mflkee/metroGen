@@ -57,6 +57,41 @@ class AuxiliaryInstrumentCreate(BaseModel):
         return _parse_flexible_date(value)
 
 
+class AuxiliaryInstrumentUpdate(BaseModel):
+    """Частичное обновление вспомогательного СИ (все поля необязательны)."""
+
+    title: str | None = None
+    reg_number: str | None = None
+    modification: str | None = None
+    manufacture_num: str | None = None
+    certificate_no: str | None = None
+    verification_date: date | None = None
+    valid_to: date | None = None
+
+    @field_validator("title", "reg_number", "manufacture_num", mode="before")
+    @classmethod
+    def _strip_required(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            raise ValueError("field must not be empty")
+        return text
+
+    @field_validator("modification", "certificate_no", mode="before")
+    @classmethod
+    def _strip_optional(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @field_validator("verification_date", "valid_to", mode="before")
+    @classmethod
+    def _coerce_date(cls, value: Any) -> date | None:
+        return _parse_flexible_date(value)
+
+
 class AuxiliaryInstrumentOut(BaseModel):
     id: int
     title: str

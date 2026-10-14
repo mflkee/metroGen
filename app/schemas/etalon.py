@@ -87,6 +87,96 @@ class EtalonUpsert(BaseModel):
         return _parse_flexible_date(value)
 
 
+class EtalonUpdate(BaseModel):
+    """Частичное обновление эталона (все поля необязательны)."""
+
+    title: str | None = None
+    mitype_number: str | None = None
+    notation: str | None = None
+    modification: str | None = None
+    manufacture_num: str | None = None
+    manufacture_year: int | None = None
+    rank_code: str | None = None
+    rank_title: str | None = None
+    schema_title: str | None = None
+
+    certificate_no: str | None = None
+    verification_date: date | None = None
+    valid_to: date | None = None
+
+    @field_validator(
+        "title",
+        "mitype_number",
+        "notation",
+        "modification",
+        "manufacture_num",
+        "rank_code",
+        "rank_title",
+        "schema_title",
+        "certificate_no",
+        mode="before",
+    )
+    @classmethod
+    def _strip_optional(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @field_validator("manufacture_year", mode="before")
+    @classmethod
+    def _coerce_year(cls, value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            raise ValueError("manufacture_year must be an integer") from None
+
+    @field_validator("verification_date", "valid_to", mode="before")
+    @classmethod
+    def _coerce_date(cls, value: Any) -> date | None:
+        return _parse_flexible_date(value)
+
+
+class EtalonCertificationIn(BaseModel):
+    certificate_no: str = Field(..., min_length=1)
+    verification_date: date | None = None
+    valid_to: date | None = None
+    source: str | None = None
+
+    @field_validator("certificate_no", mode="before")
+    @classmethod
+    def _strip_certificate(cls, value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            raise ValueError("certificate_no must not be empty")
+        return text
+
+    @field_validator("verification_date", "valid_to", mode="before")
+    @classmethod
+    def _coerce_date(cls, value: Any) -> date | None:
+        return _parse_flexible_date(value)
+
+
+class EtalonCertificationOut(BaseModel):
+    id: int
+    certificate_no: str
+    verification_date: date | None
+    valid_to: date | None
+    source: str | None
+
+    @classmethod
+    def from_model(cls, certification: Any) -> EtalonCertificationOut:
+        return cls(
+            id=certification.id,
+            certificate_no=certification.certificate_no,
+            verification_date=certification.verification_date,
+            valid_to=certification.valid_to,
+            source=getattr(certification, "source", None),
+        )
+
+
 class EtalonOut(BaseModel):
     id: int
     reg_number: str

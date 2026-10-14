@@ -4,6 +4,7 @@ export type OwnerOut = {
   id: number;
   name: string;
   inn: string | null;
+  aliases: string[];
 };
 
 export type OwnerCreatePayload = {
@@ -43,4 +44,20 @@ export async function updateOwner(
       aliases: payload.aliases,
     },
   });
+}
+
+export async function replaceOwnerAliases(
+  token: string,
+  ownerId: number,
+  aliases: string[],
+): Promise<OwnerOut> {
+  return apiRequest<OwnerOut>(`/owners/${ownerId}/aliases`, {
+    method: "PUT",
+    token,
+    body: { aliases },
+  });
+}
+
+export async function deleteOwner(token: string, ownerId: number): Promise<void> {
+  await apiRequest(`/owners/${ownerId}`, { method: "DELETE", token });
 }

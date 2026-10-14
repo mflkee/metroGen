@@ -1,25 +1,43 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   createOwner,
+  deleteOwner,
   fetchOwners,
+  replaceOwnerAliases,
   updateOwner,
   type OwnerOut,
 } from "@/api/owners";
+import { DeleteConfirmModal } from "@/components/DeleteConfirmModal";
+import { ExpandableItem } from "@/components/ExpandableItem";
+import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { useAuthStore } from "@/store/auth";
+
+type OwnerModal =
+  | { mode: "create" }
+  | { mode: "edit"; owner: OwnerOut }
+  | null;
+
+/** Aliases are edited as one-per-line text; blank lines are dropped. */
+function parseAliases(value: string): string[] {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 export function AdminOwnersPage() {
   const token = useAuthStore((state) => state.token);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [modal, setModal] = useState<OwnerModal>(null);
   const [name, setName] = useState("");
   const [inn, setInn] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [aliasesText, setAliasesText] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<OwnerOut | null>(null);
 
   const ownersQuery = useQuery({
     queryKey: ["owners", search],
@@ -27,52 +45,54 @@ export function AdminOwnersPage() {
     enabled: Boolean(token),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (payload: { name: string; inn?: string }) =>
-      createOwner(token ?? "", payload),
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = { name: name.trim(), inn: inn.trim() || null };
+      const aliases = parseAliases(aliasesText);
+      if (modal?.mode === "edit") {
+        await updateOwner(token ?? "", modal.owner.id, payload);
+        await replaceOwnerAliases(token ?? "", modal.owner.id, aliases);
+        return;
+      }
+      await createOwner(token ?? "", { ...payload, aliases });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["owners"] });
-      resetForm();
+      void queryClient.invalidateQueries({ queryKey: ["owners"] });
+      setModal(null);
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name: string; inn?: string } }) =>
-      updateOwner(token ?? "", id, payload),
+  const deleteMutation = useMutation({
+    mutationFn: (ownerId: number) => deleteOwner(token ?? "", ownerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["owners"] });
-      resetForm();
+      void queryClient.invalidateQueries({ queryKey: ["owners"] });
+      setDeleteTarget(null);
     },
   });
 
-  function resetForm() {
-    setShowForm(false);
-    setEditId(null);
+  const owners = useMemo(() => ownersQuery.data ?? [], [ownersQuery.data]);
+
+  useEffect(() => {
+    if (!modal) {
+      return;
+    }
+    if (modal.mode === "edit") {
+      setName(modal.owner.name);
+      setInn(modal.owner.inn ?? "");
+      setAliasesText(modal.owner.aliases.join("\n"));
+      return;
+    }
     setName("");
     setInn("");
-    setSaving(false);
-  }
+    setAliasesText("");
+  }, [modal]);
 
-  function startEdit(owner: OwnerOut) {
-    setEditId(owner.id);
-    setName(owner.name);
-    setInn(owner.inn ?? "");
-    setShowForm(true);
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSaving(true);
-    try {
-      if (editId) {
-        await updateMutation.mutateAsync({ id: editId, payload: { name: name.trim(), inn: inn.trim() || undefined } });
-      } else {
-        await createMutation.mutateAsync({ name: name.trim(), inn: inn.trim() || undefined });
-      }
-    } finally {
-      setSaving(false);
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!name.trim()) {
+      return;
     }
+    saveMutation.mutate();
   }
 
   return (
@@ -88,64 +108,119 @@ export function AdminOwnersPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn-primary btn-sm" type="button" onClick={() => { resetForm(); setShowForm(true); }}>
+          <button className="btn-primary btn-sm" type="button" onClick={() => setModal({ mode: "create" })}>
             Добавить
           </button>
-          <span className="status-chip">Всего: {ownersQuery.data?.length ?? "..."}</span>
+          <span className="status-chip">Всего: {owners.length}</span>
         </div>
 
-        {showForm ? (
-          <form className="rounded-2xl border border-line p-4 space-y-3" onSubmit={handleSubmit}>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className="block text-sm text-steel">
-                Название
-                <input className="form-input mt-1" required type="text" value={name} onChange={(e) => setName(e.target.value)} />
-              </label>
-              <label className="block text-sm text-steel">
-                ИНН
-                <input className="form-input mt-1" type="text" value={inn} onChange={(e) => setInn(e.target.value)} />
-              </label>
-              <div className="flex items-end gap-2">
-                <button className="btn-primary" disabled={saving} type="submit">
-                  {saving ? "..." : editId ? "Сохранить" : "Создать"}
-                </button>
-                <button className="btn-secondary" type="button" onClick={resetForm}>Отмена</button>
-              </div>
-            </div>
-          </form>
+        {ownersQuery.isLoading ? <p className="text-sm text-steel">Загрузка...</p> : null}
+        {ownersQuery.isError ? (
+          <p className="text-sm text-[var(--danger-text)]">Не удалось загрузить список владельцев.</p>
         ) : null}
 
-        <div className="overflow-x-auto rounded-2xl border border-line">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Название</th>
-                <th>ИНН</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {ownersQuery.isLoading ? (
-                <tr><td className="text-center text-steel" colSpan={4}>Загрузка...</td></tr>
-              ) : ownersQuery.data?.length ? (
-                ownersQuery.data.map((owner) => (
-                  <tr key={owner.id} >
-                    <td className="text-center text-steel">{owner.id}</td>
-                    <td className="text-ink">{owner.name}</td>
-                    <td className="text-center text-steel">{owner.inn ?? "—"}</td>
-                    <td >
-                      <button className="btn-secondary btn-sm" type="button" onClick={() => startEdit(owner)}>Редактировать</button>
-                    </td>
-                  </tr>
-                ))
+        <div className="space-y-3">
+          {!ownersQuery.isLoading && !ownersQuery.isError && owners.length === 0 ? (
+            <p className="text-sm text-steel">Нет записей.</p>
+          ) : null}
+
+          {owners.map((owner) => (
+            <ExpandableItem
+              key={owner.id}
+              actions={
+                <>
+                  <button className="btn-secondary btn-sm" type="button" onClick={() => setModal({ mode: "edit", owner })}>
+                    Изменить
+                  </button>
+                  <button className="btn-danger btn-sm" type="button" onClick={() => setDeleteTarget(owner)}>
+                    Удалить
+                  </button>
+                </>
+              }
+              header={
+                <div>
+                  <div className="font-semibold text-ink">{owner.name}</div>
+                  <div className="mt-1 text-sm text-steel">ИНН: {owner.inn ?? "—"}</div>
+                </div>
+              }
+            >
+              <div className="text-xs uppercase tracking-[0.16em] text-steel">Алиасы</div>
+              {owner.aliases.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {owner.aliases.map((alias) => (
+                    <span key={alias} className="status-chip">
+                      {alias}
+                    </span>
+                  ))}
+                </div>
               ) : (
-                <tr><td className="text-center text-steel" colSpan={4}>Нет записей.</td></tr>
+                <p className="text-sm text-steel">Алиасов нет.</p>
               )}
-            </tbody>
-          </table>
+            </ExpandableItem>
+          ))}
         </div>
       </div>
+
+      <Modal
+        description={modal?.mode === "edit" ? "Измените реквизиты владельца и его алиасы." : "Добавьте организацию-владельца СИ."}
+        footer={
+          <div className="flex justify-end gap-3">
+            <button className="btn-secondary btn-sm" type="button" onClick={() => setModal(null)}>
+              Отмена
+            </button>
+            <button className="btn-primary btn-sm" disabled={saveMutation.isPending} form="owner-form" type="submit">
+              {saveMutation.isPending ? "Сохраняем..." : "Сохранить"}
+            </button>
+          </div>
+        }
+        open={modal !== null}
+        title={modal?.mode === "edit" ? "Изменить владельца" : "Новый владелец"}
+        onClose={() => setModal(null)}
+      >
+        <form className="space-y-4" id="owner-form" onSubmit={handleSubmit}>
+          <label className="block text-sm text-steel">
+            Название
+            <input className="form-input mt-1" required type="text" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="block text-sm text-steel">
+            ИНН
+            <input className="form-input mt-1" type="text" value={inn} onChange={(e) => setInn(e.target.value)} />
+          </label>
+          <label className="block text-sm text-steel">
+            Алиасы (по одному в строке)
+            <textarea
+              className="form-input mt-1 min-h-[96px]"
+              value={aliasesText}
+              onChange={(e) => setAliasesText(e.target.value)}
+            />
+          </label>
+          {saveMutation.isError ? (
+            <p className="text-sm text-[var(--danger-text)]">
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Не удалось сохранить владельца."}
+            </p>
+          ) : null}
+        </form>
+      </Modal>
+
+      <DeleteConfirmModal
+        description={
+          deleteTarget
+            ? `Удаляем владельца «${deleteTarget.name}». Действие необратимо.`
+            : undefined
+        }
+        errorMessage={
+          deleteMutation.isError
+            ? deleteMutation.error instanceof Error
+              ? deleteMutation.error.message
+              : "Не удалось удалить владельца."
+            : null
+        }
+        isOpen={deleteTarget !== null}
+        isPending={deleteMutation.isPending}
+        title="Удалить владельца"
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
     </section>
   );
 }

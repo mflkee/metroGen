@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.db.repositories.core import OwnerRepository
-from app.schemas.owner import OwnerCreate, OwnerOut, OwnerUpdate
+from app.schemas.owner import OwnerAliasesUpdate, OwnerCreate, OwnerOut, OwnerUpdate
 
 router = APIRouter(prefix="/api/v1/owners", tags=["owners"])
 
@@ -34,8 +34,8 @@ async def create_owner(payload: OwnerCreate, session: AsyncSession = Depends(get
         aliases=payload.aliases or [],
     )
     await session.commit()
-    await session.refresh(owner)
-    return OwnerOut.from_model(owner)
+    refreshed = await repo.get_by_id(owner.id)
+    return OwnerOut.from_model(refreshed or owner)
 
 
 @router.patch(
@@ -63,5 +63,49 @@ async def update_owner(
         await repo.ensure_aliases(owner, aliases)
 
     await session.commit()
-    await session.refresh(owner)
-    return OwnerOut.from_model(owner)
+    refreshed = await repo.get_by_id(owner_id)
+    return OwnerOut.from_model(refreshed or owner)
+
+
+@router.put(
+    "/{owner_id}/aliases",
+    response_model=OwnerOut,
+    summary="Replace the owner's aliases",
+)
+async def replace_owner_aliases(
+    owner_id: int,
+    payload: OwnerAliasesUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> OwnerOut:
+    repo = OwnerRepository(session)
+    owner = await repo.get_by_id(owner_id)
+    if owner is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="owner not found")
+
+    await repo.replace_aliases(owner, payload.aliases)
+    await session.commit()
+    refreshed = await repo.get_by_id(owner_id)
+    return OwnerOut.from_model(refreshed or owner)
+
+
+@router.delete(
+    "/{owner_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an owner that no record refers to",
+)
+async def delete_owner(owner_id: int, session: AsyncSession = Depends(get_db)) -> Response:
+    repo = OwnerRepository(session)
+    owner = await repo.get_by_id(owner_id)
+    if owner is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="owner not found")
+
+    references = await repo.count_references(owner_id)
+    if references:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Owner is used by {references} record(s) and cannot be deleted.",
+        )
+
+    await repo.delete(owner)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
