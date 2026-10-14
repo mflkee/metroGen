@@ -1,0 +1,139 @@
+# Design
+
+## Context
+
+См. `proposal.md` — Why. Текущее состояние:
+
+- Каталог форм — модульный словарь `TEMPLATES` (`app/services/templates.py:4-200`), 6 шаблонов:
+  `pressure_common`, `pressure_sensor`, `controller_43790_12`, `controller_65685_16`,
+  `rtd_platinum`, `level_meter`; у каждого `path` на HTML-файл и `points`/`allowable_variation_pct`.
+- Выбор — эвристики `resolve_template_id(method_code, mitype_number, mitype_title)`
+  (`templates.py:203-233`), включая набор `_LEVEL_MITYPE_NUMBERS`.
+- Builder пишет `context["template_id"]` (`app/services/protocol_builder.py:1090-1097`), но рендер
+  его игнорирует и пересчитывает форму из `methodology_full`/`method_code`, `mitypeNumber` и
+  `device_info` (`app/services/html_renderer.py:89-108`).
+- Генератор уровнемеров разветвляется по номеру типа внутри себя (`generators/level_meter.py:82-123`).
+- Модель `Template` в БД есть (`app/db/models.py:24-34`), но не засеяна и не читается; у
+  `Methodology` (`models.py:89-105`) нет `template_id`.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- Форма выбирается данными (правила в БД + форма методики), с прозрачным приоритетом и fallback.
+- Рендер рендерит именно вычисленную форму — один источник истины.
+- Под-формы уровнемеров выбираемы явно.
+- Всё это видно и управляемо из UI, включая предпросмотр и override на запуск.
+
+**Non-Goals:**
+
+- Не редактировать сами HTML-шаблоны из UI (только выбор формы).
+- Не менять алгоритмы генерации таблиц (`generators/*`), кроме выделения под-форм уровнемера.
+- Не привязывать правила к владельцу/конкретному прибору (только kind + условие).
+- Не журналировать историю генераций (отдельный будущий change).
+
+## Decisions
+
+### D1: Модель привязок — новая таблица + колонка у методики
+
+```python
+class TemplateBindingRule(Base):
+    id, instrument_kind: str            # manometers | controllers | thermometers | level_meters
+    match_field: str                    # "mitype_number" | "title_keyword" | "methodology_code"
+    match_value: str                    # нормализованное значение (upper/strip)
+    template_id: str                    # id из TEMPLATES
+    priority: int                       # меньше — раньше; порядок применения
+    is_active: bool
+```
+
+плюс `Methodology.template_id: str | None`. Alembic-миграция создаёт таблицу и колонку; сид
+заполняет правила, повторяющие текущие эвристики (см. D5).
+
+*Альтернатива A:* только `Methodology.template_id`. Отклонено — не покрывает выбор по номеру типа
+и по ключевому слову (именно то, что нужно уровнемерам и контроллерам).
+*Альтернатива B:* JSON-конфиг без миграции. Отклонено пользователем (нужны транзакции и UI-CRUD).
+
+### D2: Единая функция разрешения
+
+Новый сервис `app/services/template_resolution.py`:
+
+```python
+def resolve_form(session, *, instrument_kind, method_code, mitype_number, mitype_title, override=None) -> str
+```
+
+Порядок: `override` → правила по `priority` (`instrument_kind` + совпадение условия) →
+`Methodology.template_id` (если методика найдена) → встроенные эвристики (`resolve_template_id`).
+Старая `resolve_template_id` сохраняется как fallback-слой без изменения поведения.
+
+*Альтернатива:* оставить эвристики в `templates.py` и просто добавить чтение правил в builder.
+Отклонено — рендер всё равно должен знать итоговую форму, поэтому нужен один общий источник.
+
+### D3: Рендер уважает вычисленную форму
+
+`render_protocol_html` (`html_renderer.py:111-181`) использует `context["template_id"]`, если он
+задан; `_template_name_from_context` остаётся только как явный fallback для старых вызовов и
+**логирует** факт пересчёта, чтобы такие случаи были видны.
+
+*Альтернатива:* удалить `_template_name_from_context` сразу. Отклонено — есть тесты/вызовы,
+которые могут передавать контекст без `template_id`; fallback безопаснее, а лог закрывает дыру.
+
+### D4: Под-формы уровнемера — отдельные template_id
+
+Вводим явные формы: `level_meter` (одна таблица, дефолт), `level_meter_two_tables`
+(`86065-22`-стиль), `level_meter_current_output` (`47249-16`-стиль); каждая регистрируется в
+`TEMPLATES` и `generators/registry.py`. Генератор выбирает таблицы по `template_id`, а не по номеру
+типа внутри себя (`generators/level_meter.py`).
+
+*Альтернатива:* оставить один `level_meter` и передавать `form_variant` в контексте. Отклонено —
+тогда правило привязки не может адресовать вариант напрямую, а каталог форм перестаёт быть полным.
+
+### D5: Сид правил из текущих эвристик
+
+Миграция/сид заводит правила, эквивалентные `resolve_template_id`: `mitype_number` `43790-12`,
+`65685-16`, `13535-93`, набор `_LEVEL_MITYPE_NUMBERS`; `title_keyword` `ТЕРМОПРЕОБРАЗОВ`/`8.461`,
+`СГМ ЭРИС-100`, `СК-1000`, `МАНОМЕТР`, `УРОВНЕМЕР`/`УРОВН`/`LEVEL`, `ДАВЛЕН`+`ДАТЧИК/…`;
+`methodology_code` `8.461`, `2539`. Так сразу после раскатки поведение совпадает с прежним.
+
+### D6: API и UI
+
+- Новый роутер `app/api/routes/templates.py`:
+  - `GET /templates` — каталог форм (id, title, instrument kind);
+  - `GET/POST /template-rules`, `PATCH/DELETE /template-rules/{id}` — CRUD правил;
+  - `POST /template-rules/preview` — `{instrument_kind, mitype_number?, mitype_title?, method_code?}` → форма + сработавшее правило/источник.
+- Frontend: `AdminTemplatesPage` (роут `/admin/templates`, пункт в `lib/nav.ts`, доступ для
+  ADMINISTRATOR/DEVELOPER), где список правил — тот же паттерн раскрывающихся элементов и диалогов
+  из change `unify-entity-ui`; блок предпросмотра.
+- `GenerationPage`: после выбора типа и файла показывает, во что разворачивается вход
+  (распределение форм по строкам, если строк несколько), и даёт override на запуск
+  (`startGenerationJob(..., templateIdOverride)`).
+
+## Risks / Trade-offs
+
+- [Правило отключит рабочий сценарий, и форма «уедет»] → сид повторяет эвристики; правила
+  приоритетны и включаемы; предпросмотр показывает источник решения.
+- [Две точки выбора формы (правило и `Methodology.template_id`) запутают приоритет] → приоритет
+  зафиксирован в D2 и в спеке (правило > методика > эвристика); предпросмотр называет источник.
+- [Выделение под-форм уровнемера изменит существующие протоколы] → текущие номера типов
+  (`86065-22`, `47249-16`) сидятся правилами на соответствующие новые формы, поведение сохраняется.
+- [Снятие пересчёта в рендере обнажит вызовы без `template_id`] → fallback + лог; тесты покрывают
+  оба пути (с `template_id` и без).
+- [Затронуты большие файлы (`protocols.py`, `html_renderer.py`)] → точечные правки + тесты.
+
+## Migration Plan
+
+1. Alembic: `TemplateBindingRule` + `Methodology.template_id`.
+2. Сид правил, эквивалентных эвристикам (идемпотентно).
+3. Сервис разрешения + правка builder/рендера; под-формы уровнемера.
+4. API правил/каталога/предпросмотра.
+5. UI: админ-страница + отображение/override в генерации.
+6. Проверка на stage: сгенерировать по одному протоколу каждого типа и убедиться, что форма
+   совпадает с прежней; затем — что правило и override её меняют.
+7. Откат: revert образа; правила/колонка аддитивны и не мешают старому коду.
+
+## Open Questions
+
+- Под-формы уровнемеров делать отдельными `template_id` (выбрано здесь) или полем `form_variant` в
+  контексте? Зафиксировать до реализации, потому что это меняет и каталог, и правила.
+- Хранить ли override запуска и историю разрешений (это часть будущего журнала `generation_runs`)?
+  Сейчас — не храним.
+- Нужны ли правила с областью видимости по владельцу? Сейчас — нет (только тип прибора + условие).

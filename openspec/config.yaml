@@ -1,0 +1,71 @@
+schema: spec-driven
+
+# Project context — shown to AI when creating artifacts.
+# Это каноническое место проектных ограничений metroGen. Держим только то,
+# что нельзя вывести из кода: границы, договорённости, рабочий процесс.
+context: |
+  # metroGen — Project Context
+
+  Сервис генерации протоколов поверки СИ: FastAPI (`app/`) + React/TS (`frontend/`).
+  Рабочая область агента — только фронтенд `frontend/src`, пока change явно не
+  трогает backend.
+
+  ## Non-negotiable constraints
+
+  1. **Правки только по коду; деплой — через GitHub Actions.** Локально не
+     собираем и не деплоим. push в `main`/`stage` → staging, `release/*` или
+     `promote.yml` → production; проверка результата — на хосте `mkair-server-tmn`
+     (`docker compose ps`, `/docs`, логи).
+  2. **Дизайн-система вендорена из `mflkee/metro-ui`.** Файлы из
+     `frontend/fleet-ui.manifest.json` НЕЛЬЗЯ править или удалять на месте:
+     изменение идёт в metro-ui, затем `npx shadcn@latest add @metro/<item>
+     --overwrite` и `npm run check:ui -- manifest`.
+  3. **Цвет — только токен.** Хардкод hex/rgb и палитра Tailwind
+     (`text-emerald-400`, `bg-[#edf2f5]`) валят `npm run check:ui` и сборку.
+     Использовать `text-steel`, `text-ink`, `border-line`, `var(--danger-text)`,
+     `signal-*`, `tone-*`.
+  4. **Сборка = контракт.** `npm run build` = `tsc --noEmit` + `npm run check:ui`
+     + `vite build`. Задача не готова, пока это не проходит.
+  5. **UI-эталон — metroLog** (`/home/mflkee/projects/metroLog/frontend`): тон-система
+     (`tone-parent`/`tone-child`), классы `.btn-*`, `.data-table`, `.status-chip`,
+     карточки-аккордеоны с `aria-expanded` и шевроном, диалоги через
+     `AppDialog`/`Modal`, подтверждение удаления через `DeleteConfirmModal`.
+  6. **Backend-границы.** `arshin_client` не пишет в БД; `registry_ingest` не
+     генерирует HTML/PDF; `protocol_builder` не знает про файловую систему/HTTP;
+     `html_renderer`/`pdf` не занимаются бизнес-валидацией.
+  7. Миграции — Alembic (`migrations/versions`), новые модели/поля всегда с
+     миграцией.
+
+  ## OpenSpec layout
+
+  - `openspec/specs/<capability>/spec.md` — долговременные возможности (появляются
+    при архивации change).
+  - `openspec/changes/<name>/` — работа в полёте: `proposal.md`, `specs/` (дельта),
+    `design.md`, `tasks.md`.
+  - Артефакты пишутся на русском; структурные заголовки и ключевые слова
+    SHALL/MUST/MODIFIED/ADDED/REMOVED/RENAMED Requirements остаются на английском.
+
+rules:
+  proposal:
+    - "Что меняем и зачем — по делу; Non-goals обязателен, если есть соблазн расширить scope."
+    - "Один change — один проверяемый диф, не более одной темы."
+  specs:
+    - "Требования проверяемы; каждое Requirement — минимум один сценарий WHEN/THEN."
+    - "Дельта только ADDED/MODIFIED/REMOVED/RENAMED Requirements поверх главных спеков."
+  design:
+    - "Обязательно: альтернативы и Risks/Trade-offs; Open Questions — если решение отложено."
+    - "Не пересказывать код; ссылаться на файл:строка."
+  tasks:
+    - "Задачи небольшие и проверяемые; каждая сопровождается способом проверки."
+    - "В конце — задачи проверки: `npm run build`, `npm run check:ui`, backend-тесты, проверка на хосте."
+
+operations:
+  apply:
+    guidance:
+      - "Перед реализацией перечитать proposal.md и design.md целиком."
+      - "Правки фронтенда держать в пределах frontend/src; backend — только если change его касается."
+      - "Не трогать вендоренные файлы metro-ui; при необходимости — сначала изменить metro-ui."
+  archive:
+    guidance:
+      - "Сначала проверить, что дельта-спеки синхронизированы с main specs (openspec sync)."
+      - "Кратко подвести итог архивации: какие capability появились/изменились."
