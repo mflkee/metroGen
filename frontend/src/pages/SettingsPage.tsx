@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 
@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SettingsSection } from "@/components/ui/settings-section";
 import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/store/auth";
-import { defaultVisibleThemes, themeOptions, type ThemeName, useThemeStore } from "@/store/theme";
+import { defaultVisibleThemes, getVisibleThemes, themeOptions, type ThemeName, useThemeStore } from "@/store/theme";
 
 export function SettingsPage() {
   const token = useAuthStore((state) => state.token);
@@ -17,7 +17,7 @@ export function SettingsPage() {
   const currentTheme = useThemeStore((state) => state.theme);
   const setTheme = useThemeStore((state) => state.setTheme);
   const [enabledThemes, setEnabledThemes] = useState<ThemeName[]>(
-    user?.enabledThemes ?? defaultVisibleThemes,
+    getVisibleThemes(user?.enabledThemes ?? defaultVisibleThemes, currentTheme),
   );
   const [mentionEmailNotificationsEnabled, setMentionEmailNotificationsEnabled] = useState(
     user?.mentionEmailNotificationsEnabled ?? true,
@@ -42,10 +42,28 @@ export function SettingsPage() {
     enabled: Boolean(token),
   });
 
+  // The draft is seeded from the profile once per signed-in user. Keying on `user.id` keeps the
+  // user's edits when the store hands back a new object for the same user (e.g. after saving).
+  const hydratedUserIdRef = useRef<number | null>(null);
+
   useEffect(() => {
-    setEnabledThemes(user?.enabledThemes ?? defaultVisibleThemes);
-    setMentionEmailNotificationsEnabled(user?.mentionEmailNotificationsEnabled ?? true);
-  }, [user]);
+    if (!user) {
+      hydratedUserIdRef.current = null;
+      return;
+    }
+    if (hydratedUserIdRef.current === user.id) {
+      return;
+    }
+    hydratedUserIdRef.current = user.id;
+    setEnabledThemes(getVisibleThemes(user.enabledThemes ?? defaultVisibleThemes, currentTheme));
+    setMentionEmailNotificationsEnabled(user.mentionEmailNotificationsEnabled ?? true);
+  }, [currentTheme, user]);
+
+  // The applied theme is never dropped: reconcile the list additively, so disabling some themes
+  // does not undo a switch made in the top bar and vice versa.
+  useEffect(() => {
+    setEnabledThemes((current) => getVisibleThemes(current, currentTheme));
+  }, [currentTheme]);
 
   function toggleTheme(theme: ThemeName) {
     setEnabledThemes((current) => {
