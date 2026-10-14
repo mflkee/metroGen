@@ -74,23 +74,23 @@ on a registration number hardcoded inside the generator.
 - **WHEN** neither a rule nor an override selects a level-meter sub-form
 - **THEN** a documented default sub-form is used
 
-### Requirement: Form mapping is manageable in the UI
+### Requirement: Form mapping is manageable
 
-An administrator SHALL be able to list, create, edit, reorder (priority), enable/disable and delete
-mapping rules, and SHALL be able to preview which form a given type description or registration
-number resolves to.
+The system SHALL expose the mapping rules (list, create, update, reorder by priority, enable/disable,
+delete) and a resolver preview through the API, so the mapping can be changed without touching the
+code.
 
-#### Scenario: Manage rules
-- **WHEN** an administrator creates, edits, reorders or deletes a rule
+#### Scenario: Manage rules through the API
+- **WHEN** an administrator creates, edits, reorders, disables or deletes a rule through the API
 - **THEN** the stored rules reflect the change and subsequent resolutions use them
 
 #### Scenario: Preview a resolution
-- **WHEN** an administrator previews a type registration number or description
-- **THEN** the UI shows the matching rule (if any) and the resulting form
+- **WHEN** a resolution is previewed for a type registration number or description
+- **THEN** the response names the matching rule (if any) and the resulting form
 
 #### Scenario: Preview shows the fallback
 - **WHEN** the previewed input matches no rule
-- **THEN** the UI shows that the result comes from the built-in fallback and names the form
+- **THEN** the response says the result comes from the built-in fallback and names the form
 
 ### Requirement: The form is resolved without asking the operator
 

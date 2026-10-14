@@ -50,6 +50,14 @@ function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
 }
 
+/**
+ * Правила выбора формы протокола.
+ *
+ * Экран **намеренно не подключён** к роутеру и навигации: раздел ещё не доделан (нужен редактор
+ * собственных форм), поэтому в прод он пока не выходит. Backend-часть (таблица правил,
+ * `resolve_form`, сид под текущие эвристики) работает и от этого экрана не зависит. Чтобы вернуть:
+ * добавить lazy-импорт и роут `/admin/templates` в `app/router.tsx` и пункт в `lib/nav.ts`.
+ */
 export function AdminTemplatesPage() {
   const token = useAuthStore((state) => state.token);
   const queryClient = useQueryClient();
