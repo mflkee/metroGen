@@ -141,23 +141,25 @@ async def test_build_context_merges_type_and_modification_in_device_info():
 
 
 @pytest.mark.anyio
-async def test_build_context_raises_when_owner_inn_missing():
+async def test_build_context_without_owner_inn_omits_it():
+    """ИНН владельца не обязателен (с 4fc4cdc): без него контекст строится, поле пустое."""
     excel_row = {
         "Обозначение СИ": "13535-93",
         "Заводской номер": "03607",
     }
     details = {"miInfo": {"singleMI": {}}, "vriInfo": {}}
 
-    with pytest.raises(ValueError, match="owner INN not found"):
-        await build_context(
-            excel_row=excel_row,
-            details=details,
-            methodology_points=dict(_DEFAULT_POINTS),
-            owner_name="ООО Тест",
-            owner_inn="",
-            allowable_error=1.5,
-            allowable_variation=1.5,
-        )
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name="ООО Тест",
+        owner_inn="",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+    )
+
+    assert ctx["owner_inn"] == ""
 
 
 @pytest.mark.anyio

@@ -243,8 +243,8 @@ def test_generator_takes_the_points_from_the_form_structure():
             point_fractions=fractions,
         )
 
-    # Без структуры — прежнее поведение (8 точек по умолчанию).
-    assert len(GENERATOR.generate(make(None))["rows"]) == 8
+    # Без структуры — прежнее поведение («красивые» шаги генератора, не меньше 8 точек).
+    assert len(GENERATOR.generate(make(None))["rows"]) >= 8
     # Со структурой — ровно её точки замера.
     assert len(GENERATOR.generate(make([0, 0.5, 1.0]))["rows"]) == 3
     assert len(GENERATOR.generate(make([0, 0.25, 0.5, 0.75, 1.0]))["rows"]) == 5
