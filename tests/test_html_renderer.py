@@ -11,6 +11,7 @@ def test_pressure_template_keeps_its_own_table_without_a_structure():
     html = render_protocol_html(
         {
             "template_id": "pressure_common",
+            "protocol_number": "1-1",
             "unit": "кгс/см²",
             "allowable_error": "1.50",
             "allowable_variation": "1.50",
@@ -38,6 +39,7 @@ def test_pressure_template_renders_the_structure_table():
     html = render_protocol_html(
         {
             "template_id": "pressure_common",
+            "protocol_number": "1-1",
             "structure_table": {
                 "columns": [
                     {"id": "si_fwd", "title": "Мои показания"},

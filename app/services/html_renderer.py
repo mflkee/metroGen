@@ -164,6 +164,9 @@ def render_protocol_html(context: dict[str, Any]) -> str:
     ctx.setdefault("has_current_output_table", False)
     ctx.setdefault("insol_two_tables", False)
     ctx.setdefault("current_output_rows", [])
+    # Таблица из структуры формы: ключа может не быть (рендер по шаблону) — при StrictUndefined
+    # это должно быть явным None, иначе `{% if structure_table %}` падает.
+    ctx.setdefault("structure_table", None)
 
     if "allowable_variation" not in ctx or ctx["allowable_variation"] is None:
         pct = ctx.get("allowable_variation_pct")
