@@ -38,23 +38,26 @@ def test_normalize_temperature_plain(value, expected):
             {"equipment_label": "Манометры ПВ", "verification_date": "2025-06-15"},
             None,
             False,
-            "PDF Манометры ПВ 06",
+            "Манометры ПВ 2025-06 03:01",
         ),
         (
             {"device_info": "Манометры TM", "verification_date": "2025-02-01"},
             "03",
             False,
-            "PDF Манометры TM 03",
+            "Манометры TM 03 03:01",
         ),
         (
             {"equipment_label": "Манометры TM", "verification_date": "2025-02-01"},
             None,
             True,
-            "PDF Манометры 02",
+            "Манометры 2025-02 03:01",
         ),
     ],
 )
-def test_exports_folder_label(ctx, forced_month, use_default_only, expected):
+def test_exports_folder_label(ctx, forced_month, use_default_only, expected, monkeypatch):
+    # Формат имени папки: «<оборудование> <год-месяц|ММ> <ЧЧ:ММ>» (см. «new export folder naming»).
+    # Время фиксируем, иначе тест флаки.
+    monkeypatch.setattr(protocols, "_make_run_time", lambda: "03:01")
     result = protocols._exports_folder_label(
         ctx,
         default_equipment="Манометры",

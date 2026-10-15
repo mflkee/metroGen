@@ -165,7 +165,7 @@ def _flatten(node: Any, prefix: str = "") -> dict[str, Any]:
             if key in ("id", "_deleted"):
                 continue
             path = f"{prefix}/{key}" if prefix else key
-            if isinstance(value, (dict, list)):
+            if isinstance(value, dict | list):
                 flat.update(_flatten(value, path))
             else:
                 flat[path] = value

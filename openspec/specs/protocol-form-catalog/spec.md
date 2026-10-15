@@ -72,13 +72,14 @@ consequences of editing that form are visible before anything is edited.
 
 ### Requirement: Editable and HTML-only forms are distinguished
 
-The system SHALL mark forms that are still rendered by a static HTML template as not editable, so the
-catalogue never implies an edit that the system cannot yet apply.
+The system SHALL distinguish forms whose protocol is rendered from the structure from those still
+rendered by a static HTML template. Every form's structure SHALL be editable; a form SHALL be marked
+as driving the protocol only once its renderer is data.
 
 #### Scenario: HTML-only form
 - **WHEN** a form is rendered by a file under `app/templates/`
-- **THEN** it is marked as «шаблон (HTML), редактирование пока недоступно»
+- **THEN** the interface says the protocol is not yet produced from the structure, and structure edits do not change generated protocols
 
 #### Scenario: Data-driven form
-- **WHEN** a form is described by data rather than a static template
-- **THEN** it is marked as editable and the editor is offered for it
+- **WHEN** a form's renderer is data
+- **THEN** the interface says the protocol is produced from the structure and the editor is offered for it

@@ -17,7 +17,6 @@ they are absent, and re-syncs the id sequence so the next insert cannot collide.
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.

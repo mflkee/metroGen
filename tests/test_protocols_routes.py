@@ -324,7 +324,7 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
-    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_time", lambda: run_id)
     _patch_etalon_certificates(monkeypatch)
 
     def _fake_named_exports_dir(name: str) -> Path:
@@ -629,12 +629,11 @@ async def test_manometers_pdf_files_prefers_matching_month(async_client, tmp_pat
     cert_calls = [
         call
         for call in respx.calls
-        if call.request.url.path.endswith("/vri")
-        and call.request.url.params.get("result_docnum")
+        if call.request.url.path.endswith("/vri") and call.request.url.params.get("result_docnum")
     ]
-    assert any(
-        call.request.url.params.get("result_docnum") == july_cert for call in cert_calls
-    ), "expected lookup using July certificate"
+    assert any(call.request.url.params.get("result_docnum") == july_cert for call in cert_calls), (
+        "expected lookup using July certificate"
+    )
 
 
 @pytest.mark.anyio
@@ -694,7 +693,7 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
         return b"%PDF-manometer%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
-    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_time", lambda: run_id)
     _patch_etalon_certificates(monkeypatch)
 
     def _fake_named_exports_dir(name: str) -> Path:
@@ -895,7 +894,7 @@ async def test_thermometers_pdf_files_happy_path(async_client, tmp_path, monkeyp
         return b"%PDF-rtd%"
 
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
-    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_time", lambda: run_id)
     _patch_etalon_certificates(monkeypatch, docnum="ET-RTD")
 
     def _fake_named_exports_dir(name: str) -> Path:
@@ -989,7 +988,7 @@ async def test_manometers_failed_pdf_files_marks_failed_context(
 
     monkeypatch.setattr("app.api.routes.protocols.render_protocol_html", fake_render)
     monkeypatch.setattr("app.api.routes.protocols.html_to_pdf_bytes", fake_pdf)
-    monkeypatch.setattr("app.api.routes.protocols._make_run_id", lambda: run_id)
+    monkeypatch.setattr("app.api.routes.protocols._make_run_time", lambda: run_id)
     _patch_etalon_certificates(monkeypatch)
 
     def _fake_named_exports_dir(name: str) -> Path:
