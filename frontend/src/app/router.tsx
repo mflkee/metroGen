@@ -26,6 +26,9 @@ const AdminOwnersPage = lazy(() =>
 const AdminUsersPage = lazy(() =>
   import("@/pages/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })),
 );
+const ProtocolFormsPage = lazy(() =>
+  import("@/pages/ProtocolFormsPage").then((module) => ({ default: module.ProtocolFormsPage })),
+);
 const DashboardPage = lazy(() =>
   import("@/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })),
 );
@@ -92,6 +95,7 @@ export const router = createBrowserRouter([
               { path: "/admin/methodologies", element: <AdminMethodologiesPage /> },
               { path: "/admin/aux-instruments", element: <AdminAuxInstrumentsPage /> },
               { path: "/admin/etalons", element: <AdminEtalonsPage /> },
+              { path: "/admin/templates", element: <ProtocolFormsPage /> },
             ],
           },
         ],

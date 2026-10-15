@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,10 +22,22 @@ from app.services.templates import resolve_template_id
 
 logger = logging.getLogger(__name__)
 
-MATCH_FIELDS = ("mitype_number", "title_keyword", "methodology_code")
+MATCH_FIELDS = ("mitype_number", "title_keyword", "methodology_code", "modification")
 INSTRUMENT_KINDS = ("manometers", "controllers", "thermometers", "level_meters")
 
 _CACHE_TTL_SECONDS = 30.0
+
+# Arshin does not normalise a modification: "FMP51", "Levelflex FMP51", "мод. FMP51",
+# "исп. FMP54" and "901.1/3100" all occur. Strip the noise words and compare by containment.
+_MODIFICATION_NOISE = ("МОД.", "МОД ", "ИСП.", "ИСП ", "МОДИФИКАЦИЯ", "ИСПОЛНЕНИЕ")
+
+
+def normalize_modification(value: str | None) -> str:
+    """Normalise a modification for matching: uppercase, noise words removed, spaces collapsed."""
+    text = (value or "").upper()
+    for junk in _MODIFICATION_NOISE:
+        text = text.replace(junk, " ")
+    return " ".join(text.split())
 
 
 @dataclass(frozen=True)
@@ -34,6 +47,7 @@ class FormResolution:
     template_id: str
     source: str  # "override" | "rule" | "methodology" | "fallback"
     rule_id: int | None = None
+    steps: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -115,7 +129,14 @@ async def _data(session: AsyncSession | None) -> tuple[list[_Rule], dict[str, st
     return _cache
 
 
-def _matches(rule: _Rule, *, method_code: str, mitype_number: str, mitype_title: str) -> bool:
+def _matches(
+    rule: _Rule,
+    *,
+    method_code: str,
+    mitype_number: str,
+    mitype_title: str,
+    modification: str,
+) -> bool:
     value = (rule.match_value or "").strip().upper()
     if not value:
         return False
@@ -131,6 +152,9 @@ def _matches(rule: _Rule, *, method_code: str, mitype_number: str, mitype_title:
     if rule.match_field == "methodology_code":
         return value in (method_code or "").upper()
 
+    if rule.match_field == "modification":
+        return normalize_modification(value) in normalize_modification(modification)
+
     return False
 
 
@@ -140,13 +164,24 @@ async def resolve_form(
     method_code: str | None = None,
     mitype_number: str | None = None,
     mitype_title: str | None = None,
+    modification: str | None = None,
     instrument_kind: str | None = None,
     override: str | None = None,
 ) -> FormResolution:
-    """Resolve the protocol form: override → rules → methodology default → heuristics."""
+    """Resolve the protocol form: override → rules → methodology default → heuristics.
+
+    ``steps`` records which stage decided, so the interface can show *why* — the same path a
+    generation run would take.
+    """
 
     if override and override.strip():
-        return FormResolution(template_id=override.strip(), source="override")
+        chosen = override.strip()
+        return FormResolution(
+            template_id=chosen,
+            source="override",
+            steps=({"stage": "override", "matched": True, "template_id": chosen},),
+        )
+    steps: list[dict[str, Any]] = [{"stage": "override", "matched": False}]
 
     rules, methodology_forms = await _data(session)
     kind = (instrument_kind or "").strip().lower()
@@ -160,14 +195,41 @@ async def resolve_form(
             method_code=method_code or "",
             mitype_number=mitype_number or "",
             mitype_title=mitype_title or "",
+            modification=modification or "",
         ):
-            return FormResolution(template_id=rule.template_id, source="rule", rule_id=rule.id)
+            steps.append(
+                {
+                    "stage": "rule",
+                    "matched": True,
+                    "rule_id": rule.id,
+                    "match_field": rule.match_field,
+                    "match_value": rule.match_value,
+                    "template_id": rule.template_id,
+                }
+            )
+            return FormResolution(
+                template_id=rule.template_id, source="rule", rule_id=rule.id, steps=tuple(steps)
+            )
+    steps.append({"stage": "rule", "matched": False})
 
     code = (method_code or "").strip().upper()
     if code:
         for methodology_code, template_id in methodology_forms.items():
             if methodology_code and methodology_code in code:
-                return FormResolution(template_id=template_id, source="methodology")
+                steps.append(
+                    {
+                        "stage": "methodology",
+                        "matched": True,
+                        "methodology_code": methodology_code,
+                        "template_id": template_id,
+                    }
+                )
+                return FormResolution(
+                    template_id=template_id, source="methodology", steps=tuple(steps)
+                )
+    steps.append({"stage": "methodology", "matched": False})
 
     fallback = resolve_template_id(method_code or "", mitype_number or "", mitype_title or "")
-    return FormResolution(template_id=fallback or "pressure_common", source="fallback")
+    chosen = fallback or "pressure_common"
+    steps.append({"stage": "fallback", "matched": True, "template_id": chosen})
+    return FormResolution(template_id=chosen, source="fallback", steps=tuple(steps))

@@ -167,3 +167,57 @@ def test_renderer_renders_the_resolved_form():
 def test_renderer_falls_back_to_heuristics_without_template_id():
     """An old caller that passes no template_id still renders (and the fallback is logged)."""
     assert _template_name_from_context({"methodology_full": "ГОСТ 8.461-2009"}) == "rtd.html"
+
+
+def test_normalize_modification_strips_the_noise():
+    assert template_rules.normalize_modification("мод.  FMP51") == "FMP51"
+    assert template_rules.normalize_modification("исп. FMP54") == "FMP54"
+    assert template_rules.normalize_modification("Levelflex FMP51") == "LEVELFLEX FMP51"
+    assert template_rules.normalize_modification(None) == ""
+
+
+async def test_modification_rule_beats_the_registration_number_rule(monkeypatch):
+    """The execution decides the table shape; the type number is only a fallback."""
+    _set_cache(
+        monkeypatch,
+        [
+            _rule(1, "level_meters", "mitype_number", "47249-16", "level_meter", 35),
+            _rule(2, "level_meters", "modification", "FMP51", "level_meter_current_output", 26),
+        ],
+    )
+
+    with_modification = await template_rules.resolve_form(
+        None, mitype_number="47249-16", modification="мод. FMP51"
+    )
+    without_modification = await template_rules.resolve_form(None, mitype_number="47249-16")
+
+    assert with_modification.template_id == "level_meter_current_output"
+    assert with_modification.rule_id == 2
+    assert without_modification.template_id == "level_meter"
+
+
+async def test_resolution_reports_the_decision_path(monkeypatch):
+    _set_cache(
+        monkeypatch,
+        [_rule(5, "level_meters", "modification", "901", "level_meter_two_tables", 26)],
+    )
+
+    resolution = await template_rules.resolve_form(
+        None, mitype_number="86065-22", modification="901.1/3100"
+    )
+
+    stages = {step["stage"]: step for step in resolution.steps}
+    assert stages["override"]["matched"] is False
+    assert stages["rule"]["matched"] is True
+    assert stages["rule"]["match_field"] == "modification"
+    assert stages["rule"]["rule_id"] == 5
+
+
+async def test_override_is_reported_as_the_first_step(monkeypatch):
+    _set_cache(monkeypatch, [])
+
+    resolution = await template_rules.resolve_form(None, override="level_meter_two_tables")
+
+    assert resolution.source == "override"
+    assert resolution.steps[0]["stage"] == "override"
+    assert resolution.steps[0]["matched"] is True

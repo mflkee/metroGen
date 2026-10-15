@@ -211,3 +211,74 @@ async def test_template_rule_rejects_unknown_template(async_client):
         },
     )
     assert response.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_catalog_exposes_the_form_tree(async_client):
+    response = await async_client.get("/api/v1/templates")
+    assert response.status_code == 200
+    body = response.json()
+
+    forms = {item["id"]: item for item in body["templates"]}
+    assert "level_meter" in forms
+    assert "modification" in body["match_fields"]
+
+    base = forms["level_meter"]
+    assert base["instrument_kind"] == "level_meters"
+    assert base["parent_code"] is None
+    assert "level_meter_two_tables" in base["children"]
+
+    derived = forms["level_meter_two_tables"]
+    assert derived["parent_code"] == "level_meter"
+    # Пока форма рендерится HTML-шаблоном, редактирование недоступно.
+    assert derived["renderer"] == "html"
+    assert derived["is_editable"] is False
+
+
+@pytest.mark.anyio
+async def test_form_card_lists_the_rules_that_select_it(async_client):
+    response = await async_client.get("/api/v1/templates/level_meter_two_tables")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["form"]["id"] == "level_meter_two_tables"
+    assert body["form"]["parent_code"] == "level_meter"
+    assert any(rule["match_field"] == "modification" for rule in body["rules"])
+
+    missing = await async_client.get("/api/v1/templates/no_such_form")
+    assert missing.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_preview_returns_the_decision_path_and_accepts_a_modification(async_client):
+    suffix = _suffix()
+    created = await async_client.post(
+        "/api/v1/templates/rules",
+        json={
+            "instrument_kind": "level_meters",
+            "match_field": "modification",
+            "match_value": f"SMOKEMOD{suffix}",
+            "template_id": "level_meter_two_tables",
+            "priority": 4,
+            "is_active": True,
+        },
+    )
+    assert created.status_code == 201
+    rule_id = created.json()["id"]
+
+    preview = await async_client.post(
+        "/api/v1/templates/rules/preview",
+        json={
+            "instrument_kind": "level_meters",
+            "mitype_number": "86065-22",
+            "modification": f"исп. SMOKEMOD{suffix}",
+        },
+    )
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["template_id"] == "level_meter_two_tables"
+    assert body["rule_id"] == rule_id
+    stages = {step["stage"]: step for step in body["steps"]}
+    assert stages["rule"]["matched"] is True
+    assert stages["rule"]["match_field"] == "modification"
+
+    await async_client.delete(f"/api/v1/templates/rules/{rule_id}")

@@ -1096,6 +1096,7 @@ async def build_context(
         method_code=method_code,
         mitype_number=mitype_number,
         mitype_title=mitype_title,
+        modification=context.get("device_modification") or "",
         override=override,
     )
     template_id = resolution.template_id or "pressure_common"
