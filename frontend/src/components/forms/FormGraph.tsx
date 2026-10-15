@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
+import ForceGraph from "force-graph";
+import type { LinkObject, NodeObject } from "force-graph";
 
 export type FormGraphNode = {
   id: string;
@@ -21,6 +22,9 @@ export type FormGraphLink = {
   type: "inherits" | "binds";
 };
 
+type GraphNode = NodeObject & FormGraphNode;
+type GraphLink = LinkObject<GraphNode> & { type: "inherits" | "binds" };
+
 type FormGraphProps = {
   nodes: FormGraphNode[];
   links: FormGraphLink[];
@@ -31,15 +35,36 @@ type FormGraphProps = {
   height?: number;
 };
 
-type SimNode = FormGraphNode & { x: number; y: number };
-type SimLink = { source: string | SimNode; target: string | SimNode; type: "inherits" | "binds" };
+type ThemeColors = {
+  accent: string;
+  muted: string;
+  surface: string;
+  text: string;
+  danger: string;
+};
+
+/** Colours come from the theme tokens; canvas cannot use Tailwind classes. */
+function readThemeColors(): ThemeColors {
+  if (typeof document === "undefined") {
+    return { accent: "steelblue", muted: "gray", surface: "white", text: "black", danger: "red" };
+  }
+  const style = getComputedStyle(document.documentElement);
+  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    accent: read("--accent", "steelblue"),
+    muted: read("--text-muted", "gray"),
+    surface: read("--tone-parent-bg", "white"),
+    text: read("--text-primary", "black"),
+    danger: read("--danger", "red"),
+  };
+}
 
 /**
- * The dependency graph of the protocol forms — an Obsidian-style force layout drawn as plain SVG.
+ * The dependency graph of the protocol forms, drawn by `force-graph` (Canvas + d3-force inside).
  *
- * The layout is computed once per node/edge set (the simulation is run to completion, not animated),
- * so the picture is stable and cheap: a re-layout button re-runs it. Wheel zooms, dragging the
- * background pans, clicking a node selects it.
+ * Nodes are draggable, zoom happens at the pointer, the background pans, hover highlights a node with
+ * its neighbours and clicking a form selects it. Filters are applied by the page (which nodes and
+ * edges exist at all); search only highlights.
  */
 export function FormGraph({
   nodes,
@@ -49,208 +74,255 @@ export function FormGraph({
   onSelect,
   height = 460,
 }: FormGraphProps) {
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [seed, setSeed] = useState(0);
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const graphRef = useRef<ForceGraph<GraphNode, GraphLink> | null>(null);
+  const [themeTick, setThemeTick] = useState(0);
 
-  const { simNodes, simLinks, viewBox } = useMemo(() => {
-    const plainNodes: SimNode[] = nodes.map((node) => ({ ...node, x: 0, y: 0 }));
-    const byId = new Map(plainNodes.map((node) => [node.id, node]));
-    const plainLinks: SimLink[] = links
-      .filter((link) => byId.has(link.source) && byId.has(link.target))
-      .map((link) => ({ source: link.source, target: link.target, type: link.type }));
+  // Read by the canvas callbacks, which are installed once.
+  const queryRef = useRef(query);
+  const selectedRef = useRef<string | null>(selectedId);
+  const hoverRef = useRef<string | null>(null);
+  const colors = useMemo(() => readThemeColors(), [themeTick]);
 
-    if (plainNodes.length) {
-      const simulation = forceSimulation<SimNode>(plainNodes)
-        .force(
-          "link",
-          forceLink<SimNode, SimLink>(plainLinks)
-            .id((node) => node.id)
-            .distance((link) => (link.type === "inherits" ? 96 : 148))
-            .strength(0.8),
-        )
-        .force("charge", forceManyBody<SimNode>().strength(-340))
-        .force("center", forceCenter(0, 0))
-        .force("collide", forceCollide<SimNode>(38));
-      simulation.stop();
-      for (let tick = 0; tick < 320; tick += 1) {
-        simulation.tick();
-      }
-    }
-
-    const xs = plainNodes.map((node) => node.x);
-    const ys = plainNodes.map((node) => node.y);
-    const pad = 90;
-    const minX = xs.length ? Math.min(...xs) - pad : -pad;
-    const maxX = xs.length ? Math.max(...xs) + pad : pad;
-    const minY = ys.length ? Math.min(...ys) - pad : -pad;
-    const maxY = ys.length ? Math.max(...ys) + pad : pad;
-
-    return {
-      simNodes: plainNodes,
-      simLinks: plainLinks.map((link) => ({
-        source: link.source as SimNode,
-        target: link.target as SimNode,
-        type: link.type,
-      })),
-      viewBox: `${minX} ${minY} ${Math.max(maxX - minX, 1)} ${Math.max(maxY - minY, 1)}`,
-    };
-  }, [nodes, links, seed]);
+  queryRef.current = query;
+  selectedRef.current = selectedId;
 
   const needle = query.trim().toLowerCase();
-  const matches = (node: FormGraphNode) =>
-    needle.length > 0 &&
-    (node.id.toLowerCase().includes(needle) ||
-      node.label.toLowerCase().includes(needle) ||
-      (node.subtitle ?? "").toLowerCase().includes(needle));
+  const matches = useCallback(
+    (node: FormGraphNode) =>
+      needle.length > 0 &&
+      (node.id.toLowerCase().includes(needle) ||
+        node.label.toLowerCase().includes(needle) ||
+        (node.subtitle ?? "").toLowerCase().includes(needle)),
+    [needle],
+  );
 
-  const anyMatch = needle.length > 0 && simNodes.some(matches);
+  const isDimmed = useCallback(
+    (node: GraphNode) => {
+      if (needle.length > 0) {
+        return !matches(node);
+      }
+      const hovered = hoverRef.current;
+      if (hovered) {
+        return hovered !== node.id && !isNeighbour(hovered, node.id);
+      }
+      return false;
+    },
+    [matches, needle],
+  );
+
+  const neighbours = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const add = (a: string, b: string) => {
+      if (!map.has(a)) map.set(a, new Set());
+      map.get(a)!.add(b);
+    };
+    for (const link of links) {
+      add(link.source, link.target);
+      add(link.target, link.source);
+    }
+    return map;
+  }, [links]);
+
+  function isNeighbour(a: string, b: string): boolean {
+    return neighbours.get(a)?.has(b) ?? false;
+  }
+
+  // The graph instance is created once; data and appearance are updated below.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return undefined;
+    }
+
+    const createGraph = ForceGraph as unknown as (
+      element: HTMLElement,
+    ) => ForceGraph<GraphNode, GraphLink>;
+
+    const graph = createGraph(container)
+      .backgroundColor("transparent")
+      .nodeId("id")
+      .nodeRelSize(0)
+      .nodeCanvasObjectMode(() => "replace")
+      .nodeCanvasObject((node, ctx, scale) => {
+        const dimmed = isDimmed(node);
+        ctx.globalAlpha = dimmed ? 0.2 : 1;
+
+        const radius = node.type === "form" ? (node.isBase ? 7 : 5.5) : 3.5;
+        ctx.beginPath();
+        if (node.type === "form") {
+          ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI);
+        } else {
+          ctx.rect((node.x ?? 0) - radius, (node.y ?? 0) - radius, radius * 2, radius * 2);
+        }
+
+        ctx.fillStyle =
+          node.type === "condition"
+            ? colors.muted
+            : node.isBase
+              ? colors.accent
+              : colors.surface;
+        ctx.fill();
+
+        const isSelected = selectedRef.current === node.id;
+        const isHovered = hoverRef.current === node.id;
+        ctx.strokeStyle = isSelected ? colors.danger : matches(node) ? colors.danger : colors.accent;
+        ctx.lineWidth = (isSelected || isHovered ? 2.4 : 1.1) / scale;
+        if (node.type === "form" && node.renderer === "html") {
+          ctx.setLineDash([3 / scale, 2 / scale]);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const fontSize = Math.max(10 / scale, 2.6);
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = node.type === "form" ? colors.text : colors.muted;
+        ctx.fillText(node.label, node.x ?? 0, (node.y ?? 0) + radius + 2 / scale);
+        ctx.globalAlpha = 1;
+      })
+      .nodePointerAreaPaint((node, color, ctx) => {
+        const radius = node.type === "form" ? 11 : 6;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        if (node.type === "form") {
+          ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI);
+        } else {
+          ctx.rect((node.x ?? 0) - radius, (node.y ?? 0) - radius, radius * 2, radius * 2);
+        }
+        ctx.fill();
+      })
+      .linkColor((link) => (link.type === "inherits" ? colors.accent : colors.muted))
+      .linkWidth((link) => (link.type === "inherits" ? 1.4 : 0.7))
+      .linkLineDash((link) => (link.type === "binds" ? [4, 3] : null))
+      .linkDirectionalParticles(0)
+      .onNodeHover((node) => {
+        hoverRef.current = node ? String(node.id) : null;
+        if (container) {
+          container.style.cursor = node ? "pointer" : "grab";
+        }
+      })
+      .onNodeClick((node) => {
+        const id = String(node.id);
+        if (!id.startsWith("rule-")) {
+          onSelect?.(id);
+        }
+      })
+      .onBackgroundClick(() => onSelect?.(""))
+      .warmupTicks(40)
+      .cooldownTicks(220)
+      .d3AlphaDecay(0.04);
+
+    graph.width(container.clientWidth || 800).height(height);
+    graphRef.current = graph;
+
+    const observer = new ResizeObserver(() => {
+      if (containerRef.current) {
+        graph.width(containerRef.current.clientWidth || 800);
+      }
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      graphRef.current = null;
+      // force-graph has no public destructor; dropping the canvas is enough.
+      container.replaceChildren();
+    };
+  }, [colors, height, isDimmed, matches, onSelect]);
+
+  // Data: a fresh copy, so the simulation owns its own node objects.
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) {
+      return;
+    }
+    graph.graphData({
+      nodes: nodes.map((node) => ({ ...node })),
+      links: links.map((link) => ({ source: link.source, target: link.target, type: link.type })),
+    });
+  }, [nodes, links]);
+
+  // Search and selection repaint the canvas (the accessors read the refs).
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) {
+      return;
+    }
+    graph.nodeCanvasObject(graph.nodeCanvasObject());
+
+    if (!needle) {
+      return;
+    }
+    const first = graph.graphData().nodes.find((node) => matches(node));
+    if (first && typeof first.x === "number" && typeof first.y === "number") {
+      graph.centerAt(first.x, first.y, 400);
+      graph.zoom(2.2, 400);
+    }
+  }, [needle, selectedId, matches]);
+
+  // Follow the theme: `data-theme` changes the CSS variables the canvas reads.
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+    const observer = new MutationObserver(() => setThemeTick((tick) => tick + 1));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+
+  function relayout() {
+    const graph = graphRef.current;
+    if (!graph) {
+      return;
+    }
+    for (const node of graph.graphData().nodes) {
+      node.fx = undefined;
+      node.fy = undefined;
+    }
+    graph.d3ReheatSimulation();
+    graph.zoomToFit(400, 60);
+  }
 
   return (
     <div className="relative">
       <div className="absolute right-3 top-3 z-10 flex gap-2">
-        <button
-          className="btn-secondary btn-sm"
-          type="button"
-          onClick={() => {
-            setScale(1);
-            setOffset({ x: 0, y: 0 });
-            setSeed((value) => value + 1);
-          }}
-        >
+        <button className="btn-secondary btn-sm" type="button" onClick={relayout}>
           Пересобрать
         </button>
       </div>
 
-      <svg
-        className="w-full rounded-2xl border border-line"
-        height={height}
-        style={{ background: "var(--tone-child-bg)", cursor: dragRef.current ? "grabbing" : "grab" }}
-        viewBox={viewBox}
-        onWheel={(event) => {
-          event.preventDefault();
-          setScale((current) => Math.min(3, Math.max(0.4, current - event.deltaY * 0.0012)));
-        }}
-        onPointerDown={(event) => {
-          dragRef.current = { x: event.clientX, y: event.clientY };
-        }}
-        onPointerMove={(event) => {
-          if (!dragRef.current) return;
-          const dx = event.clientX - dragRef.current.x;
-          const dy = event.clientY - dragRef.current.y;
-          dragRef.current = { x: event.clientX, y: event.clientY };
-          setOffset((current) => ({ x: current.x + dx, y: current.y + dy }));
-        }}
-        onPointerUp={() => {
-          dragRef.current = null;
-        }}
-        onPointerLeave={() => {
-          dragRef.current = null;
-        }}
-      >
-        <g transform={`translate(${offset.x} ${offset.y}) scale(${scale})`}>
-          {simLinks.map((link, index) => {
-            const isInherits = link.type === "inherits";
-            const dimmed = anyMatch && !(matches(link.source) || matches(link.target));
-            return (
-              <line
-                key={`${link.source.id}-${link.target.id}-${index}`}
-                opacity={dimmed ? 0.15 : isInherits ? 0.9 : 0.5}
-                stroke={isInherits ? "var(--accent)" : "var(--text-muted)"}
-                strokeDasharray={isInherits ? undefined : "4 4"}
-                strokeWidth={isInherits ? 2 : 1}
-                x1={link.source.x}
-                x2={link.target.x}
-                y1={link.source.y}
-                y2={link.target.y}
-              />
-            );
-          })}
+      <div
+        className="w-full overflow-hidden rounded-2xl border border-line"
+        ref={containerRef}
+        style={{ height, background: "var(--tone-child-bg)" }}
+      />
 
-          {simNodes.map((node) => {
-            const isForm = node.type === "form";
-            const highlighted = matches(node);
-            const isSelected = selectedId === node.id;
-            const dimmed = (anyMatch && !highlighted) || (selectedId !== null && !isSelected);
-            const radius = isForm ? (node.isBase ? 20 : 15) : 7;
-            const fill = !isForm
-              ? "var(--text-muted)"
-              : node.isBase
-                ? "var(--accent)"
-                : "var(--tone-parent-bg)";
-            const stroke = isSelected
-              ? "var(--success)"
-              : highlighted
-                ? "var(--danger)"
-                : isForm
-                  ? "var(--accent)"
-                  : "var(--text-muted)";
-
-            return (
-              <g
-                key={node.id}
-                opacity={dimmed ? 0.25 : 1}
-                style={{ cursor: onSelect ? "pointer" : "default" }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect?.(node.id);
-                }}
-              >
-                {isForm ? (
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    fill={fill}
-                    r={radius}
-                    stroke={stroke}
-                    strokeDasharray={node.renderer === "html" ? "3 3" : undefined}
-                    strokeWidth={isSelected ? 3 : 2}
-                  />
-                ) : (
-                  <rect
-                    fill={fill}
-                    height={radius * 2}
-                    stroke={stroke}
-                    strokeWidth={1.5}
-                    width={radius * 2}
-                    x={node.x - radius}
-                    y={node.y - radius}
-                  />
-                )}
-                <text
-                  className={isForm ? "fill-[var(--text-primary)]" : "fill-[var(--text-muted)]"}
-                  fontSize={isForm ? 11 : 9}
-                  textAnchor="middle"
-                  x={node.x}
-                  y={node.y + radius + 12}
-                >
-                  {node.label}
-                </text>
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-steel">
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-steel">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "var(--accent)" }} />
-          базовая форма
+          форма (базовая)
         </span>
         <span className="inline-flex items-center gap-1">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full border"
             style={{ borderColor: "var(--accent)" }}
           />
-          производная форма
+          форма (производная)
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-2 w-2" style={{ background: "var(--text-muted)" }} />
-          условие (методика / тип / модификация)
+          условие правила
         </span>
-        <span>пунктирная окружность — форма ещё HTML-шаблон</span>
-        <span>клик — выбрать, колесо — масштаб, перетаскивание — сдвиг</span>
+        <span>
+          <span style={{ color: "var(--accent)" }}>——</span> наследование
+        </span>
+        <span>
+          <span style={{ color: "var(--text-muted)" }}>- - -</span> правило выбирает форму
+        </span>
+        <span>пунктирная обводка — форма ещё из HTML-шаблона</span>
+        <span>перетаскивание — узлы, колесо — масштаб, фон — сдвиг</span>
       </div>
     </div>
   );
