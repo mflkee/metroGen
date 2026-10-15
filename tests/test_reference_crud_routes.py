@@ -230,9 +230,10 @@ async def test_catalog_exposes_the_form_tree(async_client):
 
     derived = forms["level_meter_two_tables"]
     assert derived["parent_code"] == "level_meter"
-    # Пока форма рендерится HTML-шаблоном, редактирование недоступно.
+    # Структуру можно редактировать у любой формы; «протокол из данных» — только после перехода.
+    assert derived["is_editable"] is True
+    assert derived["drives_protocol"] is False
     assert derived["renderer"] == "html"
-    assert derived["is_editable"] is False
 
 
 @pytest.mark.anyio

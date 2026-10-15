@@ -199,9 +199,33 @@ def diff_structures(
     return differences
 
 
+def _node_paths(node: Any, prefix: str = "") -> list[str]:
+    """Paths of the nodes (things with an ``id``) inside an overlay."""
+    paths: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in ("id", "_deleted"):
+                continue
+            path = f"{prefix}/{key}" if prefix else key
+            paths.extend(_node_paths(value, path))
+    elif isinstance(node, list):
+        for item in node:
+            if isinstance(item, dict) and isinstance(item.get("id"), str):
+                path = f"{prefix}/{item['id']}" if prefix else item["id"]
+                paths.append(path)
+                paths.extend(_node_paths(item, path))
+            else:
+                paths.extend(_node_paths(item, prefix))
+    return paths
+
+
 def overlay_keys(overlay: dict[str, Any] | None) -> list[str]:
-    """The paths a derived form overrides (its overlay, flattened)."""
-    return sorted(_flatten(overlay or {}).keys())
+    """The paths a derived form overrides — nodes, not only the scalar leaves.
+
+    A block may be overridden by a change that carries no scalar (for example a table whose rows
+    were replaced), so the paths of the nodes themselves are what the interface needs to mark.
+    """
+    return sorted(set(_node_paths(overlay or {})))
 
 
 def render_structure_preview(structure: dict[str, Any]) -> str:
