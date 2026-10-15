@@ -114,6 +114,22 @@ class TemplateStructureUpdate(BaseModel):
 
     structure: dict[str, Any] | None = None
     overlay: dict[str, Any] | None = None
+    #: ``html`` (template still renders the protocol) or ``data`` (the structure does).
+    renderer: str | None = None
+
+
+class TemplateCompareRequest(BaseModel):
+    """Compare two forms, or two versions of one form."""
+
+    other_code: str | None = None
+    left_revision: int | None = None
+    right_revision: int | None = None
+
+
+class TemplateCompareOut(BaseModel):
+    left_label: str
+    right_label: str
+    differences: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TemplatePublishRequest(BaseModel):

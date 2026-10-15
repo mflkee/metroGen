@@ -10,6 +10,8 @@ from app.api.deps import AdminUser, get_db
 from app.db.models import ProtocolForm, ProtocolFormVersion, TemplateBindingRule
 from app.schemas.template import (
     TemplateCatalogOut,
+    TemplateCompareOut,
+    TemplateCompareRequest,
     TemplateFormDetailOut,
     TemplateOut,
     TemplatePreviewOut,
@@ -24,7 +26,7 @@ from app.schemas.template import (
     TemplateStructureUpdate,
     TemplateVersionOut,
 )
-from app.services import form_structure, template_rules
+from app.services import form_structure, form_structures, template_rules
 from app.services.templates import TEMPLATES
 
 router = APIRouter(prefix="/api/v1/templates", tags=["templates"])
@@ -391,8 +393,16 @@ async def save_form_draft(
         row.structure = payload.structure
     if payload.overlay is not None:
         row.overlay = payload.overlay
+    if payload.renderer is not None:
+        if payload.renderer not in ("html", "data"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="renderer must be 'html' or 'data'",
+            )
+        row.renderer = payload.renderer
 
     await session.commit()
+    form_structures.invalidate()
     return await get_template(form_code, session)
 
 
@@ -440,6 +450,7 @@ async def publish_form(
     session.add(version)
     await session.commit()
     await session.refresh(version)
+    form_structures.invalidate()
     return _version_out(version)
 
 
@@ -516,6 +527,7 @@ async def restore_form_version(
     session.add(version)
     await session.commit()
     await session.refresh(version)
+    form_structures.invalidate()
     return _version_out(version)
 
 
@@ -532,3 +544,65 @@ async def preview_form_structure(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
     resolved = form_structure.resolve_structure(form_code, rows_by_code)
     return TemplatePreviewRenderOut(html=form_structure.render_structure_preview(resolved))
+
+
+@router.post(
+    "/{form_code}/compare",
+    response_model=TemplateCompareOut,
+    summary="Compare two forms, or two versions of one form",
+)
+async def compare_form(
+    form_code: str,
+    payload: TemplateCompareRequest,
+    session: AsyncSession = Depends(get_db),
+) -> TemplateCompareOut:
+    rows_by_code = await _load_form_rows(session)
+    row = rows_by_code.get(form_code)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+
+    if payload.other_code:
+        other = rows_by_code.get(payload.other_code)
+        if other is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+        left = form_structure.resolve_structure(form_code, rows_by_code)
+        right = form_structure.resolve_structure(payload.other_code, rows_by_code)
+        return TemplateCompareOut(
+            left_label=row.title,
+            right_label=other.title,
+            differences=form_structure.diff_structures(left, right),
+        )
+
+    if payload.left_revision is None or payload.right_revision is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="provide other_code, or both left_revision and right_revision",
+        )
+
+    versions = {
+        version.revision: version
+        for version in (
+            await session.execute(
+                select(ProtocolFormVersion).where(
+                    ProtocolFormVersion.form_id == row.id,
+                    ProtocolFormVersion.revision.in_(
+                        [payload.left_revision, payload.right_revision]
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    left_version = versions.get(payload.left_revision)
+    right_version = versions.get(payload.right_revision)
+    if left_version is None or right_version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="version not found")
+
+    return TemplateCompareOut(
+        left_label=f"{row.title} — версия {left_version.revision}",
+        right_label=f"{row.title} — версия {right_version.revision}",
+        differences=form_structure.diff_structures(
+            left_version.structure_resolved, right_version.structure_resolved
+        ),
+    )

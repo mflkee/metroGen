@@ -207,3 +207,44 @@ def test_preview_renders_the_shape_of_the_form():
     assert "Показания СИ" in html
     assert "Точек замера: 2, колонок: 2" in html
     assert "data-table" in html
+
+
+def test_form_structures_extract_points_and_columns():
+    from app.services import form_structures
+
+    structure = _structure()
+    assert form_structures.point_fractions(structure) == [0.0, 0.5]
+    assert [column["id"] for column in form_structures.table_columns(structure) or []] == [
+        "ref",
+        "si",
+    ]
+
+    assert form_structures.point_fractions(None) is None
+    assert form_structures.point_fractions({"sections": [{"id": "s", "blocks": []}]}) is None
+
+
+def test_generator_takes_the_points_from_the_form_structure():
+    from app.services.generators.base import FixedPctTol, GenInput, steps_from_fractions
+    from app.services.generators.pressure_common import GENERATOR
+
+    assert steps_from_fractions(4.0, [0, 0.5, 1.0]) == [0.0, 2.0, 4.0]
+    assert steps_from_fractions(4.0, None) is None
+    assert steps_from_fractions(4.0, []) is None
+
+    def make(fractions):
+        return GenInput(
+            range_min=0.0,
+            range_max=4.0,
+            unit="кгс/см²",
+            points=8,
+            allowable_error=FixedPctTol(1.5),
+            allowable_variation=FixedPctTol(1.5),
+            ctx={},
+            point_fractions=fractions,
+        )
+
+    # Без структуры — прежнее поведение (8 точек по умолчанию).
+    assert len(GENERATOR.generate(make(None))["rows"]) == 8
+    # Со структурой — ровно её точки замера.
+    assert len(GENERATOR.generate(make([0, 0.5, 1.0]))["rows"]) == 3
+    assert len(GENERATOR.generate(make([0, 0.25, 0.5, 0.75, 1.0]))["rows"]) == 5

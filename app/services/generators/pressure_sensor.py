@@ -60,9 +60,7 @@ class PressureSensor(TableGenerator):
         n = max(int(gi.points or 5), 2)
         steps = [fsv * i / (n - 1) for i in range(n)]
 
-        allowable_pct = float(
-            gi.allowable_error.value(ref=fsv, fsv=fsv, ctx=gi.ctx)
-        )
+        allowable_pct = float(gi.allowable_error.value(ref=fsv, fsv=fsv, ctx=gi.ctx))
         allowable_ma = abs(allowable_pct) / 100.0 * SPAN_MA
         variation_ma = allowable_ma * 0.5
 

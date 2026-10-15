@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  compareForms,
   fetchFormVersions,
   fetchTemplateCatalog,
   fetchTemplateForm,
@@ -14,6 +15,7 @@ import {
   saveFormDraft,
   type FormStructure,
   type StructureBlock,
+  type TemplateCompare,
   type TemplatePreview,
 } from "@/api/templates";
 import { ExpandableItem } from "@/components/ExpandableItem";
@@ -118,6 +120,11 @@ export function ProtocolFormsPage() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareOther, setCompareOther] = useState("");
+  const [compareLeft, setCompareLeft] = useState("");
+  const [compareRight, setCompareRight] = useState("");
+  const [compareResult, setCompareResult] = useState<TemplateCompare | null>(null);
 
   const catalogQuery = useQuery({
     queryKey: ["template-catalog"],
@@ -138,11 +145,16 @@ export function ProtocolFormsPage() {
   const versionsQuery = useQuery({
     queryKey: ["template-form-versions", selectedCode],
     queryFn: () => fetchFormVersions(token ?? "", selectedCode as string),
-    enabled: Boolean(token) && historyOpen && selectedCode !== null,
+    enabled: Boolean(token) && (historyOpen || compareOpen) && selectedCode !== null,
   });
 
   const saveDraftMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (options?: { rendererOnly?: "html" | "data" }) => {
+      if (options?.rendererOnly) {
+        return saveFormDraft(token ?? "", selectedCode as string, {
+          renderer: options.rendererOnly,
+        });
+      }
       const resolved = formQuery.data?.structure ?? {};
       const payload = formQuery.data?.form.parent_code
         ? { overlay: buildOverlay(resolved, draft ?? {}) }
@@ -153,9 +165,24 @@ export function ProtocolFormsPage() {
       setDraft(detail.structure);
       setEditorError(null);
       void queryClient.invalidateQueries({ queryKey: ["template-form", selectedCode] });
+      void queryClient.invalidateQueries({ queryKey: ["template-catalog"] });
     },
     onError: (error) =>
       setEditorError(error instanceof Error ? error.message : "Не удалось сохранить черновик."),
+  });
+
+  const compareMutation = useMutation({
+    mutationFn: () =>
+      compareForms(
+        token ?? "",
+        selectedCode as string,
+        compareOther
+          ? { other_code: compareOther }
+          : { left_revision: Number(compareLeft), right_revision: Number(compareRight) },
+      ),
+    onSuccess: (result) => setCompareResult(result),
+    onError: (error) =>
+      setEditorError(error instanceof Error ? error.message : "Не удалось сравнить формы."),
   });
 
   const publishMutation = useMutation({
@@ -498,7 +525,7 @@ export function ProtocolFormsPage() {
                   className="btn-primary btn-sm"
                   disabled={saveDraftMutation.isPending}
                   type="button"
-                  onClick={() => saveDraftMutation.mutate()}
+                  onClick={() => saveDraftMutation.mutate({})}
                 >
                   {saveDraftMutation.isPending ? "Сохраняем..." : "Сохранить черновик"}
                 </button>
@@ -528,6 +555,27 @@ export function ProtocolFormsPage() {
                 <button className="btn-secondary btn-sm" type="button" onClick={() => setHistoryOpen(true)}>
                   История версий
                 </button>
+                <button
+                  className="btn-secondary btn-sm"
+                  type="button"
+                  onClick={() => {
+                    setCompareResult(null);
+                    setCompareOpen(true);
+                  }}
+                >
+                  Сравнить
+                </button>
+                <label className="flex items-center gap-2 text-sm text-steel" htmlFor="form-drives-protocol">
+                  <Switch
+                    checked={formQuery.data?.form.drives_protocol ?? false}
+                    disabled={saveDraftMutation.isPending}
+                    id="form-drives-protocol"
+                    onCheckedChange={(checked) =>
+                      saveDraftMutation.mutate({ rendererOnly: checked ? "data" : "html" })
+                    }
+                  />
+                  протокол собирается из структуры
+                </label>
               </div>
             ) : (
               <p className="text-sm text-steel">
@@ -612,11 +660,7 @@ export function ProtocolFormsPage() {
         ) : null}
       </Modal>
 
-      <Modal
-        open={historyOpen}
-        title="История версий"
-        onClose={() => setHistoryOpen(false)}
-      >
+      <Modal open={historyOpen} title="История версий" onClose={() => setHistoryOpen(false)}>
         {versionsQuery.isLoading ? <p className="text-sm text-steel">Загрузка...</p> : null}
         {versionsQuery.data?.length ? (
           <div className="space-y-2">
@@ -649,6 +693,115 @@ export function ProtocolFormsPage() {
         ) : versionsQuery.isLoading ? null : (
           <p className="text-sm text-steel">Публикаций ещё не было.</p>
         )}
+      </Modal>
+
+      <Modal
+        open={compareOpen}
+        size="xl"
+        title="Сравнение"
+        onClose={() => setCompareOpen(false)}
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="block text-sm text-steel">
+              Сравнить с формой
+              <Select
+                className="mt-1"
+                onChange={setCompareOther}
+                options={[
+                  { value: "", label: "— не выбрано (сравнить версии) —" },
+                  ...forms
+                    .filter((form) => form.id !== selectedCode)
+                    .map((form) => ({ value: form.id, label: form.title })),
+                ]}
+                value={compareOther}
+              />
+            </label>
+            <label className="block text-sm text-steel">
+              Версия слева
+              <Select
+                className="mt-1"
+                onChange={setCompareLeft}
+                options={[
+                  { value: "", label: "—" },
+                  ...(versionsQuery.data ?? []).map((version) => ({
+                    value: String(version.revision),
+                    label: `Версия ${version.revision}`,
+                  })),
+                ]}
+                value={compareLeft}
+              />
+            </label>
+            <label className="block text-sm text-steel">
+              Версия справа
+              <Select
+                className="mt-1"
+                onChange={setCompareRight}
+                options={[
+                  { value: "", label: "—" },
+                  ...(versionsQuery.data ?? []).map((version) => ({
+                    value: String(version.revision),
+                    label: `Версия ${version.revision}`,
+                  })),
+                ]}
+                value={compareRight}
+              />
+            </label>
+          </div>
+
+          <button
+            className="btn-primary btn-sm"
+            disabled={
+              compareMutation.isPending ||
+              (!compareOther && (!compareLeft || !compareRight))
+            }
+            type="button"
+            onClick={() => compareMutation.mutate()}
+          >
+            {compareMutation.isPending ? "Сравниваем..." : "Сравнить"}
+          </button>
+
+          {compareResult ? (
+            <div className="space-y-2">
+              <p className="text-sm text-steel">
+                {compareResult.left_label} → {compareResult.right_label}: различий{" "}
+                {compareResult.differences.length}
+              </p>
+              {compareResult.differences.length ? (
+                <div className="overflow-x-auto rounded-xl border border-line">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Что</th>
+                        <th>Изменение</th>
+                        <th>Было</th>
+                        <th>Стало</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {compareResult.differences.map((difference) => (
+                        <tr key={`${difference.path}-${difference.kind}`}>
+                          <td className="break-all font-mono text-xs text-ink">{difference.path}</td>
+                          <td className="text-steel">
+                            {difference.kind === "added"
+                              ? "добавлено"
+                              : difference.kind === "removed"
+                                ? "удалено"
+                                : "изменено"}
+                          </td>
+                          <td className="text-steel">{String(difference.before ?? "—")}</td>
+                          <td className="text-ink">{String(difference.after ?? "—")}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-steel">Различий нет — структуры совпадают.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
       </Modal>
     </section>
   );

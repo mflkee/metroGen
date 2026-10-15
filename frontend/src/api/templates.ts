@@ -76,6 +76,25 @@ export type TemplateVersion = {
   structure_resolved: FormStructure;
 };
 
+export type TemplateCompareRequest = {
+  other_code?: string | null;
+  left_revision?: number | null;
+  right_revision?: number | null;
+};
+
+export type TemplateDifference = {
+  path: string;
+  kind: string;
+  before?: unknown;
+  after?: unknown;
+};
+
+export type TemplateCompare = {
+  left_label: string;
+  right_label: string;
+  differences: TemplateDifference[];
+};
+
 export type TemplatePreviewStep = {
   stage: string;
   matched: boolean;
@@ -155,7 +174,7 @@ export async function previewTemplateRule(
 export async function saveFormDraft(
   token: string,
   code: string,
-  payload: { structure?: FormStructure; overlay?: FormStructure },
+  payload: { structure?: FormStructure; overlay?: FormStructure; renderer?: string },
 ): Promise<TemplateFormDetail> {
   return apiRequest<TemplateFormDetail>(`/templates/${encodeURIComponent(code)}/draft`, {
     method: "PUT",
@@ -203,4 +222,16 @@ export async function previewForm(token: string, code: string): Promise<string> 
     { method: "POST", token },
   );
   return result.html;
+}
+
+export async function compareForms(
+  token: string,
+  code: string,
+  payload: TemplateCompareRequest,
+): Promise<TemplateCompare> {
+  return apiRequest<TemplateCompare>(`/templates/${encodeURIComponent(code)}/compare`, {
+    method: "POST",
+    token,
+    body: payload,
+  });
 }
