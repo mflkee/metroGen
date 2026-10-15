@@ -455,7 +455,7 @@ async def test_manometers_pdf_files_happy_path(async_client, tmp_path, monkeypat
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-manometer%"
-    assert saved_path.parent == tmp_path / f"Generation pressure 09 - {run_id}"
+    assert saved_path.parent == tmp_path / f"pressure 2025-09 {run_id}"
     assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"
 
 
@@ -783,7 +783,7 @@ async def test_manometers_pdf_files_with_preloaded_registry(async_client, tmp_pa
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-manometer%"
-    assert saved_path.parent == tmp_path / f"Generation pressure 06 - {run_id}"
+    assert saved_path.parent == tmp_path / f"pressure 2025-06 {run_id}"
     assert saved_path.name == "2025-06-15 № 03607 (МПИ-1).pdf"
 
 
@@ -957,7 +957,7 @@ async def test_thermometers_pdf_files_happy_path(async_client, tmp_path, monkeyp
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-rtd%"
-    assert saved_path.parent == tmp_path / f"Generation rtd 10 - {run_id}"
+    assert saved_path.parent == tmp_path / f"rtd 2025-10 {run_id}"
 
 
 @pytest.mark.anyio
@@ -1051,7 +1051,7 @@ async def test_manometers_failed_pdf_files_marks_failed_context(
     saved_path = Path(body["files"][0])
     assert saved_path.exists()
     assert saved_path.read_bytes() == b"%PDF-failed%"
-    assert saved_path.parent == tmp_path / f"Generation pressure failed 06 - {run_id}"
+    assert saved_path.parent == tmp_path / f"pressure failed 2025-06 {run_id}"
 
     assert seen_contexts
     assert seen_contexts[0].get("verification_failed") is True

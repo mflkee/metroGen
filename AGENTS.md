@@ -141,7 +141,7 @@
   4. Файл пишется в `exports/<folder>` с уникализацией имени.
 - **Файловые правила:**
   - каталоги формируются через `get_named_exports_dir`;
-  - массовые run-экспорты используют лейблы вида `Generation pressure|rtd|Контроллеры <MM> - <run_id>`;
+  - массовые run-экспорты используют лейблы вида `<оборудование> <YYYY-MM|ММ> <ЧЧ:ММ>` (например `rtd 2025-10 03:01`; оборудование — `label_override`, месяц — `_resolve_run_month`, время — `_make_run_time`);
   - имена файлов безопасны через `sanitize_filename` и уникализируются `_unique_output_path`.
 - **Ошибки:** Playwright import failure -> `None`, дальнейшая обработка в роутере.
 
@@ -228,7 +228,7 @@
 - Добавлен отдельный сценарий `POST /api/v1/protocols/manometers/failed/pdf-files` (браковочные протоколы).
 - Уточнена фактическая карта strict certificate match: `manometers/thermometers=true`, `controllers=false`.
 - Уточнена модель retries в массовой генерации: row-level retry по маркерам транспортных/лимитных ошибок.
-- Зафиксированы текущие export naming conventions (`Generation <label> <month> - <run_id>`).
+- Зафиксированы текущие export naming conventions (`<оборудование> <YYYY-MM|ММ> <ЧЧ:ММ>`; прежний формат `Generation <label> <month> - <run_id>` отменён).
 - Добавлен раздел про `data/attachments/*` как legacy-reference (неисполняемый контур).
 - Уточнено, что builder валидирует обязательность ИНН владельца и может завершаться `ValueError`.
 

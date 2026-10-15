@@ -345,8 +345,6 @@ def _exports_folder_label(
     *,
     forced_month: str | None = None,
     use_default_only: bool = False,
-    prefix: str = "PDF",
-    run_id: str | None = None,
     label_override: str | None = None,
 ) -> str:
     equipment = label_override or (
