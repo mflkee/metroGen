@@ -31,21 +31,6 @@ class GenInput:
     allowable_error: Tolerance
     allowable_variation: Tolerance
     ctx: dict[str, Any]
-    #: Точки замера из структуры формы (доли ВПИ). Если заданы — генератор берёт их вместо своих.
-    point_fractions: list[float] | None = None
-
-
-def steps_from_fractions(fsv: float, fractions: list[float] | None) -> list[float] | None:
-    """Пересчитать доли ВПИ из структуры формы в значения опорных точек."""
-    if not fractions:
-        return None
-    steps: list[float] = []
-    for fraction in fractions:
-        try:
-            steps.append(round(fsv * float(fraction), 1))
-        except (TypeError, ValueError):
-            continue
-    return steps or None
 
 
 class TableGenerator(Protocol):

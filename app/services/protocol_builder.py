@@ -11,7 +11,6 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories import AuxiliaryInstrumentRepository
-from app.services import form_structures
 from app.services.arshin_client import resolve_etalon_certs_from_details
 from app.services.generators.base import FixedPctTol, GenInput
 from app.services.generators.registry import get_by_template
@@ -1154,15 +1153,6 @@ async def build_context(
         var_source = tpl.get("allowable_variation_pct", allowable_error)
     var_tol = FixedPctTol(float(var_source))
 
-    # Форма может задавать точки замера — но только если она уже «управляет протоколом»
-    # (renderer = "data") и есть опубликованная версия. Иначе поведение прежнее.
-    published_structures = await form_structures.load(session)
-    form_structure_data = published_structures.get(template_id)
-    form_point_fractions = form_structures.point_fractions(form_structure_data)
-    form_columns = form_structures.table_columns(form_structure_data)
-    if form_columns:
-        context["table_columns"] = form_columns
-
     gen = get_by_template(template_id)
     if gen and range_min is not None and range_max is not None:
         gen_range_max = fsv_for_gen if fsv_for_gen is not None else range_max
@@ -1174,7 +1164,6 @@ async def build_context(
                 points=points,
                 allowable_error=err_tol,
                 allowable_variation=var_tol,
-                point_fractions=form_point_fractions,
                 ctx={
                     "template_id": template_id,
                     "method_code": method_code,
@@ -1223,15 +1212,6 @@ async def build_context(
                 )
                 context["max_variation_value"] = max_variation_value
                 context["max_variation_unit"] = "%" if max_variation_value else ""
-
-    # Таблица из структуры формы: только когда форма управляет протоколом и структура её описывает.
-    # Иначе ключа нет и шаблон рисует свою (прежнюю) таблицу.
-    if form_structure_data:
-        structure_table = form_structures.build_structure_table(
-            form_structure_data, context.get("table_rows") or [], context
-        )
-        if structure_table:
-            context["structure_table"] = structure_table
 
     trainee_name = _pick_trainee_name(
         context.get("verifier_name"),

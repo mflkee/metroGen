@@ -189,9 +189,6 @@
       {% endif %}
     </div>
     {% if not hide_results_table %}
-    {% if structure_table %}
-    {% include "_structure_table.html" %}
-    {% else %}
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
         <tr>
@@ -231,7 +228,6 @@
         {% endfor %}
       </tbody>
     </table>
-    {% endif %}
     {% endif %}
     {% if verification_failed %}
     <p class="spread-bottom-large">

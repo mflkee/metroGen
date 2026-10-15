@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from random import uniform
 
-from .base import GenInput, TableGenerator, steps_from_fractions
+from .base import GenInput, TableGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class LevelMeter(TableGenerator):
         except Exception:
             err_limit_mm = 5.0
 
-        steps = steps_from_fractions(fsv, gi.point_fractions) or _nice_steps(fsv, n)
+        steps = _nice_steps(fsv, n)
         rows: list[dict[str, object]] = []
 
         for ref_val in steps:

@@ -192,9 +192,6 @@
     {% if insol_two_tables %}
     <p class="spread-bottom" style="margin-top: 0.5rem; font-weight: bold;">А.1 Результаты измерений уровня жидкости:</p>
     {% endif %}
-    {% if structure_table %}
-    {% include "_structure_table.html" %}
-    {% else %}
     <table class="spread-bottom-large" id="valuesTable">
       <thead>
         <tr>
@@ -221,7 +218,6 @@
         {% endfor %}
       </tbody>
     </table>
-    {% endif %}
 
     {# === Таблица токового выхода (Levelflex FMP51) === #}
     {% if has_current_output_table %}

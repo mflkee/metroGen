@@ -8,7 +8,6 @@ export type IconName =
   | "details"
   | "etalon"
   | "aux"
-  | "form"
   | "delete";
 
 type IconProps = {
@@ -85,14 +84,6 @@ export function Icon({ name, className }: IconProps) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 17.25a7.5 7.5 0 0 1 15 0" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 17.25l3.75-5.25" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 17.25h15" />
-        </svg>
-      );
-    case "form":
-      return (
-        <svg className={baseClassName} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 3.75h8.25L18 7.5v12.75H6z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 3.75V7.5H18" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6M9 15.75h6" />
         </svg>
       );
     case "delete":

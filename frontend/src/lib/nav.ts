@@ -45,12 +45,6 @@ const referenceNavigationItems: NavigationItem[] = [
     description: "Справочник эталонов (ФИФ) с обновлением из Аршина",
     to: "/admin/etalons",
   },
-  {
-    icon: "form",
-    label: "Формы протоколов",
-    description: "Каталог форм, наследование и граф зависимостей",
-    to: "/admin/templates",
-  },
 ];
 
 /** Pinned to the bottom of the sidebar (with «Документация», added by the shell). */

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from random import uniform
 
-from .base import GenInput, TableGenerator, steps_from_fractions
+from .base import GenInput, TableGenerator
 
 _VARIATION_SAFETY_FACTOR = 0.95
 
@@ -122,7 +122,7 @@ class PressureCommon(TableGenerator):
             # Фоллбэк: равномерные точки
             return [round((fsv * i) / desired_intervals, 6) for i in range(desired_points)]
 
-        steps = steps_from_fractions(fsv, gi.point_fractions) or _nice_steps(fsv, n)
+        steps = _nice_steps(fsv, n)
         rows: list[dict[str, object]] = []
 
         for i, ref_fwd in enumerate(steps):

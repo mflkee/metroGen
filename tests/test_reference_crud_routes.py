@@ -143,14 +143,19 @@ async def test_etalon_update_certificates_and_delete(async_client):
 
 
 @pytest.mark.anyio
-async def test_template_catalog_and_rule_crud(async_client):
-    catalog = await async_client.get("/api/v1/templates")
-    assert catalog.status_code == 200
-    body = catalog.json()
-    template_ids = {item["id"] for item in body["templates"]}
-    assert {"pressure_common", "level_meter", "level_meter_two_tables"} <= template_ids
-    assert "manometers" in body["instrument_kinds"]
-    assert "mitype_number" in body["match_fields"]
+async def test_mapping_rules_are_listed(async_client):
+    response = await async_client.get("/api/v1/templates/rules")
+    assert response.status_code == 200
+    rules = response.json()
+    assert rules
+    assert {
+        "instrument_kind",
+        "match_field",
+        "match_value",
+        "template_id",
+        "priority",
+        "is_active",
+    } <= set(rules[0])
 
 
 @pytest.mark.anyio
@@ -214,42 +219,6 @@ async def test_template_rule_rejects_unknown_template(async_client):
 
 
 @pytest.mark.anyio
-async def test_catalog_exposes_the_form_tree(async_client):
-    response = await async_client.get("/api/v1/templates")
-    assert response.status_code == 200
-    body = response.json()
-
-    forms = {item["id"]: item for item in body["templates"]}
-    assert "level_meter" in forms
-    assert "modification" in body["match_fields"]
-
-    base = forms["level_meter"]
-    assert base["instrument_kind"] == "level_meters"
-    assert base["parent_code"] is None
-    assert "level_meter_two_tables" in base["children"]
-
-    derived = forms["level_meter_two_tables"]
-    assert derived["parent_code"] == "level_meter"
-    # Структуру можно редактировать у любой формы; «протокол из данных» — только после перехода.
-    assert derived["is_editable"] is True
-    assert derived["drives_protocol"] is False
-    assert derived["renderer"] == "html"
-
-
-@pytest.mark.anyio
-async def test_form_card_lists_the_rules_that_select_it(async_client):
-    response = await async_client.get("/api/v1/templates/level_meter_two_tables")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["form"]["id"] == "level_meter_two_tables"
-    assert body["form"]["parent_code"] == "level_meter"
-    assert any(rule["match_field"] == "modification" for rule in body["rules"])
-
-    missing = await async_client.get("/api/v1/templates/no_such_form")
-    assert missing.status_code == 404
-
-
-@pytest.mark.anyio
 async def test_preview_returns_the_decision_path_and_accepts_a_modification(async_client):
     suffix = _suffix()
     created = await async_client.post(
@@ -283,36 +252,3 @@ async def test_preview_returns_the_decision_path_and_accepts_a_modification(asyn
     assert stages["rule"]["match_field"] == "modification"
 
     await async_client.delete(f"/api/v1/templates/rules/{rule_id}")
-
-
-@pytest.mark.anyio
-async def test_editing_a_form_requires_an_administrator(async_client):
-    """The write endpoints must not be reachable without an administrative role."""
-    draft = await async_client.put(
-        "/api/v1/templates/level_meter/draft",
-        json={"structure": {"schema": 1, "sections": []}},
-    )
-    assert draft.status_code == 401
-
-    publish = await async_client.post(
-        "/api/v1/templates/level_meter/publish", json={"comment": "x"}
-    )
-    assert publish.status_code == 401
-
-    restore = await async_client.post("/api/v1/templates/level_meter/versions/1/restore")
-    assert restore.status_code == 401
-
-
-@pytest.mark.anyio
-async def test_form_detail_exposes_the_structure_and_overlay(async_client):
-    response = await async_client.get("/api/v1/templates/level_meter_two_tables")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["form"]["is_editable"] is True
-    assert body["form"]["drives_protocol"] is False
-    assert isinstance(body["structure"], dict)
-    assert isinstance(body["overlay_keys"], list)
-
-    preview = await async_client.post("/api/v1/templates/level_meter_two_tables/preview")
-    assert preview.status_code == 200
-    assert "html" in preview.json()

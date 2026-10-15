@@ -63,66 +63,6 @@ class TemplateBindingRule(Base):
     )
 
 
-class ProtocolForm(Base):
-    """Форма протокола как сущность.
-
-    ``code`` совпадает с ``template_id`` в правилах и с ключом ``TEMPLATES`` (миграция без разрыва).
-    ``parent_code`` выражает наследование: производная форма ссылается на базовую. ``renderer``:
-    ``html`` — форма пока рендерится файлом из ``app/templates`` (редактирование недоступно);
-    ``data`` — форма описана структурой (появится в change ``protocol-form-editor``).
-    """
-
-    __tablename__ = "protocol_forms"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    instrument_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    parent_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    renderer: Mapped[str] = mapped_column(String(16), nullable=False, default="html")
-    structure: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
-    overlay: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
-    notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=text("now()")
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=text("now()")
-    )
-
-    versions: Mapped[list[ProtocolFormVersion]] = relationship(
-        back_populates="form", cascade="all, delete-orphan"
-    )
-
-
-class ProtocolFormVersion(Base):
-    """Опубликованная версия формы — иммутабельный снапшот разрешённой структуры.
-
-    Черновик живёт в ``ProtocolForm.structure``/``overlay``; публикация фиксирует снапшот, а
-    генерация (когда форма перейдёт на ``renderer = 'data'``) берёт последнюю версию. Откат —
-    публикация новой версии из старой: история не переписывается.
-    """
-
-    __tablename__ = "protocol_form_versions"
-    __table_args__ = (UniqueConstraint("form_id", "revision", name="uq_protocol_form_version"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    form_id: Mapped[int] = mapped_column(
-        ForeignKey("protocol_forms.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    structure_resolved: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
-    overlay: Mapped[dict[str, Any] | None] = mapped_column(JSONBType(), nullable=True)
-    comment: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    published_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    published_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=text("now()")
-    )
-
-    form: Mapped[ProtocolForm] = relationship(back_populates="versions")
-
-
 class Owner(Base):
     __tablename__ = "owners"
 

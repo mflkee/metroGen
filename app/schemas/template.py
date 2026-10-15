@@ -5,20 +5,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class TemplateOut(BaseModel):
-    id: str
-    title: str
-    instrument_kind: str
-    parent_code: str | None = None
-    children: list[str] = Field(default_factory=list)
-    renderer: str = "html"
-    is_active: bool = True
-    #: True when the form's structure can be edited in the interface.
-    is_editable: bool = True
-    #: True when the protocol itself is rendered from the structure (not from an HTML template).
-    drives_protocol: bool = False
-
-
 class TemplateRuleOut(BaseModel):
     id: int
     instrument_kind: str
@@ -84,72 +70,3 @@ class TemplatePreviewOut(BaseModel):
     source: str
     rule_id: int | None = None
     steps: list[TemplatePreviewStep] = Field(default_factory=list)
-
-
-class TemplateRuleBriefOut(BaseModel):
-    """A rule that selects a form — used by the form card's reverse lookup."""
-
-    id: int
-    instrument_kind: str
-    match_field: str
-    match_value: str
-    priority: int
-    is_active: bool
-
-
-class TemplateFormDetailOut(BaseModel):
-    form: TemplateOut
-    rules: list[TemplateRuleBriefOut]
-    #: The resolved structure (parent chain + overlays applied).
-    structure: dict[str, Any] = Field(default_factory=dict)
-    #: What this form itself overrides.
-    overlay: dict[str, Any] = Field(default_factory=dict)
-    overlay_keys: list[str] = Field(default_factory=list)
-    #: Validation problems of the current draft (empty means usable).
-    problems: list[str] = Field(default_factory=list)
-
-
-class TemplateStructureUpdate(BaseModel):
-    """Save a draft: the form's own structure and/or its overlay."""
-
-    structure: dict[str, Any] | None = None
-    overlay: dict[str, Any] | None = None
-    #: ``html`` (template still renders the protocol) or ``data`` (the structure does).
-    renderer: str | None = None
-
-
-class TemplateCompareRequest(BaseModel):
-    """Compare two forms, or two versions of one form."""
-
-    other_code: str | None = None
-    left_revision: int | None = None
-    right_revision: int | None = None
-
-
-class TemplateCompareOut(BaseModel):
-    left_label: str
-    right_label: str
-    differences: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class TemplatePublishRequest(BaseModel):
-    comment: str | None = None
-
-
-class TemplateVersionOut(BaseModel):
-    revision: int
-    comment: str | None = None
-    published_by: str | None = None
-    published_at: str | None = None
-    overlay: dict[str, Any] = Field(default_factory=dict)
-    structure_resolved: dict[str, Any] = Field(default_factory=dict)
-
-
-class TemplatePreviewRenderOut(BaseModel):
-    html: str
-
-
-class TemplateCatalogOut(BaseModel):
-    templates: list[TemplateOut]
-    instrument_kinds: list[str]
-    match_fields: list[str]

@@ -6,74 +6,6 @@ from app.services.protocol_builder import build_context
 _DEFAULT_POINTS = {"p1": "5.1", "p2": "5.2", "p3": "5.3"}
 
 
-async def _pressure_ctx(**overrides):
-    """A realistic pressure context, built the same way the other renderer tests do."""
-    excel_row = {
-        "Обозначение СИ": "13535-93",
-        "Заводской номер": "03607",
-        "Модификация": "ТМ3",
-        "Прочие сведения": "0…0,6 МПа",
-        "КТ": "1,5",
-        "Методика поверки": "МИ 2124-90",
-        "Температура": "21,5",
-        "Влажность": "60",
-        "Давление": "102,3 кПа",
-    }
-    details = {
-        "miInfo": {
-            "singleMI": {
-                "mitypeNumber": "13535-93",
-                "mitypeTitle": "Манометры показывающие",
-                "mitypeType": "ТМ3",
-            }
-        },
-        "vriInfo": {},
-    }
-    ctx = await build_context(
-        excel_row=excel_row,
-        details=details,
-        methodology_points=dict(_DEFAULT_POINTS),
-        owner_name='ООО "РИ-ИНВЕСТ"',
-        owner_inn="7705551779",
-        allowable_error=1.5,
-        allowable_variation=1.5,
-        protocol_number="01/001/26",
-    )
-    ctx.update(overrides)
-    return ctx
-
-
-@pytest.mark.anyio
-async def test_pressure_template_keeps_its_own_table_without_a_structure():
-    """Фоллбэк: без structure_table шаблон рисует свою прежнюю шапку."""
-    html = render_protocol_html(await _pressure_ctx())
-
-    assert "Приведенная погрешность" in html
-    assert "Допустимая вариация" in html
-
-
-@pytest.mark.anyio
-async def test_pressure_template_renders_the_structure_table():
-    """Когда builder положил structure_table, главная таблица собирается из структуры."""
-    html = render_protocol_html(
-        await _pressure_ctx(
-            structure_table={
-                "columns": [
-                    {"id": "si_fwd", "title": "Мои показания"},
-                    {"id": "allowable_error", "title": "Допуск"},
-                ],
-                "rows": [["1.00", "1.50"], ["2.00", "1.50"]],
-            }
-        )
-    )
-
-    assert "Мои показания" in html
-    assert "Допуск" in html
-    assert "2.00" in html
-    # Прежней шапки больше нет — таблицу задаёт структура.
-    assert "Приведенная погрешность" not in html
-
-
 @pytest.mark.anyio
 async def test_pressure_html_renders_range_class_auxiliary_and_summary():
     excel_row = {
@@ -137,12 +69,12 @@ async def test_pressure_html_renders_range_class_auxiliary_and_summary():
     assert "1,5" in html
     assert "Не эталоны:" not in html
     assert "71394-18; Измерители влажности и температуры; ИВТМ-7 М5-Д" in html
-    assert 'Место проведения поверки:' in html
+    assert "Место проведения поверки:" in html
     assert 'ООО "МКАИР"' in html
     assert "Вибрация (тряска) отсутствует (не вызывает колебаний стрелки)" in html
     assert ">60%<" in html or "> 60%<" in html
     assert "Максимальное полученное значение вариации:" in html
-    assert f'{ctx["max_variation_value"]} {ctx["max_variation_unit"]}' in html
+    assert f"{ctx['max_variation_value']} {ctx['max_variation_unit']}" in html
     assert "Максимальное полученное значение абсолютной погрешности:" not in html
     assert "°С," in html
     assert '<p class="line">атмосферное давление ' in html
