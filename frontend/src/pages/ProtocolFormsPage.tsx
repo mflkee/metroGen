@@ -1,19 +1,29 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  fetchFormVersions,
   fetchTemplateCatalog,
   fetchTemplateForm,
   fetchTemplateRules,
+  previewForm,
   previewTemplateRule,
+  publishForm,
+  restoreFormVersion,
+  saveFormDraft,
+  type FormStructure,
+  type StructureBlock,
   type TemplatePreview,
 } from "@/api/templates";
 import { ExpandableItem } from "@/components/ExpandableItem";
 import { FormGraph, type FormGraphLink, type FormGraphNode } from "@/components/forms/FormGraph";
+import { StructureEditor } from "@/components/forms/StructureEditor";
+import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { hasAdminAccess } from "@/lib/roles";
 import { useAuthStore } from "@/store/auth";
 
 const KIND_LABELS: Record<string, string> = {
@@ -48,8 +58,46 @@ function kindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
 }
 
+/**
+ * The overlay of a derived form: only the tables that differ from the resolved parent structure.
+ * Sending the whole structure would freeze every table and stop base edits from propagating.
+ */
+function buildOverlay(original: FormStructure, draft: FormStructure): FormStructure {
+  const before = new Map<string, StructureBlock>();
+  for (const section of original.sections ?? []) {
+    for (const block of section.blocks ?? []) {
+      if (block.type === "table") {
+        before.set(`${section.id}/${block.id}`, block);
+      }
+    }
+  }
+
+  const sections: FormStructure["sections"] = [];
+  for (const section of draft.sections ?? []) {
+    const blocks = (section.blocks ?? [])
+      .filter((block) => block.type === "table")
+      .filter((block) => {
+        const previous = before.get(`${section.id}/${block.id}`);
+        return !previous || JSON.stringify(previous) !== JSON.stringify(block);
+      })
+      .map((block) => ({
+        id: block.id,
+        type: "table",
+        columns: block.columns,
+        rows: block.rows,
+      }));
+    if (blocks.length) {
+      sections?.push({ id: section.id, blocks });
+    }
+  }
+  return { schema: draft.schema ?? 1, sections: sections ?? [] };
+}
+
 export function ProtocolFormsPage() {
   const token = useAuthStore((state) => state.token);
+  const role = useAuthStore((state) => state.user?.role);
+  const queryClient = useQueryClient();
+  const isAdmin = hasAdminAccess(role);
 
   const [kindFilter, setKindFilter] = useState("all");
   const [axisFilter, setAxisFilter] = useState("all");
@@ -65,6 +113,11 @@ export function ProtocolFormsPage() {
   const [preview, setPreview] = useState<TemplatePreview | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<FormStructure | null>(null);
+  const [publishComment, setPublishComment] = useState("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
 
   const catalogQuery = useQuery({
     queryKey: ["template-catalog"],
@@ -81,6 +134,64 @@ export function ProtocolFormsPage() {
     queryFn: () => fetchTemplateForm(token ?? "", selectedCode as string),
     enabled: Boolean(token) && selectedCode !== null,
   });
+
+  const versionsQuery = useQuery({
+    queryKey: ["template-form-versions", selectedCode],
+    queryFn: () => fetchFormVersions(token ?? "", selectedCode as string),
+    enabled: Boolean(token) && historyOpen && selectedCode !== null,
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: () => {
+      const resolved = formQuery.data?.structure ?? {};
+      const payload = formQuery.data?.form.parent_code
+        ? { overlay: buildOverlay(resolved, draft ?? {}) }
+        : { structure: draft ?? {} };
+      return saveFormDraft(token ?? "", selectedCode as string, payload);
+    },
+    onSuccess: (detail) => {
+      setDraft(detail.structure);
+      setEditorError(null);
+      void queryClient.invalidateQueries({ queryKey: ["template-form", selectedCode] });
+    },
+    onError: (error) =>
+      setEditorError(error instanceof Error ? error.message : "Не удалось сохранить черновик."),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: () => publishForm(token ?? "", selectedCode as string, publishComment.trim() || null),
+    onSuccess: () => {
+      setPublishComment("");
+      setEditorError(null);
+      void queryClient.invalidateQueries({ queryKey: ["template-form-versions", selectedCode] });
+    },
+    onError: (error) =>
+      setEditorError(error instanceof Error ? error.message : "Не удалось опубликовать форму."),
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: () => previewForm(token ?? "", selectedCode as string),
+    onSuccess: (html) => setPreviewHtml(html),
+    onError: (error) =>
+      setEditorError(error instanceof Error ? error.message : "Не удалось собрать предпросмотр."),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (revision: number) =>
+      restoreFormVersion(token ?? "", selectedCode as string, revision),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["template-form", selectedCode] });
+      void queryClient.invalidateQueries({ queryKey: ["template-form-versions", selectedCode] });
+    },
+    onError: (error) =>
+      setEditorError(error instanceof Error ? error.message : "Не удалось восстановить версию."),
+  });
+
+  useEffect(() => {
+    setDraft(formQuery.data?.structure ?? null);
+    setEditorError(null);
+    setPreviewHtml(null);
+  }, [formQuery.data]);
 
   const forms = useMemo(() => catalogQuery.data?.templates ?? [], [catalogQuery.data]);
   const rules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data]);
@@ -353,6 +464,79 @@ export function ProtocolFormsPage() {
           ) : (
             <p className="text-sm text-steel">Правил, указывающих на эту форму, нет — она выбирается эвристикой.</p>
           )}
+
+          <div className="space-y-3 border-t border-line pt-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <h4 className="font-semibold text-ink">Структура формы</h4>
+              <span className="text-xs text-steel">
+                {formQuery.data?.form.drives_protocol
+                  ? "протокол собирается из этой структуры"
+                  : "протокол пока рендерится HTML-шаблоном — правки структуры его не меняют"}
+              </span>
+            </div>
+
+            {draft ? (
+              <StructureEditor
+                overlayKeys={formQuery.data?.overlay_keys ?? []}
+                readOnly={!isAdmin}
+                structure={draft}
+                onChange={setDraft}
+              />
+            ) : (
+              <p className="text-sm text-steel">Структура загружается...</p>
+            )}
+
+            {formQuery.data?.problems.length ? (
+              <p className="text-sm text-[var(--danger-text)]">
+                Проблемы структуры: {formQuery.data.problems.join("; ")}
+              </p>
+            ) : null}
+
+            {isAdmin ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  className="btn-primary btn-sm"
+                  disabled={saveDraftMutation.isPending}
+                  type="button"
+                  onClick={() => saveDraftMutation.mutate()}
+                >
+                  {saveDraftMutation.isPending ? "Сохраняем..." : "Сохранить черновик"}
+                </button>
+                <button
+                  className="btn-secondary btn-sm"
+                  disabled={previewMutation.isPending}
+                  type="button"
+                  onClick={() => previewMutation.mutate()}
+                >
+                  {previewMutation.isPending ? "Собираем..." : "Предпросмотр"}
+                </button>
+                <input
+                  className="form-input max-w-[240px]"
+                  placeholder="комментарий к публикации"
+                  type="text"
+                  value={publishComment}
+                  onChange={(event) => setPublishComment(event.target.value)}
+                />
+                <button
+                  className="btn-primary btn-sm"
+                  disabled={publishMutation.isPending}
+                  type="button"
+                  onClick={() => publishMutation.mutate()}
+                >
+                  {publishMutation.isPending ? "Публикуем..." : "Опубликовать"}
+                </button>
+                <button className="btn-secondary btn-sm" type="button" onClick={() => setHistoryOpen(true)}>
+                  История версий
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-steel">
+                Редактирование доступно администратору и разработчику.
+              </p>
+            )}
+
+            {editorError ? <p className="text-sm text-[var(--danger-text)]">{editorError}</p> : null}
+          </div>
         </section>
       ) : null}
 
@@ -411,6 +595,61 @@ export function ProtocolFormsPage() {
           </div>
         ))}
       </section>
+
+      <Modal
+        open={previewHtml !== null}
+        size="xl"
+        title="Предпросмотр черновика"
+        onClose={() => setPreviewHtml(null)}
+      >
+        {previewHtml ? (
+          <iframe
+            className="preview-frame w-full rounded-2xl border border-line"
+            srcDoc={previewHtml}
+            style={{ height: "70vh" }}
+            title="Предпросмотр формы"
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={historyOpen}
+        title="История версий"
+        onClose={() => setHistoryOpen(false)}
+      >
+        {versionsQuery.isLoading ? <p className="text-sm text-steel">Загрузка...</p> : null}
+        {versionsQuery.data?.length ? (
+          <div className="space-y-2">
+            {versionsQuery.data.map((version) => (
+              <div
+                key={version.revision}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line px-4 py-3"
+              >
+                <div>
+                  <div className="font-semibold text-ink">Версия {version.revision}</div>
+                  <div className="text-sm text-steel">
+                    {version.comment ?? "без комментария"}
+                    {version.published_by ? ` · ${version.published_by}` : ""}
+                    {version.published_at
+                      ? ` · ${new Date(version.published_at).toLocaleString("ru-RU")}`
+                      : ""}
+                  </div>
+                </div>
+                <button
+                  className="btn-secondary btn-sm"
+                  disabled={restoreMutation.isPending || !isAdmin}
+                  type="button"
+                  onClick={() => restoreMutation.mutate(version.revision)}
+                >
+                  Восстановить
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : versionsQuery.isLoading ? null : (
+          <p className="text-sm text-steel">Публикаций ещё не было.</p>
+        )}
+      </Modal>
     </section>
   );
 }

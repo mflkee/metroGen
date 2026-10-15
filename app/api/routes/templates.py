@@ -3,24 +3,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
-from app.db.models import ProtocolForm, TemplateBindingRule
+from app.api.deps import AdminUser, get_db
+from app.db.models import ProtocolForm, ProtocolFormVersion, TemplateBindingRule
 from app.schemas.template import (
     TemplateCatalogOut,
     TemplateFormDetailOut,
     TemplateOut,
     TemplatePreviewOut,
+    TemplatePreviewRenderOut,
     TemplatePreviewRequest,
     TemplatePreviewStep,
+    TemplatePublishRequest,
     TemplateRuleBriefOut,
     TemplateRuleCreate,
     TemplateRuleOut,
     TemplateRuleUpdate,
+    TemplateStructureUpdate,
+    TemplateVersionOut,
 )
-from app.services import template_rules
+from app.services import form_structure, template_rules
 from app.services.templates import TEMPLATES
 
 router = APIRouter(prefix="/api/v1/templates", tags=["templates"])
@@ -124,7 +128,29 @@ def _to_out(form: _FormView, children: dict[str, list[str]]) -> TemplateOut:
         children=sorted(children.get(form.code, [])),
         renderer=form.renderer,
         is_active=form.is_active,
-        is_editable=form.renderer == "data",
+        is_editable=True,
+        drives_protocol=form.renderer == "data",
+    )
+
+
+async def _load_form_rows(session: AsyncSession) -> dict[str, ProtocolForm]:
+    """ORM rows by code — the write endpoints and the structure resolver need the real rows."""
+    try:
+        rows = (await session.execute(select(ProtocolForm))).scalars().all()
+    except Exception:
+        return {}
+    return {row.code: row for row in rows}
+
+
+def _version_out(version: ProtocolFormVersion) -> TemplateVersionOut:
+    published_at = getattr(version, "published_at", None)
+    return TemplateVersionOut(
+        revision=version.revision,
+        comment=version.comment,
+        published_by=version.published_by,
+        published_at=published_at.isoformat() if published_at else None,
+        overlay=dict(version.overlay or {}),
+        structure_resolved=dict(version.structure_resolved or {}),
     )
 
 
@@ -315,6 +341,11 @@ async def get_template(
         .scalars()
         .all()
     )
+    rows_by_code = await _load_form_rows(session)
+    resolved = form_structure.resolve_structure(form_code, rows_by_code)
+    own_row = rows_by_code.get(form_code)
+    overlay = dict(getattr(own_row, "overlay", None) or {})
+
     return TemplateFormDetailOut(
         form=_to_out(form, _children_map(forms)),
         rules=[
@@ -328,4 +359,176 @@ async def get_template(
             )
             for row in rows
         ],
+        structure=resolved,
+        overlay=overlay,
+        overlay_keys=form_structure.overlay_keys(overlay),
+        problems=form_structure.validate_structure(resolved) if resolved else [],
     )
+
+
+@router.put(
+    "/{form_code}/draft",
+    response_model=TemplateFormDetailOut,
+    summary="Save a draft of a form's structure (administrators)",
+)
+async def save_form_draft(
+    form_code: str,
+    payload: TemplateStructureUpdate,
+    user: AdminUser,
+    session: AsyncSession = Depends(get_db),
+) -> TemplateFormDetailOut:
+    row = (await _load_form_rows(session)).get(form_code)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+
+    if payload.structure is not None:
+        problems = form_structure.validate_structure(payload.structure)
+        if problems:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "structure is invalid", "problems": problems},
+            )
+        row.structure = payload.structure
+    if payload.overlay is not None:
+        row.overlay = payload.overlay
+
+    await session.commit()
+    return await get_template(form_code, session)
+
+
+@router.post(
+    "/{form_code}/publish",
+    response_model=TemplateVersionOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Publish the current draft as a new version (administrators)",
+)
+async def publish_form(
+    form_code: str,
+    payload: TemplatePublishRequest,
+    user: AdminUser,
+    session: AsyncSession = Depends(get_db),
+) -> TemplateVersionOut:
+    rows_by_code = await _load_form_rows(session)
+    row = rows_by_code.get(form_code)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+
+    resolved = form_structure.resolve_structure(form_code, rows_by_code)
+    problems = form_structure.validate_structure(resolved)
+    if problems:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "structure is invalid", "problems": problems},
+        )
+
+    last_revision = (
+        await session.execute(
+            select(func.max(ProtocolFormVersion.revision)).where(
+                ProtocolFormVersion.form_id == row.id
+            )
+        )
+    ).scalar() or 0
+
+    version = ProtocolFormVersion(
+        form_id=row.id,
+        revision=int(last_revision) + 1,
+        structure_resolved=resolved,
+        overlay=dict(row.overlay or {}),
+        comment=(payload.comment or "").strip() or None,
+        published_by=getattr(user, "email", None),
+    )
+    session.add(version)
+    await session.commit()
+    await session.refresh(version)
+    return _version_out(version)
+
+
+@router.get(
+    "/{form_code}/versions",
+    response_model=list[TemplateVersionOut],
+    summary="List the published versions of a form",
+)
+async def list_form_versions(
+    form_code: str, session: AsyncSession = Depends(get_db)
+) -> list[TemplateVersionOut]:
+    row = (await _load_form_rows(session)).get(form_code)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+
+    versions = (
+        (
+            await session.execute(
+                select(ProtocolFormVersion)
+                .where(ProtocolFormVersion.form_id == row.id)
+                .order_by(ProtocolFormVersion.revision.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [_version_out(version) for version in versions]
+
+
+@router.post(
+    "/{form_code}/versions/{revision}/restore",
+    response_model=TemplateVersionOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Restore a published version as a new one (administrators)",
+)
+async def restore_form_version(
+    form_code: str,
+    revision: int,
+    user: AdminUser,
+    session: AsyncSession = Depends(get_db),
+) -> TemplateVersionOut:
+    row = (await _load_form_rows(session)).get(form_code)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+
+    source = (
+        await session.execute(
+            select(ProtocolFormVersion).where(
+                ProtocolFormVersion.form_id == row.id,
+                ProtocolFormVersion.revision == revision,
+            )
+        )
+    ).scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="version not found")
+
+    row.overlay = dict(source.overlay or {})
+    last_revision = (
+        await session.execute(
+            select(func.max(ProtocolFormVersion.revision)).where(
+                ProtocolFormVersion.form_id == row.id
+            )
+        )
+    ).scalar() or 0
+
+    version = ProtocolFormVersion(
+        form_id=row.id,
+        revision=int(last_revision) + 1,
+        structure_resolved=dict(source.structure_resolved or {}),
+        overlay=dict(source.overlay or {}),
+        comment=f"restore of revision {revision}",
+        published_by=getattr(user, "email", None),
+    )
+    session.add(version)
+    await session.commit()
+    await session.refresh(version)
+    return _version_out(version)
+
+
+@router.post(
+    "/{form_code}/preview",
+    response_model=TemplatePreviewRenderOut,
+    summary="Render the draft structure of a form",
+)
+async def preview_form_structure(
+    form_code: str, session: AsyncSession = Depends(get_db)
+) -> TemplatePreviewRenderOut:
+    rows_by_code = await _load_form_rows(session)
+    if form_code not in rows_by_code:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="form not found")
+    resolved = form_structure.resolve_structure(form_code, rows_by_code)
+    return TemplatePreviewRenderOut(html=form_structure.render_structure_preview(resolved))

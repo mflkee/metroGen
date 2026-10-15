@@ -13,8 +13,10 @@ class TemplateOut(BaseModel):
     children: list[str] = Field(default_factory=list)
     renderer: str = "html"
     is_active: bool = True
-    #: True when the form is described by data and can be edited (the form editor change).
-    is_editable: bool = False
+    #: True when the form's structure can be edited in the interface.
+    is_editable: bool = True
+    #: True when the protocol itself is rendered from the structure (not from an HTML template).
+    drives_protocol: bool = False
 
 
 class TemplateRuleOut(BaseModel):
@@ -98,6 +100,37 @@ class TemplateRuleBriefOut(BaseModel):
 class TemplateFormDetailOut(BaseModel):
     form: TemplateOut
     rules: list[TemplateRuleBriefOut]
+    #: The resolved structure (parent chain + overlays applied).
+    structure: dict[str, Any] = Field(default_factory=dict)
+    #: What this form itself overrides.
+    overlay: dict[str, Any] = Field(default_factory=dict)
+    overlay_keys: list[str] = Field(default_factory=list)
+    #: Validation problems of the current draft (empty means usable).
+    problems: list[str] = Field(default_factory=list)
+
+
+class TemplateStructureUpdate(BaseModel):
+    """Save a draft: the form's own structure and/or its overlay."""
+
+    structure: dict[str, Any] | None = None
+    overlay: dict[str, Any] | None = None
+
+
+class TemplatePublishRequest(BaseModel):
+    comment: str | None = None
+
+
+class TemplateVersionOut(BaseModel):
+    revision: int
+    comment: str | None = None
+    published_by: str | None = None
+    published_at: str | None = None
+    overlay: dict[str, Any] = Field(default_factory=dict)
+    structure_resolved: dict[str, Any] = Field(default_factory=dict)
+
+
+class TemplatePreviewRenderOut(BaseModel):
+    html: str
 
 
 class TemplateCatalogOut(BaseModel):

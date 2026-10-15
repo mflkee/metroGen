@@ -9,6 +9,7 @@ export type TemplateOut = {
   renderer: string;
   is_active: boolean;
   is_editable: boolean;
+  drives_protocol: boolean;
 };
 
 export type TemplateCatalog = {
@@ -48,6 +49,31 @@ export type TemplateRuleBrief = {
 export type TemplateFormDetail = {
   form: TemplateOut;
   rules: TemplateRuleBrief[];
+  structure: FormStructure;
+  overlay: FormStructure;
+  overlay_keys: string[];
+  problems: string[];
+};
+
+export type StructureColumn = { id: string; title?: string };
+export type StructureRow = { id: string; kind?: string; at?: number; label?: string };
+export type StructureBlock = {
+  id: string;
+  type: string;
+  text?: string;
+  columns?: StructureColumn[];
+  rows?: StructureRow[];
+};
+export type StructureSection = { id: string; title?: string; blocks?: StructureBlock[] };
+export type FormStructure = { schema?: number; sections?: StructureSection[] };
+
+export type TemplateVersion = {
+  revision: number;
+  comment: string | null;
+  published_by: string | null;
+  published_at: string | null;
+  overlay: FormStructure;
+  structure_resolved: FormStructure;
 };
 
 export type TemplatePreviewStep = {
@@ -124,4 +150,57 @@ export async function previewTemplateRule(
     token,
     body: payload,
   });
+}
+
+export async function saveFormDraft(
+  token: string,
+  code: string,
+  payload: { structure?: FormStructure; overlay?: FormStructure },
+): Promise<TemplateFormDetail> {
+  return apiRequest<TemplateFormDetail>(`/templates/${encodeURIComponent(code)}/draft`, {
+    method: "PUT",
+    token,
+    body: payload,
+  });
+}
+
+export async function publishForm(
+  token: string,
+  code: string,
+  comment: string | null,
+): Promise<TemplateVersion> {
+  return apiRequest<TemplateVersion>(`/templates/${encodeURIComponent(code)}/publish`, {
+    method: "POST",
+    token,
+    body: { comment },
+  });
+}
+
+export async function fetchFormVersions(
+  token: string,
+  code: string,
+): Promise<TemplateVersion[]> {
+  return apiRequest<TemplateVersion[]>(`/templates/${encodeURIComponent(code)}/versions`, {
+    method: "GET",
+    token,
+  });
+}
+
+export async function restoreFormVersion(
+  token: string,
+  code: string,
+  revision: number,
+): Promise<TemplateVersion> {
+  return apiRequest<TemplateVersion>(
+    `/templates/${encodeURIComponent(code)}/versions/${revision}/restore`,
+    { method: "POST", token },
+  );
+}
+
+export async function previewForm(token: string, code: string): Promise<string> {
+  const result = await apiRequest<{ html: string }>(
+    `/templates/${encodeURIComponent(code)}/preview`,
+    { method: "POST", token },
+  );
+  return result.html;
 }

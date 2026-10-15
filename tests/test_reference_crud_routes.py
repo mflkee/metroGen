@@ -282,3 +282,36 @@ async def test_preview_returns_the_decision_path_and_accepts_a_modification(asyn
     assert stages["rule"]["match_field"] == "modification"
 
     await async_client.delete(f"/api/v1/templates/rules/{rule_id}")
+
+
+@pytest.mark.anyio
+async def test_editing_a_form_requires_an_administrator(async_client):
+    """The write endpoints must not be reachable without an administrative role."""
+    draft = await async_client.put(
+        "/api/v1/templates/level_meter/draft",
+        json={"structure": {"schema": 1, "sections": []}},
+    )
+    assert draft.status_code == 401
+
+    publish = await async_client.post(
+        "/api/v1/templates/level_meter/publish", json={"comment": "x"}
+    )
+    assert publish.status_code == 401
+
+    restore = await async_client.post("/api/v1/templates/level_meter/versions/1/restore")
+    assert restore.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_form_detail_exposes_the_structure_and_overlay(async_client):
+    response = await async_client.get("/api/v1/templates/level_meter_two_tables")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["form"]["is_editable"] is True
+    assert body["form"]["drives_protocol"] is False
+    assert isinstance(body["structure"], dict)
+    assert isinstance(body["overlay_keys"], list)
+
+    preview = await async_client.post("/api/v1/templates/level_meter_two_tables/preview")
+    assert preview.status_code == 200
+    assert "html" in preview.json()
