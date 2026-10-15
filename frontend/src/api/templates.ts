@@ -1,5 +1,13 @@
 import { apiRequest } from "@/api/client";
 
+/**
+ * Чтение каталога форм и правил — всё, что нужно странице-обзору.
+ *
+ * Редактирование (черновик структуры, публикация, версии, сравнение) живёт в API
+ * (`/templates/{code}/draft|publish|versions|preview|compare`) и в интерфейсе не предлагается:
+ * см. change `simplify-forms-section`. Если редактор когда-нибудь вернётся, обёртки добавятся рядом.
+ */
+
 export type TemplateOut = {
   id: string;
   title: string;
@@ -26,73 +34,6 @@ export type TemplateRule = {
   template_id: string;
   priority: number;
   is_active: boolean;
-};
-
-export type TemplateRulePayload = {
-  instrument_kind: string;
-  match_field: string;
-  match_value: string;
-  template_id: string;
-  priority: number;
-  is_active: boolean;
-};
-
-export type TemplateRuleBrief = {
-  id: number;
-  instrument_kind: string;
-  match_field: string;
-  match_value: string;
-  priority: number;
-  is_active: boolean;
-};
-
-export type TemplateFormDetail = {
-  form: TemplateOut;
-  rules: TemplateRuleBrief[];
-  structure: FormStructure;
-  overlay: FormStructure;
-  overlay_keys: string[];
-  problems: string[];
-};
-
-export type StructureColumn = { id: string; title?: string; source?: string };
-export type StructureRow = { id: string; kind?: string; at?: number; label?: string };
-export type StructureBlock = {
-  id: string;
-  type: string;
-  text?: string;
-  columns?: StructureColumn[];
-  rows?: StructureRow[];
-};
-export type StructureSection = { id: string; title?: string; blocks?: StructureBlock[] };
-export type FormStructure = { schema?: number; sections?: StructureSection[] };
-
-export type TemplateVersion = {
-  revision: number;
-  comment: string | null;
-  published_by: string | null;
-  published_at: string | null;
-  overlay: FormStructure;
-  structure_resolved: FormStructure;
-};
-
-export type TemplateCompareRequest = {
-  other_code?: string | null;
-  left_revision?: number | null;
-  right_revision?: number | null;
-};
-
-export type TemplateDifference = {
-  path: string;
-  kind: string;
-  before?: unknown;
-  after?: unknown;
-};
-
-export type TemplateCompare = {
-  left_label: string;
-  right_label: string;
-  differences: TemplateDifference[];
 };
 
 export type TemplatePreviewStep = {
@@ -126,38 +67,8 @@ export async function fetchTemplateCatalog(token: string): Promise<TemplateCatal
   return apiRequest<TemplateCatalog>("/templates", { method: "GET", token });
 }
 
-export async function fetchTemplateForm(token: string, code: string): Promise<TemplateFormDetail> {
-  return apiRequest<TemplateFormDetail>(`/templates/${encodeURIComponent(code)}`, {
-    method: "GET",
-    token,
-  });
-}
-
 export async function fetchTemplateRules(token: string): Promise<TemplateRule[]> {
   return apiRequest<TemplateRule[]>("/templates/rules", { method: "GET", token });
-}
-
-export async function createTemplateRule(
-  token: string,
-  payload: TemplateRulePayload,
-): Promise<TemplateRule> {
-  return apiRequest<TemplateRule>("/templates/rules", { method: "POST", token, body: payload });
-}
-
-export async function updateTemplateRule(
-  token: string,
-  ruleId: number,
-  payload: Partial<TemplateRulePayload>,
-): Promise<TemplateRule> {
-  return apiRequest<TemplateRule>(`/templates/rules/${ruleId}`, {
-    method: "PATCH",
-    token,
-    body: payload,
-  });
-}
-
-export async function deleteTemplateRule(token: string, ruleId: number): Promise<void> {
-  await apiRequest(`/templates/rules/${ruleId}`, { method: "DELETE", token });
 }
 
 export async function previewTemplateRule(
@@ -165,71 +76,6 @@ export async function previewTemplateRule(
   payload: TemplatePreviewPayload,
 ): Promise<TemplatePreview> {
   return apiRequest<TemplatePreview>("/templates/rules/preview", {
-    method: "POST",
-    token,
-    body: payload,
-  });
-}
-
-export async function saveFormDraft(
-  token: string,
-  code: string,
-  payload: { structure?: FormStructure; overlay?: FormStructure; renderer?: string },
-): Promise<TemplateFormDetail> {
-  return apiRequest<TemplateFormDetail>(`/templates/${encodeURIComponent(code)}/draft`, {
-    method: "PUT",
-    token,
-    body: payload,
-  });
-}
-
-export async function publishForm(
-  token: string,
-  code: string,
-  comment: string | null,
-): Promise<TemplateVersion> {
-  return apiRequest<TemplateVersion>(`/templates/${encodeURIComponent(code)}/publish`, {
-    method: "POST",
-    token,
-    body: { comment },
-  });
-}
-
-export async function fetchFormVersions(
-  token: string,
-  code: string,
-): Promise<TemplateVersion[]> {
-  return apiRequest<TemplateVersion[]>(`/templates/${encodeURIComponent(code)}/versions`, {
-    method: "GET",
-    token,
-  });
-}
-
-export async function restoreFormVersion(
-  token: string,
-  code: string,
-  revision: number,
-): Promise<TemplateVersion> {
-  return apiRequest<TemplateVersion>(
-    `/templates/${encodeURIComponent(code)}/versions/${revision}/restore`,
-    { method: "POST", token },
-  );
-}
-
-export async function previewForm(token: string, code: string): Promise<string> {
-  const result = await apiRequest<{ html: string }>(
-    `/templates/${encodeURIComponent(code)}/preview`,
-    { method: "POST", token },
-  );
-  return result.html;
-}
-
-export async function compareForms(
-  token: string,
-  code: string,
-  payload: TemplateCompareRequest,
-): Promise<TemplateCompare> {
-  return apiRequest<TemplateCompare>(`/templates/${encodeURIComponent(code)}/compare`, {
     method: "POST",
     token,
     body: payload,
