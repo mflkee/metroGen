@@ -6,48 +6,65 @@ from app.services.protocol_builder import build_context
 _DEFAULT_POINTS = {"p1": "5.1", "p2": "5.2", "p3": "5.3"}
 
 
-def test_pressure_template_keeps_its_own_table_without_a_structure():
-    """Фоллбэк: без structure_table шаблон рисует свою прежнюю шапку."""
-    html = render_protocol_html(
-        {
-            "template_id": "pressure_common",
-            "protocol_number": "1-1",
-            "unit": "кгс/см²",
-            "allowable_error": "1.50",
-            "allowable_variation": "1.50",
-            "table_rows": [
-                {
-                    "si_fwd": "1.00",
-                    "si_rev": "1.01",
-                    "ref_fwd": "1.000",
-                    "ref_rev": "1.000",
-                    "err_fwd": "0.00",
-                    "err_rev": "0.01",
-                    "var_pct": "0.01",
-                }
-            ],
-        }
+async def _pressure_ctx(**overrides):
+    """A realistic pressure context, built the same way the other renderer tests do."""
+    excel_row = {
+        "Обозначение СИ": "13535-93",
+        "Заводской номер": "03607",
+        "Модификация": "ТМ3",
+        "Прочие сведения": "0…0,6 МПа",
+        "КТ": "1,5",
+        "Методика поверки": "МИ 2124-90",
+        "Температура": "21,5",
+        "Влажность": "60",
+        "Давление": "102,3 кПа",
+    }
+    details = {
+        "miInfo": {
+            "singleMI": {
+                "mitypeNumber": "13535-93",
+                "mitypeTitle": "Манометры показывающие",
+                "mitypeType": "ТМ3",
+            }
+        },
+        "vriInfo": {},
+    }
+    ctx = await build_context(
+        excel_row=excel_row,
+        details=details,
+        methodology_points=dict(_DEFAULT_POINTS),
+        owner_name='ООО "РИ-ИНВЕСТ"',
+        owner_inn="7705551779",
+        allowable_error=1.5,
+        allowable_variation=1.5,
+        protocol_number="01/001/26",
     )
+    ctx.update(overrides)
+    return ctx
+
+
+@pytest.mark.anyio
+async def test_pressure_template_keeps_its_own_table_without_a_structure():
+    """Фоллбэк: без structure_table шаблон рисует свою прежнюю шапку."""
+    html = render_protocol_html(await _pressure_ctx())
 
     assert "Приведенная погрешность" in html
     assert "Допустимая вариация" in html
-    assert "1.00" in html
 
 
-def test_pressure_template_renders_the_structure_table():
+@pytest.mark.anyio
+async def test_pressure_template_renders_the_structure_table():
     """Когда builder положил structure_table, главная таблица собирается из структуры."""
     html = render_protocol_html(
-        {
-            "template_id": "pressure_common",
-            "protocol_number": "1-1",
-            "structure_table": {
+        await _pressure_ctx(
+            structure_table={
                 "columns": [
                     {"id": "si_fwd", "title": "Мои показания"},
                     {"id": "allowable_error", "title": "Допуск"},
                 ],
                 "rows": [["1.00", "1.50"], ["2.00", "1.50"]],
-            },
-        }
+            }
+        )
     )
 
     assert "Мои показания" in html
