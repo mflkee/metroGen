@@ -79,7 +79,8 @@ def validate_structure(structure: Any) -> list[str]:
                 source = column.get("source")
                 if source is not None and (not isinstance(source, str) or not source.strip()):
                     problems.append(
-                        f"table '{block_id}' column '{column.get('id')}' source must be a non-empty string"
+                        f"table '{block_id}' column '{column.get('id')}' "
+                        "source must be a non-empty string"
                     )
 
             rows = block.get("rows", [])

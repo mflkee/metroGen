@@ -255,7 +255,11 @@ def test_build_structure_table_resolves_values_by_source():
     table = form_structures.build_structure_table(structure, rows, context)
 
     assert table is not None
-    assert [column["title"] for column in table["columns"]] == ["Показания", "Допуск", "Без источника"]
+    assert [column["title"] for column in table["columns"]] == [
+        "Показания",
+        "Допуск",
+        "Без источника",
+    ]
     assert table["rows"] == [["1.00", "1.50", ""], ["2.00", "1.50", ""]]
 
 
