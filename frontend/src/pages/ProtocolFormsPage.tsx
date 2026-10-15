@@ -36,10 +36,18 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 const MATCH_FIELD_LABELS: Record<string, string> = {
-  mitype_number: "номер типа",
-  title_keyword: "ключевые слова названия",
+  mitype_number: "рег. номер типа",
+  title_keyword: "слова в названии типа",
   methodology_code: "код методики",
-  modification: "модификация",
+  modification: "исполнение (модификация)",
+};
+
+/** Примеры значений — чтобы «признак» не оставался абстрактным словом. */
+const MATCH_FIELD_EXAMPLES: Record<string, string> = {
+  mitype_number: "86065-22",
+  title_keyword: "УРОВНЕМЕР",
+  methodology_code: "МП 1657-7-2024",
+  modification: "901.1 / FMP51",
 };
 
 const STAGE_LABELS: Record<string, string> = {
@@ -317,6 +325,23 @@ export function ProtocolFormsPage() {
         description="Какие формы бывают, что от чего наследуется и почему конкретная строка поверки получает именно эту форму."
       />
 
+      <section className="section-card space-y-2">
+        <h3 className="font-semibold text-ink">Как выбирается форма</h3>
+        <p className="text-sm text-steel">
+          Форма протокола выбирается по трём вещам: <span className="text-ink">методика поверки</span>,{" "}
+          <span className="text-ink">описание типа</span> (рег. номер и название) и{" "}
+          <span className="text-ink">исполнение</span> — конкретная модификация внутри типа
+          (<span className="font-mono">901.1</span>, <span className="font-mono">FMP51</span>). Правила
+          применяются по приоритету: меньше число — раньше. Если ни одно правило не подошло, форму
+          выбирает встроенная эвристика.
+        </p>
+        <p className="text-sm text-steel">
+          <span className="text-ink">Признак</span> правила — то, по чему правило узнаёт прибор:
+          рег. номер типа, слова в названии, код методики или исполнение. У каждой формы видно, какие
+          правила на неё указывают.
+        </p>
+      </section>
+
       <section className="section-card space-y-4">
         <div>
           <h3 className="font-semibold text-ink">Почему эта форма</h3>
@@ -400,7 +425,7 @@ export function ProtocolFormsPage() {
             compact
             onChange={setAxisFilter}
             options={[
-              { value: "all", label: "Все оси" },
+              { value: "all", label: "Все признаки" },
               ...(catalogQuery.data?.match_fields ?? []).map((value) => ({
                 value,
                 label: MATCH_FIELD_LABELS[value] ?? value,
@@ -421,6 +446,14 @@ export function ProtocolFormsPage() {
           </label>
         </div>
 
+        <p className="text-xs text-steel">
+          Признаки: {Object.entries(MATCH_FIELD_LABELS).map(([value, label]) => (
+            <span key={value} className="mr-3 whitespace-nowrap">
+              {label} <span className="font-mono">{MATCH_FIELD_EXAMPLES[value]}</span>
+            </span>
+          ))}
+        </p>
+
         {catalogQuery.isLoading || rulesQuery.isLoading ? (
           <p className="text-sm text-steel">Загрузка...</p>
         ) : (
@@ -430,7 +463,7 @@ export function ProtocolFormsPage() {
             query={query}
             selectedId={selectedCode}
             onSelect={(id) => {
-              if (!id.startsWith("rule-")) setSelectedCode(id);
+              setSelectedCode(id || null);
             }}
           />
         )}
@@ -466,7 +499,7 @@ export function ProtocolFormsPage() {
                   <tr>
                     <th>Приоритет</th>
                     <th>Тип прибора</th>
-                    <th>Ось</th>
+                    <th>Признак</th>
                     <th>Значение</th>
                     <th>Статус</th>
                   </tr>
