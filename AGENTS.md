@@ -23,6 +23,13 @@
 > `ModuleNotFoundError`, проверь `docker exec <api> sh -c "cd /app && uv sync --frozen --no-dev"`
 > или пересоздай volume (`docker compose -f docker-compose.staging.yml rm -sf api && docker volume rm metrogen-stg_api_venv_stg && ... up -d api`).
 
+> ⚠️ **Тесты гоняются на отдельной БД, не на staging.** `pytest tests/` пишет в ту БД, на которую
+> смотрит (`DATABASE_URL`): тесты ingest'ят реестр, и на staging активные строки копятся, после чего
+> поиск записи падает с `MultipleResultsFound`. Рецепт чистой БД (создать → `alembic upgrade head` +
+> seed → `pytest` → удалить) — в архиве change `2026-10-15-fix-stale-tests` (`design.md`, D5).
+> Стилевые проверки гоняются ruff'ом версии из проекта (0.12.12), а не локальным: локальный новее и
+> часть правил уже удалена.
+
 ## Область покрытия
 Актуализация выполнена по всем исходным текстовым файлам репозитория:
 - root-конфиги и инфраструктура (`README.md`, `pyproject.toml`, Docker/Alembic/pytest config);
