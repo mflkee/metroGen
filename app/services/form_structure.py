@@ -75,6 +75,12 @@ def validate_structure(structure: Any) -> list[str]:
             for column_index, column in enumerate(columns):
                 if not isinstance(column, dict) or not column.get("id"):
                     problems.append(f"table '{block_id}' columns[{column_index}] needs an id")
+                    continue
+                source = column.get("source")
+                if source is not None and (not isinstance(source, str) or not source.strip()):
+                    problems.append(
+                        f"table '{block_id}' column '{column.get('id')}' source must be a non-empty string"
+                    )
 
             rows = block.get("rows", [])
             if not isinstance(rows, list):
@@ -261,8 +267,12 @@ def render_structure_preview(structure: dict[str, Any]) -> str:
             rows = [row for row in (block.get("rows") or []) if isinstance(row, dict)]
             parts.append("<table class='data-table'><thead><tr>")
             for column in columns:
+                title = escape(str(column.get("title") or column.get("id") or ""))
+                source = str(column.get("source") or "").strip()
                 parts.append(
-                    f"<th>{escape(str(column.get('title') or column.get('id') or ''))}</th>"
+                    f"<th>{title}"
+                    + (f"<br><small>{escape(source)}</small>" if source else "")
+                    + "</th>"
                 )
             parts.append("</tr></thead><tbody>")
             for row in rows:

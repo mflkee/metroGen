@@ -110,3 +110,51 @@ def table_columns(structure: dict[str, Any] | None) -> list[dict[str, Any]] | No
         return None
     columns = [column for column in table.get("columns") or [] if isinstance(column, dict)]
     return columns or None
+
+
+def build_structure_table(
+    structure: dict[str, Any] | None,
+    rows: list[Any] | None,
+    context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Turn the form's table plus the generator's rows into the table the template renders.
+
+    A column shows the value named by its ``source``: the generator's row first, the render context
+    second, an empty cell when neither has it.
+    """
+    table = _first_table(structure)
+    if table is None:
+        return None
+
+    columns = [
+        column
+        for column in table.get("columns") or []
+        if isinstance(column, dict) and str(column.get("id") or "").strip()
+    ]
+    if not columns:
+        return None
+
+    rendered_rows: list[list[str]] = []
+    for row in rows or []:
+        cells: list[str] = []
+        for column in columns:
+            source = str(column.get("source") or "").strip()
+            value: Any = ""
+            if source:
+                if isinstance(row, dict) and source in row:
+                    value = row.get(source)
+                elif context and source in context:
+                    value = context.get(source)
+            cells.append("" if value is None else str(value))
+        rendered_rows.append(cells)
+
+    if not rendered_rows:
+        return None
+
+    return {
+        "columns": [
+            {"id": column["id"], "title": str(column.get("title") or column["id"])}
+            for column in columns
+        ],
+        "rows": rendered_rows,
+    }

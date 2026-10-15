@@ -1224,6 +1224,15 @@ async def build_context(
                 context["max_variation_value"] = max_variation_value
                 context["max_variation_unit"] = "%" if max_variation_value else ""
 
+    # Таблица из структуры формы: только когда форма управляет протоколом и структура её описывает.
+    # Иначе ключа нет и шаблон рисует свою (прежнюю) таблицу.
+    if form_structure_data:
+        structure_table = form_structures.build_structure_table(
+            form_structure_data, context.get("table_rows") or [], context
+        )
+        if structure_table:
+            context["structure_table"] = structure_table
+
     trainee_name = _pick_trainee_name(
         context.get("verifier_name"),
         verification_dt,

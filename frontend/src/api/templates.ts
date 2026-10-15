@@ -55,7 +55,7 @@ export type TemplateFormDetail = {
   problems: string[];
 };
 
-export type StructureColumn = { id: string; title?: string };
+export type StructureColumn = { id: string; title?: string; source?: string };
 export type StructureRow = { id: string; kind?: string; at?: number; label?: string };
 export type StructureBlock = {
   id: string;

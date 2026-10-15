@@ -504,6 +504,7 @@ export function ProtocolFormsPage() {
 
             {draft ? (
               <StructureEditor
+                instrumentKind={formQuery.data?.form.instrument_kind}
                 overlayKeys={formQuery.data?.overlay_keys ?? []}
                 readOnly={!isAdmin}
                 structure={draft}

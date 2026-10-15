@@ -223,6 +223,71 @@ def test_form_structures_extract_points_and_columns():
     assert form_structures.point_fractions({"sections": [{"id": "s", "blocks": []}]}) is None
 
 
+def test_build_structure_table_resolves_values_by_source():
+    from app.services import form_structures
+
+    structure = {
+        "schema": 1,
+        "sections": [
+            {
+                "id": "main",
+                "blocks": [
+                    {
+                        "id": "points",
+                        "type": "table",
+                        "columns": [
+                            {"id": "si", "title": "Показания", "source": "si_fwd"},
+                            {"id": "tol", "title": "Допуск", "source": "allowable_error"},
+                            {"id": "mystery", "title": "Без источника", "source": "nope"},
+                        ],
+                        "rows": [{"id": "p0", "at": 0}, {"id": "p1", "at": 1}],
+                    }
+                ],
+            }
+        ],
+    }
+    rows = [
+        {"si_fwd": "1.00", "si_rev": "1.01"},
+        {"si_fwd": "2.00", "si_rev": "2.01"},
+    ]
+    context = {"allowable_error": "1.50"}
+
+    table = form_structures.build_structure_table(structure, rows, context)
+
+    assert table is not None
+    assert [column["title"] for column in table["columns"]] == ["Показания", "Допуск", "Без источника"]
+    assert table["rows"] == [["1.00", "1.50", ""], ["2.00", "1.50", ""]]
+
+
+def test_build_structure_table_needs_rows_and_columns():
+    from app.services import form_structures
+
+    structure = _structure()
+    assert form_structures.build_structure_table(structure, [], {}) is None
+    assert form_structures.build_structure_table(structure, [{"si_val": "1"}], {}) is not None
+    assert form_structures.build_structure_table(None, [{"a": "1"}], {}) is None
+
+
+def test_validate_structure_rejects_an_empty_column_source():
+    broken = _structure(
+        sections=[
+            {
+                "id": "main",
+                "blocks": [
+                    {
+                        "id": "points",
+                        "type": "table",
+                        "columns": [{"id": "ref", "title": "Эталон", "source": "  "}],
+                        "rows": [{"id": "p0", "at": 0}],
+                    }
+                ],
+            }
+        ]
+    )
+    problems = form_structure.validate_structure(broken)
+    assert any("source must be a non-empty string" in problem for problem in problems)
+
+
 def test_generator_takes_the_points_from_the_form_structure():
     from app.services.generators.base import FixedPctTol, GenInput, steps_from_fractions
     from app.services.generators.pressure_common import GENERATOR

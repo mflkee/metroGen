@@ -6,6 +6,55 @@ from app.services.protocol_builder import build_context
 _DEFAULT_POINTS = {"p1": "5.1", "p2": "5.2", "p3": "5.3"}
 
 
+def test_pressure_template_keeps_its_own_table_without_a_structure():
+    """Фоллбэк: без structure_table шаблон рисует свою прежнюю шапку."""
+    html = render_protocol_html(
+        {
+            "template_id": "pressure_common",
+            "unit": "кгс/см²",
+            "allowable_error": "1.50",
+            "allowable_variation": "1.50",
+            "table_rows": [
+                {
+                    "si_fwd": "1.00",
+                    "si_rev": "1.01",
+                    "ref_fwd": "1.000",
+                    "ref_rev": "1.000",
+                    "err_fwd": "0.00",
+                    "err_rev": "0.01",
+                    "var_pct": "0.01",
+                }
+            ],
+        }
+    )
+
+    assert "Приведенная погрешность" in html
+    assert "Допустимая вариация" in html
+    assert "1.00" in html
+
+
+def test_pressure_template_renders_the_structure_table():
+    """Когда builder положил structure_table, главная таблица собирается из структуры."""
+    html = render_protocol_html(
+        {
+            "template_id": "pressure_common",
+            "structure_table": {
+                "columns": [
+                    {"id": "si_fwd", "title": "Мои показания"},
+                    {"id": "allowable_error", "title": "Допуск"},
+                ],
+                "rows": [["1.00", "1.50"], ["2.00", "1.50"]],
+            },
+        }
+    )
+
+    assert "Мои показания" in html
+    assert "Допуск" in html
+    assert "2.00" in html
+    # Прежней шапки больше нет — таблицу задаёт структура.
+    assert "Приведенная погрешность" not in html
+
+
 @pytest.mark.anyio
 async def test_pressure_html_renders_range_class_auxiliary_and_summary():
     excel_row = {

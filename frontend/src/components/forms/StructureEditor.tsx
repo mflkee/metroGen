@@ -7,7 +7,30 @@ type StructureEditorProps = {
   onChange: (next: FormStructure) => void;
   /** Paths the form overrides (from the API) — used to mark an edited table. */
   overlayKeys?: string[];
+  /** Instrument kind, to suggest the value sources the generator can produce. */
+  instrumentKind?: string;
   readOnly?: boolean;
+};
+
+/**
+ * The value sources the generators produce, per instrument kind. Kept next to the editor on purpose:
+ * it is a hint for the operator, and it changes with the generator.
+ */
+const COLUMN_SOURCES: Record<string, string[]> = {
+  manometers: [
+    "si_fwd",
+    "si_rev",
+    "ref_fwd",
+    "ref_rev",
+    "err_fwd",
+    "err_rev",
+    "var_pct",
+    "allowable_error",
+    "allowable_variation",
+  ],
+  thermometers: ["si_val", "ref_val", "abs_err", "r0_deviation_pct", "r0_allowable_pct"],
+  level_meters: ["si_val", "ref_val", "abs_err", "allowable_error"],
+  controllers: ["set_value", "measured_value", "error_pct", "allowable_error"],
 };
 
 type EditableTable = {
@@ -58,6 +81,7 @@ export function StructureEditor({
   structure,
   onChange,
   overlayKeys = [],
+  instrumentKind = "manometers",
   readOnly = false,
 }: StructureEditorProps) {
   const tables = useMemo(() => collectTables(structure), [structure]);
@@ -139,6 +163,7 @@ export function StructureEditor({
               <input
                 className="form-input text-sm"
                 disabled={readOnly}
+                placeholder="заголовок"
                 type="text"
                 value={column.title ?? ""}
                 onChange={(event) =>
@@ -146,6 +171,22 @@ export function StructureEditor({
                     ...block,
                     columns: (block.columns ?? []).map((item, itemIndex) =>
                       itemIndex === index ? { ...item, title: event.target.value } : item,
+                    ),
+                  }))
+                }
+              />
+              <input
+                className="form-input max-w-[170px] font-mono text-xs"
+                disabled={readOnly}
+                list={`column-sources-${current.block.id}`}
+                placeholder="источник (si_fwd)"
+                type="text"
+                value={column.source ?? ""}
+                onChange={(event) =>
+                  edit((block) => ({
+                    ...block,
+                    columns: (block.columns ?? []).map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, source: event.target.value } : item,
                     ),
                   }))
                 }
@@ -165,6 +206,11 @@ export function StructureEditor({
               </button>
             </div>
           ))}
+          <datalist id={`column-sources-${current.block.id}`}>
+            {(COLUMN_SOURCES[instrumentKind] ?? []).map((source) => (
+              <option key={source} value={source} />
+            ))}
+          </datalist>
         </div>
 
         <div className="space-y-2">
