@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     API_RELOAD: bool = False
     API_LOG_LEVEL: str = "info"
     SECRET_KEY: str = "change-me"
-    ACCESS_TOKEN_TTL_HOURS: int = 12
+    # Sessions do not expire in any practical sense: people sign in once and stay in (see
+    # metroAuth's README, «Сессии»). Revocation is by turning the account off — checked on
+    # every request — or by rotating the secret key, which ends every session at once.
+    ACCESS_TOKEN_TTL_HOURS: int = 87600  # 10 years
     # Unified account registry (metroAccounts). When enabled, credentials are checked there.
     ACCOUNTS_ENABLED: bool = False
     ACCOUNTS_URL: str = ""
