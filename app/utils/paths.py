@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from app.core.config import settings
+from app.utils.time import msk_today
 
 
 def get_project_root() -> Path:
@@ -19,7 +20,7 @@ def get_exports_base() -> Path:
 
 
 def get_dated_exports_dir(today: date | None = None) -> Path:
-    d = today or date.today()
+    d = today or msk_today()
     base = get_exports_base()
     target = base / d.isoformat()
     return _ensure_dir(target)

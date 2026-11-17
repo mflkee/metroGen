@@ -30,6 +30,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuthStore } from "@/store/auth";
+import { formatMskDateTime } from "@/lib/datetime";
 
 type WorkspaceTab = "generation" | "database" | "exports";
 type RunStatus = "idle" | "running" | "success" | "error";
@@ -622,7 +623,7 @@ export function GenerationPage() {
                                     </div>
                                     <div>
                                       <dt className="text-xs uppercase tracking-[0.16em] text-steel">Загружено</dt>
-                                      <dd className="text-ink">{entry.loadedAt ? new Date(entry.loadedAt).toLocaleString("ru-RU") : "—"}</dd>
+                                      <dd className="text-ink">{entry.loadedAt ? formatMskDateTime(entry.loadedAt) : "—"}</dd>
                                     </div>
                                     <div className="sm:col-span-2 lg:col-span-3">
                                       <dt className="text-xs uppercase tracking-[0.16em] text-steel">Источник</dt>
@@ -656,7 +657,7 @@ export function GenerationPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h4 className="font-semibold text-ink">{folder.name}</h4>
-                    <p className="text-sm text-steel">{folder.filesCount} файлов · {new Date(folder.modifiedAt).toLocaleString("ru-RU")}</p>
+                    <p className="text-sm text-steel">{folder.filesCount} файлов · {formatMskDateTime(folder.modifiedAt)}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button className="btn-primary btn-sm" type="button" onClick={() => void downloadExportFolder(folder.path, folder.name)}>

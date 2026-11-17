@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.repositories import AuxiliaryInstrumentRepository
 from app.services.arshin_client import ARSHIN_BASE, _parse_date_value, _request_json
 from app.utils.normalization import normalize_serial
+from app.utils.time import msk_today
 
 __all__ = ("resolve_auxiliary",)
 
@@ -108,7 +109,7 @@ async def resolve_auxiliary(
     ``_resolved_auxiliary_instruments``).
     """
     repo = AuxiliaryInstrumentRepository(session)
-    today = date.today()
+    today = msk_today()
 
     pairs = [(_clean(reg), _clean(serial)) for reg, serial in requested_pairs]
     pairs = [(reg, serial) for reg, serial in pairs if reg and serial]

@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import EtalonCertification, EtalonDevice
 from app.db.repositories import EtalonRepository
 from app.services.arshin_client import resolve_etalon_certs_from_details
+from app.utils.time import msk_today
 
 __all__ = ("resolve_etalons",)
 
@@ -217,7 +218,7 @@ async def resolve_etalons(
       ``_resolved_etalon_certs``).
     """
     repo = EtalonRepository(session)
-    today = date.today()
+    today = msk_today()
 
     sources: dict[str, Mapping[str, Any]] = {}
     for source in _iter_etalon_sources(details):

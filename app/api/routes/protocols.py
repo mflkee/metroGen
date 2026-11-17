@@ -54,6 +54,7 @@ from app.utils.excel import (
 )
 from app.utils.normalization import normalize_serial
 from app.utils.paths import get_named_exports_dir, get_output_dir, sanitize_filename
+from app.utils.time import msk_now, msk_today
 
 router = APIRouter(prefix="/api/v1/protocols", tags=["protocols"])
 
@@ -305,12 +306,12 @@ def _extract_year_month_from_context(ctx: Mapping[str, Any]) -> str:
     ver_date = _parse_date_value(ctx.get("verification_date") or ctx.get("Дата поверки"))
     if ver_date:
         return f"{ver_date.year}-{ver_date.month:02d}"
-    return f"{date.today().year}-{date.today().month:02d}"
+    return f"{msk_today().year}-{msk_today().month:02d}"
 
 
 def _make_run_time() -> str:
     """Return current time string HH:MM for folder naming."""
-    return datetime.now().strftime("%H:%M")
+    return msk_now().strftime("%H:%M")
 
 
 def _resolve_run_month(
@@ -320,7 +321,7 @@ def _resolve_run_month(
         if re.match(r"^\d{4}-\d{2}$", forced_month):
             return forced_month
         if re.match(r"^\d{2}$", forced_month):
-            year = str(date.today().year)
+            year = str(msk_today().year)
             if items:
                 for item in items:
                     ctx = item.context or {}
@@ -336,7 +337,7 @@ def _resolve_run_month(
             ctx = item.context or {}
             if ctx:
                 return _extract_year_month_from_context(ctx)
-    return f"{date.today().year}-{date.today().month:02d}"
+    return f"{msk_today().year}-{msk_today().month:02d}"
 
 
 def _exports_folder_label(

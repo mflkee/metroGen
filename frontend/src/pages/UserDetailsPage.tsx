@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { roleLabels } from "@/lib/roles";
+import { formatMskDateTime } from "@/lib/datetime";
 import { useAuthStore } from "@/store/auth";
 
 /** The roles in the order the form offers them. */
@@ -176,11 +177,11 @@ export function UserDetailsPage() {
             </div>
             <div>
               <div className="text-xs uppercase tracking-[0.16em] text-steel">Последний вход</div>
-              <div className="mt-1 text-ink">{user?.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("ru-RU") : "не было"}</div>
+              <div className="mt-1 text-ink">{user?.lastLoginAt ? formatMskDateTime(user.lastLoginAt) : "не было"}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-[0.16em] text-steel">Создан</div>
-              <div className="mt-1 text-ink">{user?.createdAt ? new Date(user.createdAt).toLocaleString("ru-RU") : "..."}</div>
+              <div className="mt-1 text-ink">{user?.createdAt ? formatMskDateTime(user.createdAt) : "..."}</div>
             </div>
           </div>
         </aside>
